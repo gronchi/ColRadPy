@@ -1358,13 +1358,14 @@ class colradpy():
                                          [_isin(self.data['atomic']['ion_pot_lvl']-1, metasplus_to_keep)]
                     #parent cross coupling coefficient, start in the parent atom, recombine get redistrubted then
                     #ionize back into the parent but into a different parent metastable
+                    #Use S*n_e from the CR matrix so XCD has units cm^3/s.
                     if(len(self.data['processed']['xcd']) > 1):
                         self.data['processed']['xcd'][metasplus_to_keep_ind,np.array([m]),:] =-np.einsum('ik,imk->mk',
 
-                                self.data['rates']['ioniz']['ionization'][levels_to_keep,m,:],np.einsum('ijk,jmk->imk',
+                                self.data['cr_matrix']['cr'][len(self.data['atomic']['energy'])+m,levels_to_keep,:],np.einsum('ijk,jmk->imk',
                                 self.data['cr_matrix']['cr_red_inv'][0:len(self.data['atomic']['energy']),
                                                                      0:len(self.data['atomic']['energy']),:],
-                                recomb_coeff[len(self.data['atomic']['metas']):len(self.data['atomic']['energy']),metasplus_to_keep,:]))
+                                recomb_coeff[levels_to_keep][:,metasplus_to_keep,:]))
 
         else:
         
@@ -1488,12 +1489,13 @@ class colradpy():
                                          [_isin(self.data['atomic']['ion_pot_lvl']-1, metasplus_to_keep)]
                     #parent cross coupling coefficient, start in the parent atom, recombine get redistrubted then
                     #ionize back into the parent but into a different parent metastable
-                    self.data['processed']['xcd'][metasplus_to_keep_ind,np.array([m]),:,:] =-np.einsum('ik,imkl->mkl',
+                    #Use S*n_e from the CR matrix so XCD has units cm^3/s.
+                    self.data['processed']['xcd'][metasplus_to_keep_ind,np.array([m]),:,:] =-np.einsum('ikl,imkl->mkl',
 
-                            self.data['rates']['ioniz']['ionization'][levels_to_keep,m,:],np.einsum('ijkl,jmkl->imkl',
+                            self.data['cr_matrix']['cr'][len(self.data['atomic']['energy'])+m,levels_to_keep,:,:],np.einsum('ijkl,jmkl->imkl',
                             self.data['cr_matrix']['cr_red_inv'][0:len(self.data['atomic']['energy']),
                                                                  0:len(self.data['atomic']['energy']),:,:],
-                            recomb_coeff[len(self.data['atomic']['metas']):len(self.data['atomic']['energy']),metasplus_to_keep,:,:]))
+                            recomb_coeff[levels_to_keep][:,metasplus_to_keep,:,:]))
 
                     
     def solve_time_dependent(self):
