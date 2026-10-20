@@ -104,7 +104,7 @@ def r8ecip(IZC, ion_pot, energy, zpla, temperature_grid, reduced=False):
             Y   = XI * ATE
             AI = 0.0E0
             
-            for J in range(0, MXT-1):
+            for J in range(0, MXT):#all MXT points of the Gauss-Laguerre quadrature
                 B  = X[J] / Y
                 B1 = B + 1.0E0
                 C  = np.sqrt( B1 )
