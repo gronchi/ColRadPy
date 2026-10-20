@@ -628,13 +628,13 @@ class colradpy():
             ion_excit_interp_grid[:,low] = lowest_rates[:,[0]]*\
                 (self.data['user']['temp_grid'][low]/file_temps[lowest[0]])**power[:,None]
 
-        if(not self.data['user']['log_rate_ion']):
-            if(self.data['user']['scale_file_ioniz']):
-                for ii in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):
-                    scale = np.abs(self.data['atomic']['zpla'][self.data['rates']['ioniz']['ion_transitions'][ii,0]-1,
-                                                    self.data['rates']['ioniz']['ion_transitions'][ii,1]-1])
-                    ion_excit_interp_grid[ii] = ion_excit_interp_grid[ii] *scale
-                    
+        #scale the rates by the {parent} values of the level list, whatever the interpolation;
+        #levels without a value for the parent (-1) are not scaled
+        if(self.data['user']['scale_file_ioniz']):
+            ion_transitions = self.data['rates']['ioniz']['ion_transitions']
+            scale = self.data['atomic']['zpla'][ion_transitions[:,0]-1, ion_transitions[:,1]-1]
+            ion_excit_interp_grid = ion_excit_interp_grid*np.where(scale > -1, scale, 1.)[:,None]
+
         for i in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):
             self.data['rates']['ioniz']['ionization_reduced'][self.data['rates']['ioniz']\
                     ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\

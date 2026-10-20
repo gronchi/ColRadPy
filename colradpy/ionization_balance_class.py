@@ -316,7 +316,8 @@ class ionization_balance():
                                use_recombination_three_body = self.data['user']['use_recombination_three_body'][i],
                                use_recombination = self.data['user']['use_recombination'][i],
                                use_cx = self.data['user']['use_cx'][i],
-                               temp_dens_pair = self.data['user']['temp_dens_pair'])
+                               temp_dens_pair = self.data['user']['temp_dens_pair'],
+                               scale_file_ioniz = self.data['user']['scale_file_ioniz'][i])
 
                 tmp.solve_cr() #Solving the CR set of equations
                 #keep all the CR data if requested
