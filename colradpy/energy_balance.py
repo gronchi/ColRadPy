@@ -128,12 +128,16 @@ class energy_balance(object):
             temperatures=np.array([self.data["user"]["electron_temp"]]),
         )
 
-        # Create function that returns population in each charge state at any time
+        # Create function that returns population in each charge state at any time.
+        # The rate matrix is the one solve_no_source diagonalized; it lets untrusted
+        # eigen solutions be recomputed with expm.
         pops_fun = partial(
             eval_matrix_exponential_solution,
             n0=n0,
             eigenvalues=self.ion_balance.data["processed"]["eigen_val"],
             eigenvectors=self.ion_balance.data["processed"]["eigen_vec"],
+            matrix=np.einsum("ijkl,l->ijkl", self.ion_balance.data["ion_matrix"],
+                             self.ion_balance.data["user"]["dens_grid"]),
         )
 
         # Calculate solution using scipy solver
