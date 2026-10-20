@@ -32,11 +32,11 @@ def adf11_class(fil):
 
 def read_adf11(fil):
     """ Reads data formatted in adf11 format. This format is generally used for GCR coefficients.
-        The data is stored in arrays of log_10.
-        Creates a dictionary to hold the data
-        Args:
-          :param fil: The file path to the input file
-      :type fil: string
+    The data is stored in arrays of log_10.
+    Creates a dictionary to hold the data
+
+    :param fil: The file path to the input file
+    :type fil: string
     """
     cls, resolved = adf11_class(fil)
 

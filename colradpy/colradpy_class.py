@@ -1766,9 +1766,9 @@ class colradpy():
            that this will split. Most transitsions of spectroscopic importance should be able to be
            split by this.
 
-           Spin conserving dipole multiplets (|dL| <= 1) are split with the Condon and Shortley line
+           Spin conserving dipole multiplets (``|dL| <= 1``) are split with the Condon and Shortley line
            strengths and lines with a single pair of j levels go to that pair. Other lines, which
-           these factors do not describe (spin changing or |dL| > 1), are kept unsplit at the
+           these factors do not describe (spin changing or ``|dL| > 1``), are kept unsplit at the
            wavelength between the statistically weighted centres of their terms, with split levels
            -1 and ['kept_unsplit'] True.
 
@@ -1947,7 +1947,7 @@ class colradpy():
     def split_structure_terms_to_levels(self):
         """ split_structure_term_to_levels will take an LS resolved file like is common for low-z
             species and split it to j resolution. This is so the file can be shifted to NIST energy
-            values as well as be spectroscopically 'accurate'. This is just using j = |l-s| .. l+s to
+            values as well as be spectroscopically 'accurate'. This is just using ``j = |l-s| .. l+s`` to
             get the j values. This also puts the configuration string into NIST format.
         """
         
@@ -2423,27 +2423,27 @@ class colradpy():
             
     def make_dopp_broad(self, T, m, calc_gauss=True, dw=0., n=50,gs=5,split_wave=np.array([])):
         """ Make the doppler shift for spectral lines ues equation 1.25 and 1.26 from Stuart Lochs thesis
-        Args:
-          :param nu0: frequency of spectral line
-          :type nu0: float
-        
-          :param T:  Temperature (eV)
-          :type T: float
 
-          :param m:  Mass of ion (kg)
-          :type m: float
+        :param nu0: frequency of spectral line
+        :type nu0: float
 
-          :param calc_gauss: calculated a number of gaussians=['processed']['pecs'] or len(split_wave)
-          :type calc_gauss: bool
+        :param T:  Temperature (eV)
+        :type T: float
 
-          :param dw:  wavelength grid spacing if default not chosen
-          :type dw:  float
+        :param m:  Mass of ion (kg)
+        :type m: float
 
-          :param n:  length of wavelength grids
-          :type n:  int
+        :param calc_gauss: calculated a number of gaussians=['processed']['pecs'] or len(split_wave)
+        :type calc_gauss: bool
 
-          :param split_wave:  PEC/wavelength array to be broadened
-          :type split_wave:  int
+        :param dw:  wavelength grid spacing if default not chosen
+        :type dw:  float
+
+        :param n:  length of wavelength grids
+        :type n:  int
+
+        :param split_wave:  PEC/wavelength array to be broadened
+        :type split_wave:  int
 
         """
 
@@ -2496,9 +2496,9 @@ class colradpy():
 
     def gauss_dopp(self, wave_arr, wave, dnu_g):
         ''' Gives a doppler broadened Gaussian profile
-        Args:
-          :param wave_arr: wavelength array for the gaussians
-          :param dnu_g: dnu_g parameter for doppler broadening
+
+        :param wave_arr: wavelength array for the gaussians
+        :param dnu_g: dnu_g parameter for doppler broadening
 
 
         '''
@@ -2680,12 +2680,13 @@ class colradpy():
 
     def plot_pec_ratio_dens(self,pec1,pec2,temp=np.array([0]),meta = np.array([0]),scale='log'):
         """plot_pec_ratio_dens will plot the ratio of any two user defined PECs versus density.
-           Temperature values for the ratio are choosen by the user by specifying the indices from the user
-           temperature array to be plotted. Each temperature chosen will show up as a new line in the figure.
-           The user can also choose the metastable by default only the ground is plotted.
-           The user specifies the indices of the metastable to be plot. 
-           A new figure for each metastable chosen will be made with the number of density lines chosen.
-           The density axis default is a log scale but linear can be chosen as well.
+        Temperature values for the ratio are choosen by the user by specifying the indices from the user
+        temperature array to be plotted. Each temperature chosen will show up as a new line in the figure.
+        The user can also choose the metastable by default only the ground is plotted.
+        The user specifies the indices of the metastable to be plot.
+        A new figure for each metastable chosen will be made with the number of density lines chosen.
+        The density axis default is a log scale but linear can be chosen as well.
+
         :param pec1: Index of pec on the top of the ratio
         :type pec1: int
 
@@ -2743,17 +2744,17 @@ class colradpy():
             (degenerate levels) or not positive (split levels out of order), with a
             warning. PECs need a temperature-density grid, not temp_dens_pair.
 
-        :param fil_name
-        :type str
+        :param fil_name: name of the adf15 file
+        :type fil_name: str
 
         :param pec_inds: indices of the PECs to write, all by default
-        :type int arr
+        :type pec_inds: int arr
 
-        :param num
-        :type int
+        :param num: number of values on each line of the file
+        :type num: int
 
-        :param pecs_split
-        :type bool
+        :param pecs_split: write the PECs split to j levels by split_pec_multiplet
+        :type pecs_split: bool
 
         """
 
@@ -2797,19 +2798,19 @@ class colradpy():
         """ This function dumps data to a hdf5 file for other codes
 
         :param fil_name: The file path and name that will be saved
-        :type str
+        :type fil_name: str
 
         :param cut_limit: limits the PEC dumped relative to the largest line in the spectrum
-        :type float 
+        :type cut_limit: float
 
         :param pecs: Save the PECs and associated information
-        :type bool
+        :type pecs: bool
 
         :param gcrs: Save the GCR coefficients
-        :type bool
+        :type gcrs: bool
 
         :param additional: Save data not always used by other codes
-        :type bool
+        :type additional: bool
 
         """
         import hdfdict

@@ -190,17 +190,17 @@ def type4_yconvert(tconvert_grid,energy,col_excit,c=1.5,direct='f'):
 
 def lin_yconvert(coeff_lin_b,coeff_lin_m,xval_extrap):
     """ Some rates may not have infinite energy points in which case a
-        linear extrapolation is done in the burgess tully space from the 
+    linear extrapolation is done in the burgess tully space from the
     last two calculated points
 
     :param coeff_lin_b: coefficients of 'b' in the y=mx+b equation
-    :type energy: array
+    :type coeff_lin_b: array
 
     :param coeff_lin_m: coefficients of 'm' in the y=mx+b equation
-    :type temp_grid: array
+    :type coeff_lin_m: array
 
     :param xval_extrap: xvalues for the extrapolated temperatures
-    :type temp_grid: array
+    :type xval_extrap: array
 
     :returns: array --linear extrapolation rate  values
 
@@ -253,18 +253,18 @@ def calc_coeffs_a(coeffs_b,xval_arr,yval_arr):
 
 def calc_coeffs_lin_m(xval_arr,yval_arr):
     """ Some rates may not have infinite energy points in which case a
-        linear extrapolation is done in the burgess tully space from the 
-    last two calculated points this calculates the 'b' coefficient in the 
+    linear extrapolation is done in the burgess tully space from the
+    last two calculated points this calculates the 'm' coefficient in the
     equation y = mx+b
 
     :param xval_arr: array of x values from calcualted points must have atleast 2
-    :type energy: array
+    :type xval_arr: array
 
     :param yval_arr: array of y values from calcualted points must have atleast 2
-    :type energy: array
+    :type yval_arr: array
 
     :param yval_inf: array of infinite energy y values from calcualtions
-    :type energy: array
+    :type yval_inf: array
 
 
     :returns: array -- m coefficent
@@ -277,18 +277,18 @@ def calc_coeffs_lin_m(xval_arr,yval_arr):
 
 def calc_coeffs_lin_b(xval_arr,yval_arr,coeff_lin_m):
     """ Some rates may not have infinite energy points in which case a
-        linear extrapolation is done in the burgess tully space from the 
-    last two calculated points this calculates the 'b' coefficient in the 
+    linear extrapolation is done in the burgess tully space from the
+    last two calculated points this calculates the 'b' coefficient in the
     equation y = mx+b
 
     :param xval_arr: array of x values from calcualted points must have atleast 2
-    :type energy: array
+    :type xval_arr: array
 
     :param yval_arr: array of y values from calcualted points must have atleast 2
-    :type energy: array
+    :type yval_arr: array
 
     :param yval_inf: array of infinite energy y values from calcualtions
-    :type energy: array
+    :type yval_inf: array
 
 
     :returns: array -- b coefficent

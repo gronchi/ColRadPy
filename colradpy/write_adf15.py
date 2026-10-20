@@ -47,11 +47,9 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                 charge_state, dens, temp, metas, ion_pot, user='', atomic='', num=8,
                 num_recomb=None):
     """Write all or a subset of PECs to an adf15 formatted file.
-    standard adf15 units
-    wave in [A]
-    PEC in [ph cm3 s-1]
-    dens in  [cm-3]
-    temp in [eV]
+
+    Standard adf15 units: wave in [A], PEC in [ph cm3 s-1], dens in [cm-3] and
+    temp in [eV].
 
     One block is written for each selected line and driving population, ordered by
     driver. The driver columns of pecs are the metastables (TYPE = EXCIT, INDM = the
@@ -60,48 +58,47 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
     ISEL numbers the blocks from 1. PECs below MIN_PEC, including zeros, are written
     as MIN_PEC.
 
-    :param fil_name
-    :type str
+    :param fil_name: name of the adf15 file
+    :type fil_name: str
 
     :param pec_inds: indices of the lines to write
-    :type int arr
+    :type pec_inds: int arr
 
     :param wave: wavelengths in A
-    :type float arr
+    :type wave: float arr
 
     :param pecs: PECs with shape (lines, drivers, temperatures, densities)
-    :type float arr
+    :type pecs: float arr
 
-    :param element_sym
-    :type str
+    :param element_sym: element symbol
+    :type element_sym: str
 
-    :param charge_state
-    :type int
+    :param charge_state: charge of the ion
+    :type charge_state: int
 
-    :param dens
-    :type float arr
+    :param dens: electron densities in cm-3
+    :type dens: float arr
 
-    :param temp
-    :type float arr
+    :param temp: electron temperatures in eV
+    :type temp: float arr
 
-    :param metas
-    :type float_arr
+    :param metas: metastable level indices
+    :type metas: float_arr
 
-    :param ion_pot
-    :type float arr
+    :param ion_pot: ionization potentials, one for each recombining parent
+    :type ion_pot: float arr
 
+    :param user: the 'user' dictionary of colradpy, written in the comments
+    :type user: dict
 
-    :param user
-    :type dict
+    :param atomic: the 'atomic' dictionary of colradpy, for the nuclear charge and the levels in the comments
+    :type atomic: dict
 
-    :param atomic
-    :type dict
-
-    :param num
-    :type int
+    :param num: number of values on each line of the file
+    :type num: int
 
     :param num_recomb: number of recombination driver columns in pecs, len(ion_pot) by default
-    :type int
+    :type num_recomb: int
 
     """
 

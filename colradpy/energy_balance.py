@@ -24,41 +24,40 @@ class energy_balance(object):
     densities/temperatures at a time (it is not vectorized across a grid of
     temperatures/densities like the ionization balance).
 
-    :Args:       
-      :param fils: Array of the input adf04 or adf11 files
-      :type fils: string array
+    :param fils: Array of the input adf04 or adf11 files
+    :type fils: string array
 
-      :param metas: List of arrays for the metastable levels in a charge state
-      :type metas: list
+    :param metas: List of arrays for the metastable levels in a charge state
+    :type metas: list
 
-      :param mass: Mass of the species being modelled in (amu)
-      :type mass: float
+    :param mass: Mass of the species being modelled in (amu)
+    :type mass: float
       
-      :param polarizability: Dipole polarizability of the neutral species being modelled in Bohr radii cubed
-      :type polarizability: float
+    :param polarizability: Dipole polarizability of the neutral species being modelled in Bohr radii cubed
+    :type polarizability: float
 
-      :param electron_temp: Electron temperature of the background plasma in (eV)
-      :type electron_temp: float
+    :param electron_temp: Electron temperature of the background plasma in (eV)
+    :type electron_temp: float
 
-      :param electron_dens: Electron density of the background plasma in (cm^-3)
-      :type electron_dens: float
+    :param electron_dens: Electron density of the background plasma in (cm^-3)
+    :type electron_dens: float
 
-      :param ion_temp: Main ion temperature of the background plasma in (eV)
-      :type ion_temp: float
+    :param ion_temp: Main ion temperature of the background plasma in (eV)
+    :type ion_temp: float
 
-      :param ion_dens: Main ion density of the background plasma in (cm^-3)
-      :type ion_dens: float
+    :param ion_dens: Main ion density of the background plasma in (cm^-3)
+    :type ion_dens: float
 
-      :param ion_mass: Main ion species mass in (amu)
-      :type ion_mass: float
+    :param ion_mass: Main ion species mass in (amu)
+    :type ion_mass: float
 
-      :param ion_charge_number: Main ion species charge number
-      :type ion_charge_number: int
+    :param ion_charge_number: Main ion species charge number
+    :type ion_charge_number: int
       
-      :param init_temp: Initial temperatures in (eV) of the charge states for the modelled species
-      :type init_temp: float array
+    :param init_temp: Initial temperatures in (eV) of the charge states for the modelled species
+    :type init_temp: float array
 
-      :param kwargs: Keyword arguments to pass to `ionization_balance`
+    :param kwargs: Keyword arguments to pass to `ionization_balance`
     """
 
     def __init__(self, fils, metas, mass, polarizability, electron_temp,
@@ -230,8 +229,10 @@ def plasma_energy_transfer_frequency(
     Calculates the collisional energy transfer frequency between two plasma
     species.
     
-    The thermal equilibration of two species is given by:
+    The thermal equilibration of two species is given by::
+
         3/2 * n_1 * dT_1/dt = -nu_1,2 * n_1 * (T_1 - T_2)
+
     where n is density, T is temperature, t is time, and nu is the collisional
     energy transfer frequency. This frequency characterizes the rate at which
     energy is transferred by collisions from species 2 to species 1. It is
@@ -289,8 +290,10 @@ def neutral_energy_transfer_frequency(masses, plasma_density, neutral_dipole_pol
     include contributions from longer range interactions.
 
     The thermal equilibration of the neutral species with the plasma species is
-    given by:
+    given by::
+
         3/2 * n_n * dT_n/dt = -nu_n,p * n_n * (T_n - T_p)
+
     where n_n is neutral density, T_n/T_p is neutral/plasma temperature, t is
     time, and nu is the collisional energy transfer frequency.
 
