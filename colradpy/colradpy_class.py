@@ -60,6 +60,7 @@ else:
 from matplotlib import rc,rcParams
 from fractions import Fraction
 import os
+import warnings
 import pathlib
 import subprocess
 
@@ -2640,14 +2641,20 @@ class colradpy():
 
 
 
-    def write_pecs_adf15(self,fil_name='', pec_inds = 0, num = 8, pecs_split=False):
+    def write_pecs_adf15(self,fil_name='', pec_inds = None, num = 8, pecs_split=False):
 
         """ This function calls the write_adf15 function.
+
+            Wavelengths are written in A, in standard air from 200 nm and in vacuum
+            below (see vac_to_air). By default all lines are written except those
+            whose wavelength cannot be: infinite or too long for the adf15 format
+            (degenerate levels) or not positive (split levels out of order), with a
+            warning. PECs need a temperature-density grid, not temp_dens_pair.
 
         :param fil_name
         :type str
 
-        :param pec_inds
+        :param pec_inds: indices of the PECs to write, all by default
         :type int arr
 
         :param num
@@ -2658,38 +2665,40 @@ class colradpy():
 
         """
 
-        
+        if(self.data['user']['temp_dens_pair']):
+            raise ValueError('adf15 files need PECs on a temperature-density grid, '
+                             'they cannot be written with temp_dens_pair=True')
+
         if(fil_name==''):#defaul file name if the user did not choose one
-            fil_name = 'adf15_colradpy_' + re.split('/',self.data['user']['file_loc'])[-1]
+            fil_name = 'adf15_colradpy_' + os.path.basename(self.data['user']['file_loc'])
 
         if(pecs_split):#write split PECs if requested
-
-            if(pec_inds == 0):
-                #if no PEC indices specified by user just retun all
-                pec_inds = np.linspace(0,len(self.data['processed']['split']['wave_air'])-1,
-                                     len(self.data['processed']['split']['wave_air']),dtype='int')
-            
-            write_adf15(fil_name, pec_inds, self.data['processed']['split']['wave_air']*10,
-                    self.data['processed']['split']['pecs'], self.data['atomic']['element'],
-                    self.data['atomic']['charge_state'], self.data['user']['dens_grid'],
-                    self.data['user']['temp_grid'], self.data['atomic']['metas'],
-                        self.data['atomic']['ion_pot'],
-                        user = self.data['user'], atomic = self.data['atomic'], num = num)
-            
+            processed = self.data['processed']['split']
         else:#write un-split PECs
+            processed = self.data['processed']
+        wave = processed['wave_air']*10#nm to A
 
-            if(pec_inds == 0):
-            
-                pec_inds = np.linspace(0,len(self.data['processed']['wave_air'])-1,
-                                     len(self.data['processed']['wave_air']),dtype='int')
-            
-            write_adf15(fil_name, pec_inds, self.data['processed']['wave_air']*10,
-                    self.data['processed']['pecs'], self.data['atomic']['element'],
+        #pec_inds = 0 also selects all, as before
+        if(pec_inds is None or (np.isscalar(pec_inds) and pec_inds == 0)):
+            #if no PEC indices specified by user just return all that can be written
+            pec_inds = np.where((wave > 0) & (wave < MAX_WAVELENGTH))[0]
+            if(len(pec_inds) < len(wave)):
+                warnings.warn(str(len(wave) - len(pec_inds)) + ' of ' + str(len(wave)) +
+                              ' lines are not written to the adf15 file, their wavelengths are '
+                              'not positive, infinite or longer than ' + str(MAX_WAVELENGTH) + ' A')
+
+        num_recomb = 0
+        if(self.data['user']['use_recombination'] or self.data['user']['use_recombination_three_body']):
+            num_recomb = len(self.data['atomic']['ion_pot'])
+
+        write_adf15(fil_name, pec_inds, wave,
+                    processed['pecs'], self.data['atomic']['element'],
                     self.data['atomic']['charge_state'], self.data['user']['dens_grid'],
                     self.data['user']['temp_grid'], self.data['atomic']['metas'],
-                        self.data['atomic']['ion_pot'],
-                        user = self.data['user'], atomic = self.data['atomic'], num = num)
-            
+                    self.data['atomic']['ion_pot'],
+                    user = self.data['user'], atomic = self.data['atomic'], num = num,
+                    num_recomb = num_recomb)
+
 
 
     def dump_hdf5(self,fil_name='colradpy_hdf5_dump.hkl', cut_limit=1e-3, pecs=True, gcrs=False, additional=False):
