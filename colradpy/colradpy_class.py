@@ -134,6 +134,30 @@ def parent_statistical_weight(term):
     return weight
 
 
+def strip_closed_shells(conf, closed_shells, nist_ground):
+    """Removes the closed subshells that lead a configuration, e.g. 1s2.2s2.2p6.3s.3p,
+       and are not in the NIST ground configuration, e.g. 3s2, because NIST leaves out
+       those inner subshells.
+
+    :param conf: configuration with subshells separated by '.'
+    :type conf: str
+
+    :param closed_shells: closed subshells such as 1s2
+    :type closed_shells: array
+
+    :param nist_ground: NIST ground configuration
+    :type nist_ground: str
+
+    :returns: str --configuration in the NIST form
+
+    """
+    ground_shells = str(nist_ground).split('.')
+    shells = str(conf).split('.')
+    while(len(shells) > 1 and shells[0] in closed_shells and shells[0] not in ground_shells):
+        shells = shells[1:]
+    return '.'.join(shells)
+
+
 #Wavelengths below this (nm) are kept in vacuum, as in the NIST ASD. The Edlen formula
 #is not valid in the vacuum ultraviolet and has poles at 87.7 and 160.3 nm.
 MIN_AIR_WAVELENGTH = 200.
@@ -1723,8 +1747,17 @@ class colradpy():
     def split_pec_multiplet(self):
         """This function will solve take LS resolved PECs and split them statistically among the j levels
            Note that is only works for dipole transitions. See "split_multiplet.py" for the transitions
-           that this will split. Most transitsions of spectroscopic importance should be able to be 
+           that this will split. Most transitsions of spectroscopic importance should be able to be
            split by this.
+
+           Spin conserving dipole multiplets (|dL| <= 1) are split with the Condon and Shortley line
+           strengths and lines with a single pair of j levels go to that pair. Other lines, which
+           these factors do not describe (spin changing or |dL| > 1), are kept unsplit at the
+           wavelength between the statistically weighted centres of their terms, with split levels
+           -1 and ['kept_unsplit'] True.
+
+           Wavelengths use the split level energies of shift_j_res_energy_to_nist when available,
+           otherwise the energies of the terms.
 
            Creates the ['split'] sub dictionary to hold the information of the split
 
@@ -1732,18 +1765,30 @@ class colradpy():
         if('processed' not in self.data.keys()):
             self.solve_quasi_static()
 
-        if('split' not in self.data['processed'].keys()):
-            self.data['processed']['split'] = {}
+        if('split' not in self.data['processed'].keys() or 'term_map' not in self.data['processed']['split']):
+            self.split_structure_terms_to_levels()
+        split = self.data['processed']['split']
 
-        self.data['processed']['split']['j_up'] = []
-        self.data['processed']['split']['j_low'] = []
-        self.data['processed']['split']['pecs'] = []
-        self.data['processed']['split']['wave_air'] = []
-        self.data['processed']['split']['relative_inten'] = []
-        self.data['processed']['split']['pec_levels'] = []
-        self.data['processed']['split']['unsplit_pec_levels'] = []
-        self.data['processed']['split']['unres_pec_map'] = []
-        
+        term_map = split['term_map'].astype(int)
+        if('energy' in split):
+            level_energy = np.asarray(split['energy'], dtype=float)
+        else:
+            level_energy = np.asarray(self.data['atomic']['energy'], dtype=float)[term_map]
+        #statistically weighted energy of the split levels of each term
+        level_weight = 2*np.asarray(split['j'], dtype=float) + 1
+        term_energy = np.bincount(term_map, level_weight*level_energy, len(self.data['atomic']['energy']))/\
+                      np.maximum(np.bincount(term_map, level_weight, len(self.data['atomic']['energy'])), 1e-300)
+
+        split['j_up'] = []
+        split['j_low'] = []
+        split['pecs'] = []
+        split['wave_vac'] = []
+        split['relative_inten'] = []
+        split['pec_levels'] = []
+        split['unsplit_pec_levels'] = []
+        split['unres_pec_map'] = []
+        split['kept_unsplit'] = []
+
         for i in range(0,len(self.data['processed']['pec_levels'])):
             up = self.data['processed']['pec_levels'][i,0]
             low = self.data['processed']['pec_levels'][i,1]
@@ -1752,76 +1797,50 @@ class colradpy():
                                          self.data['atomic']['L'][low],
                                          (self.data['atomic']['S'][up]-1)/2.,
                                          self.data['atomic']['L'][up])
-            L_tmp = np.zeros_like(ju)
-            self.data['processed']['split']['j_low'].append(jl)
-            self.data['processed']['split']['j_up'].append(ju)
-            self.data['processed']['split']['relative_inten'].append(res)
+            split['j_low'].append(jl)
+            split['j_up'].append(ju)
+            split['relative_inten'].append(res)
 
-            
-            if(res.size>0):
-
-                if((np.sum(res) > 0) or (res.size==1) ):
-                    for j in range(0,len(ju)):
-                        up_id = np.where((self.data['processed']['split']['config'] ==
-                                                                     self.data['atomic']['nist_conf_form'][up])&
-                                  (self.data['processed']['split']['L'] == self.data['atomic']['L'][up]) &
-                                  (self.data['processed']['split']['S'] == self.data['atomic']['S'][up]) &
-                                  (self.data['processed']['split']['j'] == ju[j]))[0]
-                        
-
-                        low_id = np.where((self.data['processed']['split']['config'] ==
-                                                              self.data['atomic']['nist_conf_form'][low])&
-                                  (self.data['processed']['split']['L'] == self.data['atomic']['L'][low]) &
-                                  (self.data['processed']['split']['S'] == self.data['atomic']['S'][low]) &
-                                  (self.data['processed']['split']['j'] == jl[j]))[0]
-
-                        #Allows for solution to ambiguility when no parentage is specified in
-                        #configuations. 
-                        conf_id_u = 0
-                        conf_id_l = 0
-                        if(up in self.data['atomic']['inds_same_id']):
-                            for kk in range(0,len(self.data['atomic']['id_groups'])):
-                                if( up in self.data['atomic']['id_groups'][kk]):
-                                    conf_id_u = np.where( up == self.data['atomic']['id_groups'][kk])[0][0]
-                                        
-                        if(low in self.data['atomic']['inds_same_id']):
-                            for kk in range(0,len(self.data['atomic']['id_groups'])):
-                                if( low in self.data['atomic']['id_groups'][kk]):
-                                    conf_id_l = np.where( low == self.data['atomic']['id_groups'][kk])[0][0]
-
-                        self.data['processed']['split']['pec_levels'].append(np.array([up_id[conf_id_u],
-                                                                                       low_id[conf_id_l]]))
-                        if(res.size == 1):#check if the term is split and apply factors if it is
-                            #term is not split into multiply levels 
-                            self.data['processed']['split']['pecs'].append(
-                                                                     self.data['processed']['pecs'][i])
-                            self.data['processed']['split']['unsplit_pec_levels'].append(
-                                                                                self.data['processed']['pec_levels'][i])
-                            self.data['processed']['split']['unres_pec_map'].append(i)
-                            
-                        else:#term is split into different levels
-                            #give each split corresponding PEC its relative value add the transition to different maps
-                            self.data['processed']['split']['pecs'].append(
-                                                   self.data['processed']['pecs'][i]*res[j]/np.sum(res))
-                            self.data['processed']['split']['unsplit_pec_levels'].append(
-                                                                                self.data['processed']['pec_levels'][i])
-                            self.data['processed']['split']['unres_pec_map'].append(i)
-                        #
-                        self.data['processed']['split']['wave_air'].append(
-                            1/(self.data['processed']['split']['energy'][up_id[conf_id_u]] - \
-                               self.data['processed']['split']['energy'][low_id[conf_id_l]]+1.e-20)*1e7)
-
+            if(len(ju) == 1):
+                #a single pair of levels has the whole line
+                weights = np.ones(1)
+            elif(self.data['atomic']['S'][up] == self.data['atomic']['S'][low] and
+                 np.abs(self.data['atomic']['L'][up] - self.data['atomic']['L'][low]) <= 1 and np.sum(res) > 0):
+                weights = res/np.sum(res)
             else:
-                self.data['processed']['split']['pecs'].append(self.data['processed']['pecs'][i])
+                weights = None
 
-        self.data['processed']['split']['wave_vac'] = np.copy(np.asarray(self.data['processed']['split']['wave_air']))
-        self.data['processed']['split']['wave_air'] = vac_to_air(self.data['processed']['split']['wave_vac'])
-        self.data['processed']['split']['pecs'] =  np.asarray(self.data['processed']['split']['pecs'])
-        self.data['processed']['split']['pec_levels'] =  np.asarray(self.data['processed']['split']['pec_levels'])
-        self.data['processed']['split']['unsplit_pecs_levels'] =  np.asarray(
-                                                                  self.data['processed']['split']['unsplit_pec_levels'])
-        self.data['processed']['split']['unres_pec_map'] =  np.asarray(self.data['processed']['split']['unres_pec_map'])
-        
+            if(weights is None):
+                #the line is kept unsplit between the centres of its terms
+                split['pecs'].append(self.data['processed']['pecs'][i])
+                split['pec_levels'].append(np.array([-1, -1]))
+                split['unsplit_pec_levels'].append(self.data['processed']['pec_levels'][i])
+                split['unres_pec_map'].append(i)
+                split['kept_unsplit'].append(True)
+                with np.errstate(divide='ignore'):
+                    split['wave_vac'].append(1.e7/np.abs(term_energy[up] - term_energy[low]))
+                continue
+
+            for j in range(0,len(ju)):
+                up_id = np.where((term_map == up) & (split['j'] == ju[j]))[0][0]
+                low_id = np.where((term_map == low) & (split['j'] == jl[j]))[0][0]
+                #give each split corresponding PEC its relative value add the transition to different maps
+                split['pecs'].append(self.data['processed']['pecs'][i]*weights[j])
+                split['pec_levels'].append(np.array([up_id, low_id]))
+                split['unsplit_pec_levels'].append(self.data['processed']['pec_levels'][i])
+                split['unres_pec_map'].append(i)
+                split['kept_unsplit'].append(False)
+                with np.errstate(divide='ignore'):
+                    split['wave_vac'].append(1.e7/np.abs(level_energy[up_id] - level_energy[low_id]))
+
+        split['wave_vac'] = np.asarray(split['wave_vac'])
+        split['wave_air'] = vac_to_air(split['wave_vac'])
+        split['pecs'] =  np.asarray(split['pecs'])
+        split['pec_levels'] =  np.asarray(split['pec_levels'])
+        split['unsplit_pec_levels'] =  np.asarray(split['unsplit_pec_levels'])
+        split['unsplit_pecs_levels'] = split['unsplit_pec_levels']
+        split['unres_pec_map'] =  np.asarray(split['unres_pec_map'])
+        split['kept_unsplit'] = np.asarray(split['kept_unsplit'], dtype=bool)
 
     def auto_check_eissner_config(self):
 
@@ -1903,16 +1922,10 @@ class colradpy():
 
             self.data['atomic']['nist_conf_form'] = shells_arr_tmp + self.data['atomic']['nist_conf_form']
 
-            in_all = True
-            while(in_all):
-                for ij in range(0,len(closed_shells)):
-                    in_all = in_all and closed_shells[ij][0:2] not in self.data['nist']['levels'][0]['conf']
-                    if(in_all):
-
-                        for kk in range(0,len(self.data['atomic']['nist_conf_form'])):
-
-                            self.data['atomic']['nist_conf_form'][kk] = re.sub(closed_shells[ij]+'.', '', self.data['atomic']['nist_conf_form'][kk])
-                            self.data['atomic']['nist_conf_form'][kk] = re.sub(r'\.\.', r'\.', self.data['atomic']['nist_conf_form'][kk])
+            #NIST leaves out the inner closed subshells that are not in its ground configuration
+            self.data['atomic']['nist_conf_form'] = np.array(
+                [strip_closed_shells(conf, closed_shells, self.data['nist']['levels'][0]['conf'])
+                 for conf in self.data['atomic']['nist_conf_form']], dtype=object)
 
         
     def split_structure_terms_to_levels(self):
@@ -1922,6 +1935,9 @@ class colradpy():
             get the j values. This also puts the configuration string into NIST format.
         """
         
+        if('nist' not in self.data):
+            self.get_nist_levels_txt()
+        self.data.setdefault('processed', {})
         if('split' not in self.data['processed']):
             self.data['processed']['split'] = {}
 
@@ -2057,32 +2073,13 @@ class colradpy():
             
             
 
-            in_all = True
-            while(in_all):
-                for ij in range(0,len(closed_shells)):
-                    in_all = in_all and closed_shells[ij] not in self.data['nist']['levels'][0]['conf']
-                    if(in_all):
-                        
-                        for kk in range(0,len(self.data['atomic']['nist_conf_form'])):
-                            
-                            ttmp = self.data['atomic']['nist_conf_form'][kk][4:]
-                            self.data['atomic']['nist_conf_form'][kk] = ttmp
-                            
-            #remove closed subshells because thats what NIST does
-            #probably a better way to do this but I cant be bothered
-            closed_shells = np.array(['1s2','2s2','2p6','3s2','3p6','4s2','3d10','4p6','5s2','4f14','5d10'])
-
-
-
-            
-            in_all = True
-            while(in_all):
-                for ij in range(0,len(closed_shells)):
-                    in_all = in_all and closed_shells[ij] not in self.data['nist']['levels'][0]['conf']
-                    if(in_all):
-
-                        for kk in range(0,len(self.data['processed']['split']['config'])):
-                            self.data['processed']['split']['config'][kk] = self.data['processed']['split']['config'][kk][4:]
+            #NIST leaves out the inner closed subshells that are not in its ground configuration
+            self.data['atomic']['nist_conf_form'] = np.array(
+                [strip_closed_shells(conf, closed_shells, self.data['nist']['levels'][0]['conf'])
+                 for conf in self.data['atomic']['nist_conf_form']], dtype=object)
+            self.data['processed']['split']['config'] = np.array(
+                [strip_closed_shells(conf, closed_shells, self.data['nist']['levels'][0]['conf'])
+                 for conf in self.data['processed']['split']['config']], dtype=object)
                             
         self.data['processed']['split']['L'] = np.concatenate(l,axis=0)
         self.data['processed']['split']['S'] = np.concatenate(s,axis=0)
@@ -2113,7 +2110,7 @@ class colradpy():
         test = np.where(np.char.find(closed_shells,
                               conf[0][0:2])==0)[0]
         #need the if statement here to easily account for hydrogenic species
-        if(test[0] >0):
+        if(test.size > 0 and test[0] > 0):
             for ij in range(0,test[0]):
 
                 add_shell = np.setdiff1d(range(conf.shape[0]),
@@ -2147,87 +2144,92 @@ class colradpy():
                         wat = closed_shells[ij] + '.' + shells_arr_tmp[ik]
                         shells_arr_tmp[ik] = wat
             '''
-            in_all = True
-            while(in_all):
-                
-                for ij in range(0,len(closed_shells)):
-
-                    in_all = in_all and closed_shells[ij][0:2] not in self.data['nist']['levels'][0]['conf']
-                    if(in_all):
-                        for kk in range(0,len(self.data['atomic']['nist_conf_form'])):
-                            self.data['atomic']['nist_conf_form'][kk] = self.data['atomic']['nist_conf_form'][kk][len(closed_shells[ij])+1:]
+            #NIST leaves out the inner closed subshells that are not in its ground configuration
+            self.data['atomic']['nist_conf_form'] = np.array(
+                [strip_closed_shells(conf, closed_shells, self.data['nist']['levels'][0]['conf'])
+                 for conf in self.data['atomic']['nist_conf_form']])
         
 
 
         
+    def _nist_level(self, conf, S, L, j):
+        """First NIST level with the configuration, term and J, or None."""
+        term = str(S) + L_LETTERS[L]
+        j_val = str(Fraction(j))
+        for ent in self.data['nist']['levels']:
+            if(ent['conf'] == conf and ent['term'] == term and ent['j_val'] == j_val):
+                return ent
+        return None
+
     def shift_j_res_energy_to_nist(self,already_j=False,fractional_diff_adf04_nist=0.05):
         """shift_j_res_energy_to_nist maps j resolved structure energy values to the NIST values
            if those values are availble. Saves these in the 'split' sub dictionary. This can be used
-           with a j resolved file or with LS file if it is split to j resolution with the 
+           with a j resolved file or with LS file if it is split to j resolution with the
            'split_structure_terms_to_levels' method.
+
+           Levels that are not in NIST keep their energy from the adf04 file, the energy of their
+           term for split levels. ['nist_shifted'] marks the levels that were shifted.
         """
+        if('nist' not in self.data):
+            self.get_nist_levels_txt()
 
-
-        l_map = np.array(list(L_LETTERS)) #map of l values to the letters, NIST uses letters
         if( not already_j):#added check for already at j resolution in which case no need to split
-            if('split' not in self.data['processed']):
-                if('config' not in self.data['processed']['split']):
-                    self.split_structure_terms_to_levels()
-            
-            energy = np.ones_like(self.data['processed']['split']['config'])
-            energy = energy * -1.
-            for i in range(0,len(self.data['processed']['split']['config'])):
-                 tmp = list( filter(lambda ent: ent['conf']== self.data['processed']['split']['config'][i],
-                           filter(lambda ent: ent['term']== str(self.data['processed']['split']['S'][i]) +\
-                                                                        l_map[self.data['processed']['split']['L'][i]],
-                           filter(lambda ent: ent['j_val']==str(Fraction(self.data['processed']['split']['j'][i])),
-                                                                  self.data['nist']['levels']))))
-                 if(tmp):
-                     #the or is to account for the ground state splitting which will definitely lead to bigger than 5% difference
-                     #or any term in the file that has a 
-                     if( (np.abs(float(tmp[0]['energy'])-self.data['atomic']['energy'][int(self.data['processed']['split']['term_map'][i])])/tmp[0]['energy'] < fractional_diff_adf04_nist) or
-                          self.data['atomic']['energy'][int(self.data['processed']['split']['term_map'][i])] < 10000):
-                         energy[i] = float(tmp[0]['energy'])
+            if('split' not in self.data.get('processed', {}) or 'config' not in self.data['processed']['split']):
+                self.split_structure_terms_to_levels()
 
-                         
-            self.data['processed']['split']['energy'] = energy
-            
+            split = self.data['processed']['split']
+            term_energy = self.data['atomic']['energy'][split['term_map'].astype(int)]
+            energy = np.array(term_energy, dtype=float)
+            shifted = np.zeros(len(energy), dtype=bool)
+            for i in range(0,len(split['config'])):
+                tmp = self._nist_level(split['config'][i], split['S'][i], split['L'][i], split['j'][i])
+                if(tmp is not None):
+                    nist_energy = float(tmp['energy'])
+                    #the or is to account for the ground state splitting which will definitely lead to bigger than 5% difference
+                    #or any term in the file that has a low energy
+                    if( (np.abs(nist_energy - term_energy[i]) < fractional_diff_adf04_nist*np.abs(nist_energy)) or
+                        term_energy[i] < 10000):
+                        energy[i] = nist_energy
+                        shifted[i] = True
+
+            split['energy'] = energy
+            split['nist_shifted'] = shifted
+
         else:
-            energy = np.ones(len(self.data['atomic']['nist_conf_form']))
-            energy = energy * -1.
+            if('nist_conf_form' not in self.data['atomic']):
+                self.get_nist_conf_form()
+            energy = np.array(self.data['atomic']['energy'], dtype=float)
+            shifted = np.zeros(len(energy), dtype=bool)
             for i in range(0,len(self.data['atomic']['nist_conf_form'])):
-                
-                 tmp = list( filter(lambda ent: ent['conf']== self.data['atomic']['nist_conf_form'][i],
-                           filter(lambda ent: ent['term']== str(self.data['atomic']['S'][i]) +\
-                                                                        l_map[self.data['atomic']['L'][i]],
-                           filter(lambda ent: ent['j_val']==str(Fraction(self.data['atomic']['w'][i])),
-                                                                  self.data['nist']['levels']))))
-                 if(tmp):
-                             energy[i] = float(tmp[0]['energy'])
-                             print(self.data['atomic']['nist_conf_form'][i],self.data['atomic']['S'][i],l_map[self.data['atomic']['L'][i]],Fraction(self.data['atomic']['w'][i]),tmp)
+                tmp = self._nist_level(self.data['atomic']['nist_conf_form'][i], self.data['atomic']['S'][i],
+                                       self.data['atomic']['L'][i], self.data['atomic']['w'][i])
+                if(tmp is not None):
+                    energy[i] = float(tmp['energy'])
+                    shifted[i] = True
+                    print(self.data['atomic']['nist_conf_form'][i],self.data['atomic']['S'][i],L_LETTERS[self.data['atomic']['L'][i]],Fraction(self.data['atomic']['w'][i]),tmp)
 
             self.data['atomic']['adf04_energies'] = np.copy(self.data['atomic']['energy'])
             self.data['atomic']['energy'] = energy
+            self.data['atomic']['nist_shifted'] = shifted
             print('Energy values that could be shifted to NIST energies have been. Original energies now stored in [atomic][adf04_energies')
 
-            
-
-
-
-
-
     def shift_j_res_pecs(self):
-        
-        a = np.where( self.data['atomic']['energy'] > -1)[0] #levels that are not in NIST have be given -1 for energies
+        """Wavelengths of the PECs between levels shifted to NIST energies by shift_j_res_energy_to_nist
+           with already_j=True, in ['wave_vac_shift'] and ['wave_air_shift'].
+        """
+        if('nist_shifted' in self.data['atomic']):
+            a = np.where(self.data['atomic']['nist_shifted'])[0]
+        else:
+            a = np.where( self.data['atomic']['energy'] > -1)[0] #levels that are not in NIST have be given -1 for energies
         in_upper = _isin(self.data['processed']['pec_levels'][:,0],a) #find all the levels that have be shifted upp and lower
         in_lower = _isin(self.data['processed']['pec_levels'][:,1],a)
 
 
-        #set up 'shift' wave and pecs 
+        #set up 'shift' wave and pecs
         self.data['processed']['pecs_shift'] = self.data['processed']['pecs'][np.logical_and(in_upper,in_lower)]
         self.data['processed']['pec_levels_shift'] = self.data['processed']['pec_levels'][np.logical_and(in_upper,in_lower)]
         self.data['processed']['wave_vac_shift'] = np.zeros(len(self.data['processed']['pec_levels_shift']))
-        
+
         for i in range(0,len(self.data['processed']['pec_levels_shift'])):
             self.data['processed']['wave_vac_shift'][i] =  1.e7/abs(self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,0]]\
                                                                         - self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,1]])
@@ -2235,55 +2237,43 @@ class colradpy():
         #wavelengths below the air cut off stay in vacuum
         self.data['processed']['wave_air_shift'] = vac_to_air(self.data['processed']['wave_vac_shift'])
 
-
-        
-
     def shift_j_res_energy_to_nist2(self,already_j=False):
         """shift_j_res_energy_to_nist maps j resolved structure energy values to the NIST values
            if those values are availble. Saves these in the 'split' sub dictionary. This can be used
-           with a j resolved file or with LS file if it is split to j resolution with the 
+           with a j resolved file or with LS file if it is split to j resolution with the
            'split_structure_terms_to_levels' method.
+
+           Levels that are not in NIST keep their energy from the adf04 file, the original
+           energies are in ['adf04_energies'] and ['nist_shifted'] marks the shifted levels.
         """
+        if('nist' not in self.data):
+            self.get_nist_levels_txt()
 
-
-        l_map = np.array(list(L_LETTERS)) #map of l values to the letters, NIST uses letters
         if( not already_j):#added check for already at j resolution in which case no need to split
-            if('split' not in self.data['processed']):
-                if('config' not in self.data['processed']):
-                    self.split_structure_terms_to_levels()
-            
-            energy = np.ones_like(np.copy(self.data['atomic']['energy']))
-            energy = energy * -1.
-            for i in range(0,len(self.data['atomic']['config'])):
-                 tmp = list( filter(lambda ent: ent['conf']== self.data['atomic']['config'][i],
-                           filter(lambda ent: ent['term']== str(self.data['atomic']['S'][i]) +\
-                                                                        l_map[self.data['atomic']['L'][i]],
-                           filter(lambda ent: ent['j_val']==str(Fraction(self.data['atomic']['w'][i])),
-                                                                  self.data['nist']['levels']))))
-                 if(tmp):
-                             energy[i] = float(tmp[0]['energy'])
-            self.data['atomic']['energy'] = energy
-            
-        else: 
-            energy = np.ones(len(self.data['atomic']['nist_conf_form']))
-            energy = energy * -1.
-            for i in range(0,len(self.data['atomic']['nist_conf_form'])):
-                 tmp = list( filter(lambda ent: ent['conf']== self.data['atomic']['nist_conf_form'][i],
-                           filter(lambda ent: ent['term']== str(self.data['atomic']['S'][i]) +\
-                                                                        l_map[self.data['atomic']['L'][i]],
-                           filter(lambda ent: ent['j_val']==str(Fraction(self.data['atomic']['w'][i])),
-                                                                  self.data['nist']['levels']))))
-                 if(tmp):
-                             energy[i] = float(tmp[0]['energy'])
-                             print(self.data['atomic']['nist_conf_form'][i],self.data['atomic']['S'][i],l_map[self.data['atomic']['L'][i]],Fraction(self.data['atomic']['w'][i]),tmp)
+            if('split' not in self.data.get('processed', {}) or 'config' not in self.data['processed']['split']):
+                self.split_structure_terms_to_levels()
+            confs = self.data['atomic']['config']
+        else:
+            if('nist_conf_form' not in self.data['atomic']):
+                self.get_nist_conf_form()
+            confs = self.data['atomic']['nist_conf_form']
 
-            self.data['atomic']['adf04_energies'] = np.copy(self.data['atomic']['energy'])
-            self.data['atomic']['energy'] = energy
-            print('Energy values that could be shifted to NIST energies have been. Original energies now stored in [atomic][adf04_energies')
+        energy = np.array(self.data['atomic']['energy'], dtype=float)
+        shifted = np.zeros(len(energy), dtype=bool)
+        for i in range(0,len(confs)):
+            tmp = self._nist_level(confs[i], self.data['atomic']['S'][i], self.data['atomic']['L'][i],
+                                   self.data['atomic']['w'][i])
+            if(tmp is not None):
+                energy[i] = float(tmp['energy'])
+                shifted[i] = True
+                if(already_j):
+                    print(confs[i],self.data['atomic']['S'][i],L_LETTERS[self.data['atomic']['L'][i]],Fraction(self.data['atomic']['w'][i]),tmp)
 
-            
+        self.data['atomic']['adf04_energies'] = np.copy(self.data['atomic']['energy'])
+        self.data['atomic']['energy'] = energy
+        self.data['atomic']['nist_shifted'] = shifted
+        print('Energy values that could be shifted to NIST energies have been. Original energies now stored in [atomic][adf04_energies')
 
-            
     def get_nist_levels(self):
         """ get_nist_levels grabs the nist energy levels from the NIST mysql database. The mysql NIST database must
             be installed. There is a plain text file in the works to get around this and simplify for users.
