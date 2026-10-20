@@ -2583,13 +2583,14 @@ class colradpy():
             for j in p_t:
                 for k in p_m:
                     plt.figure()
-                    scaling = int(np.floor(np.log2(np.max(self.data['processed']['pecs'][:,k,j,i]))/np.log2(10)))
+                    #the PECs are plotted in units of 10^scaling ph cm3 s-1, so the largest is from 1 to 10
+                    scaling = int(np.floor(np.log10(np.max(self.data['processed']['pecs'][:,k,j,i]))))
                     plt.vlines(self.data['processed']['wave_air'],
                            np.zeros_like(self.data['processed']['wave_air']),
-                                         self.data['processed']['pecs'][:,k,j,i]*10**np.abs(scaling))
+                                         self.data['processed']['pecs'][:,k,j,i]/10.**scaling)
 
                     plt.xlabel('Wavelength in air (nm)',weight='semibold')
-                    plt.ylabel('PEC X 1E' +str(scaling) + ' (ph cm$^{-3}$ s$^{-1}$)',weight='semibold')
+                    plt.ylabel('PEC (10$^{' + str(scaling) + '}$ ph cm$^{3}$ s$^{-1}$)',weight='semibold')
                     plt.title('Temperature ' + str(self.data['user']['temp_grid'][j]) + ' eV,  '+\
                               'Density ' + format(self.data['user']['dens_grid'][i],'.2e') + ' cm$^{-3}$, '+\
                               'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
