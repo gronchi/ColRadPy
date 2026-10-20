@@ -107,6 +107,9 @@ L_LETTERS = 'SPDFGHIKLMNOQRTUV'
 #eV per cm-1, converts level energies and ionization potentials for the reduced rates
 EV_PER_WAVENUMBER = 0.00012398774011749576
 
+#Photon energy in J of a transition of 1 cm-1 (h c)
+J_PER_WAVENUMBER = constants.h*constants.c*100
+
 
 def parent_statistical_weight(term):
     """Statistical weight of a parent term from the first line of an adf04 file.
@@ -1343,7 +1346,7 @@ class colradpy():
         self.data['processed']['pec_levels'] = []
         self.data['processed']['wave_vac'] = []
 
-        plt = []
+        pls = []
         for i in range(0,len(self.data['cr_matrix']['A_ji'])):
             for j in range(0,len(levels_to_keep)):
                 #if statement here because there will be a number of transitions that have zero
@@ -1354,24 +1357,25 @@ class colradpy():
                     self.data['processed']['pecs'].append( self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*\
                                                         self.data['processed']['pops'][j]/ \
                                                         self.data['user']['dens_grid'])
-                    #convert cm-1 to eV with /8100
-                    #convert eV to joules *1.6021e-19
-                    #convert to from W to erg/s to stay in cgs 1e7
-                    plt.append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] - self.data['atomic']['energy'][i])/\
-                               8100*1.60218e-19*(self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*\
-                                                        self.data['processed']['pops'][j]/ \
-                                                        self.data['user']['dens_grid'])*1.e7)
-   
+                    #line power, photon energy * PEC, in W cm3
+                    pls.append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] - self.data['atomic']['energy'][i])*                               J_PER_WAVENUMBER*(self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*                                                        self.data['processed']['pops'][j]/                                                         self.data['user']['dens_grid']))
+
                     self.data['processed']['wave_vac'].append(1.e7/abs(self.data['atomic']['energy'][levels_to_keep[j]]\
                                                                         - self.data['atomic']['energy'][i]))
 
                     self.data['processed']['pec_levels'].append( np.array([levels_to_keep[j],i]))
 
 
-        self.data['processed']['pls'] = np.asarray(plt)
-        self.data['processed']['plt'] = np.sum(np.asarray(plt)[:,0:len(self.data['atomic']['metas'])], axis=0)
-        self.data['processed']['prb'] = np.sum(np.asarray(plt)[:,len(self.data['atomic']['metas']):], axis=0)        
-        #sum over all the deltaE *PEC values note that the units are W m3
+        #radiated line power coefficients in W cm3, summed over lines for the driving populations:
+        #excitation from the metastables (plt), recombination (prb) and charge exchange (prc)
+        #from the parents
+        nrecomb = 0
+        if(self.data['user']['use_recombination'] or self.data['user']['use_recombination_three_body']):
+            nrecomb = len(self.data['atomic']['ion_pot'])
+        self.data['processed']['pls'] = np.asarray(pls)
+        self.data['processed']['plt'] = np.sum(self.data['processed']['pls'][:,0:nmeta], axis=0)
+        self.data['processed']['prb'] = np.sum(self.data['processed']['pls'][:,nmeta:nmeta+nrecomb], axis=0)
+        self.data['processed']['prc'] = np.sum(self.data['processed']['pls'][:,nmeta+nrecomb:], axis=0)
 
         self.data['processed']['pecs'] = np.asarray(self.data['processed']['pecs'])
 
@@ -1701,13 +1705,9 @@ class colradpy():
                                                                  self.data['processed']['td']['td_pop'][levels_to_keep[j]]/\
                                                                  self.data['user']['dens_grid'])
 
-                    # 6.62607015e-34 Plank constant [m^2 kg/s], 299792458 Speed of light [m/s], level energy is in cm-1
-                    #6.62607015e-34*299792458=1.9865e-25*(100 [m-1/cm-1])=1.9865e-23
-                    self.data['processed']['td']['pls'].append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] - \
-                                                                      self.data['atomic']['energy'][i])*1.9865e-23*\
-                                           (self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*self.data['processed']['td']['td_pop'][levels_to_keep[j]]/ \
-                                                        self.data['user']['dens_grid']/1.e6))
-                    
+                    #line power, photon energy * PEC, in W cm3
+                    self.data['processed']['td']['pls'].append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] -                                                                       self.data['atomic']['energy'][i])*J_PER_WAVENUMBER*                                           (self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*self.data['processed']['td']['td_pop'][levels_to_keep[j]]/                                                         self.data['user']['dens_grid']))
+
 
         self.data['processed']['td']['pecs'] = np.asarray(self.data['processed']['td']['pecs'])
         self.data['processed']['td']['pls'] = np.asarray(self.data['processed']['td']['pls'])
@@ -2829,6 +2829,7 @@ class colradpy():
             processed['xcd']          = np.copy(self.data['processed']['xcd'])
             processed['plt']          = np.copy(self.data['processed']['plt'])
             processed['prb']          = np.copy(self.data['processed']['prb'])
+            processed['prc']          = np.copy(self.data['processed']['prc'])
 
         if(additional):# dumps additional data to hdf5 that other codes generally dont care about
             processed['pop_lvl']      = self.data['processed']['pop_lvl']

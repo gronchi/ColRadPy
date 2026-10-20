@@ -54,9 +54,9 @@ class TimeDependentRadiatedPowerTests(unittest.TestCase):
                 energy = model.data["atomic"]["energy"]
                 photon = np.abs(energy[levels[:, 0]] - energy[levels[:, 1]])
                 photon = photon * J_PER_WAVENUMBER
-                # PEC is in cm^3 s^-1 and power in W m^3.
-                expected = photon[:, None, None, None] * td["pecs"] / 1e6
-                np.testing.assert_allclose(td["pls"], expected, rtol=1e-4)
+                # PEC is in cm^3 s^-1 and power in W cm^3.
+                expected = photon[:, None, None, None] * td["pecs"]
+                np.testing.assert_allclose(td["pls"], expected, rtol=1e-12)
                 np.testing.assert_allclose(td["plt"], td["pls"].sum(axis=0))
 
     def test_initially_populated_line_at_time_zero(self):
@@ -68,8 +68,7 @@ class TimeDependentRadiatedPowerTests(unittest.TestCase):
         levels = [tuple(pair) for pair in model.data["processed"]["pec_levels"]]
         energy = model.data["atomic"]["energy"]
         a_value = model.data["cr_matrix"]["A_ji"][2, 0]
-        expected = (abs(energy[2] - energy[0]) * J_PER_WAVENUMBER
-                    * a_value / densities / 1e6)
+        expected = abs(energy[2] - energy[0]) * J_PER_WAVENUMBER * a_value / densities
         power = td["pls"][levels.index((2, 0))][0]
         for temperature in range(power.shape[0]):
             np.testing.assert_allclose(power[temperature], expected, rtol=1e-4)
