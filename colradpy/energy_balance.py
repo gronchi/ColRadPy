@@ -417,33 +417,50 @@ def debye_length(charges, densities, temperatures):
     ).sum(axis=-1)**(-1/2)
 
 
-# Tests for collisional energy transfer rates
+# Example: collisional energy transfer frequencies of carbon in an edge hydrogen plasma
+# (n = 5e18 m^-3, T_e = T_p = 15 eV, carbon at 1.5 eV) and between electrons and deuterons
+# in a core deuterium plasma (n = 1e21 m^-3, T_e = 1 keV, T_D = 10 keV)
 if __name__ == "__main__":
-    proton_to_carbon2_rate = plasma_energy_transfer_frequency(  # Energy transfer rate from protons to C2+
-        masses=np.array([12.011 * constants.value("atomic mass constant"), constants.proton_mass]),
-        charges=np.array([2, 1]),
-        densities=np.array([1e17, 5e18]),
-        temperatures=np.array([1.5, 15]),
+    carbon_mass = 12.011 * constants.value("atomic mass constant")
+    # the electrons shield the plasma, as in energy_balance.solve
+    edge_debye_length = debye_length(
+        charges=np.array([-1]), densities=np.array([5e18]), temperatures=np.array([15.0]),
     )
-    electron_to_carbon2_rate = plasma_energy_transfer_frequency(  # Energy transfer rate from electrons to C2+
-        masses=np.array([12.011 * constants.value("atomic mass constant"), constants.electron_mass]),
-        charges=np.array([2, -1]),
-        densities=np.array([1e17, 5e18]),
-        temperatures=np.array([1.5, 15]),
+    core_debye_length = debye_length(
+        charges=np.array([-1]), densities=np.array([1e21]), temperatures=np.array([1e3]),
     )
-    proton_to_carbon0_rate = neutral_energy_transfer_frequency(
-        masses=np.array([12.011 * constants.value("atomic mass constant"), constants.proton_mass]),
-        plasma_density=5e18,
-        neutral_dipole_polarizability=12.0,
-    )
-    electron_to_carbon0_rate = neutral_energy_transfer_frequency(
-        masses=np.array([12.011 * constants.value("atomic mass constant"), constants.electron_mass]),
-        plasma_density=5e18,
-        neutral_dipole_polarizability=12.0,
-    )
-    deuteron_to_electron_rate = plasma_energy_transfer_frequency(
-        masses=np.array([constants.electron_mass, constants.value("deuteron mass")]),
-        charges=np.array([-1, 1]),
-        densities=np.array([1e21, 1e21]),
-        temperatures=np.array([1e3, 10e3]),
-    )
+    rates = {
+        "protons to C2+": plasma_energy_transfer_frequency(
+            masses=np.array([carbon_mass, constants.proton_mass]),
+            charges=np.array([2, 1]),
+            densities=5e18,
+            temperatures=np.array([1.5, 15.0]),
+            debye_length=edge_debye_length,
+        ),
+        "electrons to C2+": plasma_energy_transfer_frequency(
+            masses=np.array([carbon_mass, constants.electron_mass]),
+            charges=np.array([2, -1]),
+            densities=5e18,
+            temperatures=np.array([1.5, 15.0]),
+            debye_length=edge_debye_length,
+        ),
+        "protons to C": neutral_energy_transfer_frequency(
+            masses=np.array([carbon_mass, constants.proton_mass]),
+            plasma_density=5e18,
+            neutral_dipole_polarizability=12.0,
+        ),
+        "electrons to C": neutral_energy_transfer_frequency(
+            masses=np.array([carbon_mass, constants.electron_mass]),
+            plasma_density=5e18,
+            neutral_dipole_polarizability=12.0,
+        ),
+        "deuterons to electrons": plasma_energy_transfer_frequency(
+            masses=np.array([constants.electron_mass, constants.value("deuteron mass")]),
+            charges=np.array([-1, 1]),
+            densities=1e21,
+            temperatures=np.array([1e3, 10e3]),
+            debye_length=core_debye_length,
+        ),
+    }
+    for name, rate in rates.items():
+        print(f"Energy transfer frequency from {name}: {float(rate):.4e} s^-1")

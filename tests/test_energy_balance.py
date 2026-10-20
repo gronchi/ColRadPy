@@ -4,6 +4,9 @@ Checks the plasma parameters the energy balance derives from its inputs, which
 are given in cm^-3 while the collision formulas work in SI units.
 """
 
+import contextlib
+import io
+import runpy
 import unittest
 import warnings
 
@@ -99,6 +102,17 @@ class EnergyBalanceTests(unittest.TestCase):
             balance.solve()
         self.assertTrue(balance.data["processed"]["success"])
         self.assertEqual(balance.data["processed"]["temperatures"].shape, (3, 3))
+
+    def test_module_example(self):
+        # The example run as __main__ called plasma_energy_transfer_frequency without
+        # the Debye length and raised TypeError.
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # runpy: module already imported
+            runpy.run_module("colradpy.energy_balance", run_name="__main__")
+        rates = [float(line.split(": ")[1].split()[0]) for line in output.getvalue().splitlines()]
+        self.assertEqual(len(rates), 5)
+        self.assertTrue(all(np.isfinite(rate) and rate > 0 for rate in rates))
 
 
 if __name__ == "__main__":
