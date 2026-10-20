@@ -41,6 +41,7 @@ except ImportError:
 import re
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
+from scipy import constants
 import sys
 sys.path.append('./')
 from colradpy.r8necip import *
@@ -2318,7 +2319,8 @@ class colradpy():
             self.data['processed']['broadening']['nat']['wave_arr'] =np.linspace(wave-dww,
                                                                       wave + dww,n,axis=1)#create 2d wave array
 
-            lor_tmp = self.lorentz(self.data['processed']['broadening']['nat']['dnu_l']/2/np.pi,
+            #dnu_l is the full width at half maximum, lorentz takes the half width
+            lor_tmp = self.lorentz(self.data['processed']['broadening']['nat']['dnu_l']/2,
                                           constants.c/((self.data['processed']['broadening']['nat']['wave_arr']/1.e9)),
                                                                  constants.c/(wave/1.e9))
             
@@ -2428,7 +2430,7 @@ class colradpy():
         '''Lorentzian function used for natural line broadening vl/((v-v0)**2 + vl**2)
 
         Args:
-          :param vl: width param
+          :param vl: half width at half maximum
           :type vl: float
 
           :param v: x array
