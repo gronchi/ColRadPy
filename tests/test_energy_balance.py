@@ -5,6 +5,7 @@ are given in cm^-3 while the collision formulas work in SI units.
 """
 
 import unittest
+import warnings
 
 import numpy as np
 from scipy import constants
@@ -74,6 +75,30 @@ class EnergyBalanceTests(unittest.TestCase):
             debye_length=balance.debye_length,
         )
         np.testing.assert_allclose(log, 10.15863, rtol=1e-5)
+
+    def test_failed_integration(self):
+        # A failed integration returned energies for fewer times than the abundances,
+        # which were broadcast against them without a warning.
+        balance = make_balance(10.0, 1e13)
+        rate = balance._evolve_energy
+        # the energies diverge at 5 ms, between the first and second solution times
+        balance._evolve_energy = lambda t, e, f: rate(t, e, f) + 1 / (5e-3 - t)**2
+        with self.assertWarnsRegex(RuntimeWarning, "failed after 1 of 3 solution times"):
+            balance.solve()
+        processed = balance.data["processed"]
+        self.assertFalse(processed["success"])
+        np.testing.assert_array_equal(processed["time"], [1e-3])
+        for key in ("abundances", "energies", "temperatures"):
+            self.assertEqual(processed[key].shape, (3, 1))
+
+        # a successful integration keeps every time and gives no warning
+        balance = make_balance(10.0, 1e13)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            warnings.filterwarnings("ignore", "invalid value", RuntimeWarning)  # 0/0 for empty states
+            balance.solve()
+        self.assertTrue(balance.data["processed"]["success"])
+        self.assertEqual(balance.data["processed"]["temperatures"].shape, (3, 3))
 
 
 if __name__ == "__main__":

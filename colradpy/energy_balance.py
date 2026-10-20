@@ -1,4 +1,5 @@
 from functools import partial
+import warnings
 import numpy as np
 from scipy import constants
 from scipy.integrate import solve_ivp
@@ -145,10 +146,21 @@ class energy_balance(object):
             args=(pops_fun,), method="BDF",
         )
 
+        # If the integration failed, the solution only reaches part of the requested times,
+        # so the results are kept up to the last time reached
+        num_times = len(sol.t)
+        if not sol.success:
+            warnings.warn(
+                "The energy balance integration failed after " + str(num_times) + " of "
+                + str(len(td_t)) + " solution times: " + str(sol.message)
+                + " The results stop at the last time reached.",
+                RuntimeWarning,
+            )
+
         # Package solution data
         self.data["processed"] = {}
-        self.data["processed"]["time"] = td_t
-        self.data["processed"]["abundances"] = self.ion_balance.data["processed"]["pops_td"][:, :, 0, 0]
+        self.data["processed"]["time"] = np.asarray(td_t)[:num_times]
+        self.data["processed"]["abundances"] = self.ion_balance.data["processed"]["pops_td"][:, :num_times, 0, 0]
         self.data["processed"]["energies"] = sol.y
         self.data["processed"]["temperatures"] = self.data["processed"]["energies"] / (3/2 * self.data["processed"]["abundances"])
         self.data["processed"]["nfev"] = sol.nfev
