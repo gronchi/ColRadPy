@@ -101,6 +101,36 @@ def get_git_hash(base_path=None):
     # Nothing worked
     return "unknown"
 
+#Letters of the total orbital angular momentum L = 0, 1, 2, ... (J is skipped)
+L_LETTERS = 'SPDFGHIKLMNOQRTUV'
+
+#eV per cm-1, converts level energies and ionization potentials for the reduced rates
+EV_PER_WAVENUMBER = 0.00012398774011749576
+
+
+def parent_statistical_weight(term):
+    """Statistical weight of a parent term from the first line of an adf04 file.
+       LS parents are written (2S+1)L, e.g. 2S or 3P, with weight (2S+1)(2L+1).
+       IC parents add J, e.g. 3P2.0 or 2P1.5 (or 3/2), with weight 2J+1.
+       See the ADF04 specification (ADAS appxa-04).
+
+    :param term: The parent term, without parentheses
+    :type term: str
+
+    :returns: float --statistical weight
+
+    """
+    match = re.fullmatch(r'(\d+)([A-Za-z])(\d+(?:\.\d*)?|\d+/\d+)?', str(term).strip())
+    if(match is None or match.group(2).upper() not in L_LETTERS):
+        raise ValueError('parent term ' + repr(term) + ' is not (2S+1)L or (2S+1)LJ')
+    if(match.group(3) is None):
+        return float(int(match.group(1))*(2*L_LETTERS.index(match.group(2).upper())+1))
+    weight = 2*float(Fraction(match.group(3)) if '/' in match.group(3) else match.group(3))+1
+    if(weight < 1 or weight != round(weight)):
+        raise ValueError('parent term ' + repr(term) + ' has J that is not a whole or half integer')
+    return weight
+
+
 #Wavelengths below this (nm) are kept in vacuum, as in the NIST ASD. The Edlen formula
 #is not valid in the vacuum ultraviolet and has poles at 87.7 and 160.3 nm.
 MIN_AIR_WAVELENGTH = 200.
@@ -500,18 +530,17 @@ class colradpy():
            supplimented into the matrix
         """
 
-        #if there is no ionization in the file create a zero matrix so that ECIP can be subbed in
+        #ionization rates and reduced rates exp(dE/kT)*S, which do not underflow at low temperature
+        #and are kept for three body recombination
+        self.data['rates']['ioniz']['ionization'] = np.zeros((len(self.data['atomic']['energy']),
+                                                              len(self.data['atomic']['ion_pot']),
+                                                              len(self.data['user']['temp_grid'])))
+        self.data['rates']['ioniz']['ionization_reduced'] = np.zeros_like(self.data['rates']['ioniz']['ionization'])
+
+        #if there is no ionization in the file keep the zero matrix so that ECIP can be subbed in
         if(np.size(self.data['rates']['ioniz']['ion_excit']) < 1):
             print('No ionization in the input file ECIP can be made')
-            self.data['rates']['ioniz']['ionization'] = np.zeros((len(self.data['atomic']['energy']),
-                                                                  len(self.data['atomic']['ion_pot']),
-                                                                  len(self.data['user']['temp_grid'])))
             return
-
-        #changed 4/19/17 to allow mutliple ion metas        
-        self.data['rates']['ioniz']['ionization'] = np.zeros((len(self.data['atomic']['energy']),
-                                                                       len(self.data['atomic']['ion_pot']),
-                                                                       len(self.data['user']['temp_grid'])))
 
 
 
@@ -538,16 +567,19 @@ class colradpy():
                                                     self.data['rates']['ioniz']['ion_transitions'][ii,1]-1])
                     ion_excit_interp_grid[ii] = ion_excit_interp_grid[ii] *scale
                     
-        for i in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):            
+        for i in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):
+            self.data['rates']['ioniz']['ionization_reduced'][self.data['rates']['ioniz']\
+                    ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\
+                    ['ion_transitions'][i,1] -1, :] = ion_excit_interp_grid[i]
             for j in range(0,len(self.data['user']['temp_grid'])):
-                
+
                 self.data['rates']['ioniz']['ionization'][self.data['rates']['ioniz']\
                     ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\
                     ['ion_transitions'][i,1] -1, j] = ion_excit_interp_grid[i,j]/\
                     np.exp((self.data['atomic']['ion_pot'][self.data['rates']['ioniz']\
                     ['ion_transitions'][i,1]-1] - self.data['atomic']['energy']\
                     [self.data['rates']['ioniz']['ion_transitions'][i,0] -1 ])\
-                    *0.00012398774011749576/self.data['user']['temp_grid'][j])
+                    *EV_PER_WAVENUMBER/self.data['user']['temp_grid'][j])
                 
                 
     def suppliment_with_ecip(self):
@@ -567,25 +599,52 @@ class colradpy():
                   ' try to calculate them')
             self.make_ioniz_from_reduced_ionizrates()
 
-        #added for the case that ionization is turned off and 
+        #added for the case that ionization is turned off and
         if('ionization' not in self.data['rates']['ioniz']):
             self.data['rates']['ioniz']['ionization'] = np.zeros((len(self.data['atomic']['energy']),
                                                                   len(self.data['atomic']['ion_pot']),
                                                                   len(self.data['user']['temp_grid'])))
-        
+        if('ionization_reduced' not in self.data['rates']['ioniz']):
+            self.data['rates']['ioniz']['ionization_reduced'] = \
+                                        self.reduced_ionization(self.data['rates']['ioniz']['ionization'])
+
+        #exponent dE/kT of the ECIP rates, as calculated in r8ecip
+        ecip_exponent = np.einsum('ij,k->ijk', self.data['atomic']['ion_pot'][None,:] -
+                                  self.data['atomic']['energy'][:,None],
+                                  9.11269E-06*157890.0/(self.data['user']['temp_grid']*11604.5))
         for p in range(0,len(self.data['atomic']['ion_pot'])):
-            #there was a stupid problem beacuse {X} only designates ecip not other ionization   
+            #there was a stupid problem beacuse {X} only designates ecip not other ionization
             ion_inds = np.where( self.data['atomic']['zpla'][:,p] > -1)[0]
             ion_inds2 = np.where( self.data['atomic']['zpla1'] == p +1)[0]
             ion_inds = np.intersect1d(ion_inds,ion_inds2)
-            if(self.data['rates']['ioniz']['ionization'].size > 0):
-                ecip_inds = np.where(self.data['rates']['ioniz']['ionization'][:,p,0] ==0)[0]
-            else:
-                ecip_inds = np.linspace(0,len(self.data['atomic']['energy'])-1,
-                                       len(self.data['atomic']['energy']),dtype=int)
+            #levels without ionization from the file. The reduced rates are used because the
+            #rates themselves can underflow to zero at low temperature.
+            ecip_inds = np.where(np.all(self.data['rates']['ioniz']['ionization_reduced'][:,p,:] == 0,
+                                        axis=1))[0]
             to_use = np.intersect1d(ecip_inds,ion_inds)
             self.data['rates']['ioniz']['ionization'][to_use,p,:] =\
                                         self.data['rates']['ioniz']['ecip'][to_use,p,:]
+            #r8ecip sets rates to zero for exponents above 180, which stay zero
+            ecip = self.data['rates']['ioniz']['ecip'][to_use,p,:]
+            self.data['rates']['ioniz']['ionization_reduced'][to_use,p,:] = \
+                np.exp(np.log(ecip, out=np.full_like(ecip, -np.inf), where=ecip > 0) +
+                       ecip_exponent[to_use,p,:])
+
+    def reduced_ionization(self, ionization):
+        """Reduced ionization rates exp(dE/kT)*S of ionization rates S with shape
+           (levels, parents, temperatures). Rates that are zero stay zero.
+
+        :param ionization: Ionization rates in cm3 s-1
+        :type ionization: float array
+
+        :returns: array --reduced ionization rates in cm3 s-1
+
+        """
+        exponent = np.einsum('ij,k->ijk', self.data['atomic']['ion_pot'][None,:] -
+                             self.data['atomic']['energy'][:,None],
+                             EV_PER_WAVENUMBER/self.data['user']['temp_grid'])
+        return np.exp(np.log(ionization, out=np.full_like(ionization, -np.inf, dtype=float),
+                             where=ionization > 0) + exponent)
     def make_cx_rates_from_file(self):
         """This function will make thermal charge exchange rates from the rates that are provided in the
            adf04 file.
@@ -704,23 +763,20 @@ class colradpy():
                         np.zeros((len(self.data['atomic']['energy']),
                                   len(self.data['atomic']['ion_pot']),
                                   len(self.data['user']['temp_grid'])))
+        #statistical weight of each parent
+        self.data['rates']['recomb']['w_ion'] = np.array([parent_statistical_weight(term)
+                                                          for term in self.data['atomic']['ion_term']])
+        #reduced ionization exp(dE/kT)*S, so the Boltzmann factors of detailed balance cancel
+        #without the overflow and underflow of exp(dE/kT) and S at low temperature
+        if('ionization_reduced' in self.data['rates']['ioniz']):
+            ionization_reduced = self.data['rates']['ioniz']['ionization_reduced']
+        else:
+            ionization_reduced = self.reduced_ionization(self.data['rates']['ioniz']['ionization'])
         for p in range(0,len(self.data['atomic']['ion_pot'])):
-            l_map = np.array(['S','P','D','F','G','H','I','J','I','K'])
-            if(len(self.data['atomic']['ion_term'][p]) ==2): # was -1)/2.
-                w_ion = ( int(self.data['atomic']['ion_term'][p][0]) * \
-                          (np.where(l_map==self.data['atomic']['ion_term'][p][1].upper())[0][0]*2+1))
-            elif(len(self.data['atomic']['ion_term'][p]) ==3):
-                w_ion = float(self.data['atomic']['ion_term'][p][2])
-            else:
-                w_ion=1e30 #was 1e30 changed 1/10/2020
-            self.data['rates']['recomb']['w_ion'] = w_ion#1.656742E-22
             #this is from detailed balance
             self.data['rates']['recomb']['recomb_three_body'][:,p,:] = 1.656742E-22* \
                 (self.data['atomic']['w'].reshape(len(self.data['atomic']['w']),1)*2+1)/ \
-                w_ion*np.exp( (self.data['atomic']['ion_pot'][p] - \
-                self.data['atomic']['energy']).reshape(len(self.data['atomic']['energy']),1) / \
-                (self.data['user']['temp_grid']/0.000123985))*\
-                self.data['rates']['ioniz']['ionization'][:,p,:] / \
+                self.data['rates']['recomb']['w_ion'][p]*ionization_reduced[:,p,:] / \
                 (self.data['user']['temp_grid'])**(1.5)
 
         recomb_3b_ind = np.where(np.isnan(self.data['rates']['recomb']['recomb_three_body']))
@@ -2086,7 +2142,7 @@ class colradpy():
         """
 
 
-        l_map = np.array(['S','P','D','F','G','H','I','J','K','O','P']) #map of l values to the letters, NIST uses letters        
+        l_map = np.array(list(L_LETTERS)) #map of l values to the letters, NIST uses letters
         if( not already_j):#added check for already at j resolution in which case no need to split
             if('split' not in self.data['processed']):
                 if('config' not in self.data['processed']['split']):
@@ -2164,7 +2220,7 @@ class colradpy():
         """
 
 
-        l_map = np.array(['S','P','D','F','G','H','I','J']) #map of l values to the letters, NIST uses letters        
+        l_map = np.array(list(L_LETTERS)) #map of l values to the letters, NIST uses letters
         if( not already_j):#added check for already at j resolution in which case no need to split
             if('split' not in self.data['processed']):
                 if('config' not in self.data['processed']):

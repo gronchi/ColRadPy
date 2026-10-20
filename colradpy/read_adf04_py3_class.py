@@ -54,10 +54,10 @@ def read_adf04(fil):
 
         ion_term = []
         for i in range(0,len(adf04['atomic']['ion_pot'])):
-            adf04['atomic']['ion_pot'][i] =float(
-                re.split('[(]',first_linep[first_linep_inds[i+3]])[0])
-            ion_term.append(re.split(
-                '[)]',re.split('[(]',first_linep[first_linep_inds[i+3]])[1])[0])
+            ion_pot_term = re.split('[()]',first_linep[first_linep_inds[i+3]])
+            adf04['atomic']['ion_pot'][i] =float(ion_pot_term[0])
+            #a parent without a term is 1S (ADF04 specification)
+            ion_term.append(ion_pot_term[1] if len(ion_pot_term) > 1 else '1S')
 
         adf04['atomic']['ion_term'] = np.asarray(ion_term)
 
