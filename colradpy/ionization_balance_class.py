@@ -45,7 +45,8 @@ class ionization_balance():
     :type fils: string array
 
     :param metas: One array for the first stage (later stages inferred from the
-        preceding SCD parent count), or one array per charge state
+        preceding SCD parent count), or one array per adf04 file, which can be followed by
+        one for the final stage (its number of metastables must be the parents of the last file)
     :type metas: array or list of arrays
 
     :param temp_grid: Array of the temperatures in (eV)
@@ -232,8 +233,15 @@ class ionization_balance():
             if not metas_input:
                 raise ValueError('metas must select at least one level in the first stage')
             explicit_metas = not np.isscalar(metas_input[0])
+            #one level array per adf04 file, which can be followed by one for the final stage that
+            #has no adf04 file; its number of metastables must be the parents of the last file
+            final_metas = None
+            if explicit_metas and len(metas_input) == len(fils) + 1:
+                final_metas = np.atleast_1d(np.asarray(metas_input[-1], dtype=int))
+                metas_input = metas_input[:-1]
             if explicit_metas and len(metas_input) != len(fils):
-                raise ValueError('metas must have one level array per adf04 file')
+                raise ValueError('metas must have one level array per adf04 file, which can be '
+                                 'followed by one for the final stage')
             self.data['user']['metas'] = []
 
 
@@ -331,6 +339,14 @@ class ionization_balance():
                 self.data['cr_data']['gcrs'][str(i)]['xcd'] = tmp.data['processed']['xcd']
                 if(self.data['user']['use_cx'][i]):
                     self.data['cr_data']['gcrs'][str(i)]['ccd'] = tmp.data['processed']['ccd']
+
+            if final_metas is not None:
+                last = len(fils) - 1
+                num_parents = self.data['cr_data']['gcrs'][str(last)]['scd'].shape[1]
+                if(len(final_metas) != num_parents):
+                    raise ValueError('the final stage has ' + str(len(final_metas)) + ' metastables but stage ' +
+                                     str(last) + ' ionizes to ' + str(num_parents) + ' parents')
+                self.data['user']['metas'].append(final_metas)
 
             if self.data['user']['init_abund'].size == 0:
                 gcrs = self.data['cr_data']['gcrs']

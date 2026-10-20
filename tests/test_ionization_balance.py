@@ -123,6 +123,17 @@ class MetastableInputTests(unittest.TestCase):
         self.assertEqual(len(balance.default_abundances()),
                          balance.data["ion_matrix"].shape[0])
 
+    def test_selection_for_the_final_stage(self):
+        # One array per charge state, the final stage included (examples/ion_bal.py), was
+        # rejected; the final stage has no adf04 file and takes the parents of the last one.
+        per_file = self.make_balance([np.array([0]), np.array([0])])
+        per_stage = self.make_balance([np.array([0]), np.array([0]), np.array([0, 1])])
+        np.testing.assert_array_equal(per_stage.data["ion_matrix"], per_file.data["ion_matrix"])
+        np.testing.assert_array_equal(per_stage.data["user"]["metas"][2], [0, 1])
+        # Be II ionizes to two Be2+ parents
+        with self.assertRaisesRegex(ValueError, "final stage has 1 metastables but stage 1 ionizes to 2"):
+            self.make_balance([np.array([0]), np.array([0]), np.array([0])])
+
     def test_invalid_selections(self):
         # Be I ionizes to one Be+ parent, so Be+ can only have one metastable.
         with self.assertRaisesRegex(ValueError, "stage 1 has 2 metastables but stage 0 ionizes to 1"):
