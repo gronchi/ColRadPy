@@ -1,63 +1,83 @@
 """Run from the repository root with: python -m unittest discover -s tests -v.
 
-Checks reading the bundled NIST level files, whose text columns np.genfromtxt
-returns as bytes on NumPy < 2 and as str on NumPy >= 2.
+Checks reading the bundled NIST level files (conf,term,J,energy per line),
+including lines with commas inside the configuration or the J column.
 """
 
 from pathlib import Path
+import os
+import re
 import unittest
-from unittest.mock import patch
-import warnings
 
 import numpy as np
 
 from colradpy import colradpy
-import colradpy.nist_read_txt as nist_read_txt
+from colradpy.nist_read_txt import _split_level, get_nist_txt
 
 
 ROOT = Path(__file__).resolve().parents[1]
 NIST = str(ROOT / "atomic" / "nist_energies") + "/"
-GENFROMTXT = np.genfromtxt
-
-
-def genfromtxt_bytes(*args, **kwargs):
-    """np.genfromtxt returning bytes for text, as NumPy < 2 did by default."""
-    with warnings.catch_warnings():
-        # NumPy >= 2 deprecates this (VisibleDeprecationWarning).
-        warnings.simplefilter("ignore")
-        return GENFROMTXT(*args, encoding="bytes", **kwargs)
 
 
 class NistReadTxtTests(unittest.TestCase):
-    def check_levels(self, read):
-        neutral = read(NIST, "Be", 1)
+    def test_well_formed_levels(self):
+        neutral = get_nist_txt(NIST, "Be", 1)
         self.assertEqual(neutral[0], {"conf": "1s2.2s2", "term": "1S", "j_val": "0",
                                       "energy": 0.0})
-        self.assertEqual((neutral[2]["conf"], neutral[2]["term"], neutral[2]["j_val"]),
-                         ("1s2.2s.2p", "3P", "1"))
-        self.assertAlmostEqual(neutral[2]["energy"], 21978.925)
-        # Fractional J values are text in the file.
-        ion = read(NIST, "Be", 2)
+        self.assertEqual(neutral[2], {"conf": "1s2.2s.2p", "term": "3P", "j_val": "1",
+                                      "energy": 21978.925})
+        # Fractional J values, compared with str(Fraction(j)) when shifting energies.
+        ion = get_nist_txt(NIST, "Be", 2)
         self.assertEqual((ion[2]["term"], ion[2]["j_val"]), ("2P", "3/2"))
         for level in neutral + ion:
             for key in ("conf", "term", "j_val"):
                 self.assertIs(type(level[key]), str)
+            self.assertIs(type(level["energy"]), float)
 
-    def test_text_columns_are_str(self):
-        self.check_levels(nist_read_txt.get_nist_txt)
+    def test_commas_inside_fields(self):
+        # Comma in the configuration.
+        self.assertEqual(_split_level("2,3.sp-,3P,0,2428700."),
+                         ("2,3.sp-", "3P", "0", 2428700.))
+        # Several J values of an unresolved level.
+        self.assertEqual(_split_level("2s.2p,3P,0,1,2,470310"),
+                         ("2s.2p", "3P", "0,1,2", 470310.))
+        self.assertEqual(_split_level("2s.2p3,3D,1/2 or 3/2,262180"),
+                         ("2s.2p3", "3D", "1/2 or 3/2", 262180.))
+        # Comma in the configuration with empty term and J.
+        self.assertEqual(_split_level("5s<1/2,F=4>.5g,,,134512.23"),
+                         ("5s<1/2,F=4>.5g", "", "", 134512.23))
+        # A numeric term of a four-field line stays the term.
+        self.assertEqual(_split_level("4f13.6s2,21,1,500.5"), ("4f13.6s2", "21", "1", 500.5))
 
-    def test_bytes_from_older_numpy(self):
-        self.assertIsInstance(genfromtxt_bytes(NIST + "be_1", dtype=None, delimiter=",")[0][0],
-                              bytes)
-        with patch.object(nist_read_txt.np, "genfromtxt", genfromtxt_bytes):
-            self.check_levels(nist_read_txt.get_nist_txt)
+    def test_files_with_commas_inside_fields(self):
+        levels = get_nist_txt(NIST, "Be", 3)
+        self.assertIn({"conf": "2,3.sp+", "term": "1P", "j_val": "1", "energy": 2441800.},
+                      levels)
+        levels = get_nist_txt(NIST, "He", 0)
+        self.assertIn({"conf": "2p.3d", "term": "3D", "j_val": "1,2,3", "energy": 514473.5},
+                      levels)
+        levels = get_nist_txt(NIST, "In", 2)
+        self.assertIn({"conf": "5s<1/2,F=5>.14h", "term": "", "j_val": "", "energy": 149959.83},
+                      levels)
 
-    def test_model_reads_bundled_levels(self):
-        model = colradpy(str(ROOT / "examples" / "input" / "cpb03_ls#be0.dat"),
-                         metas=np.array([0]), temp_grid=np.array([10.]),
-                         electron_den=np.array([1e13]))
-        model.get_nist_levels_txt()
-        self.assertEqual(model.data["nist"]["levels"][0]["conf"], "1s2.2s2")
+    def test_all_bundled_files(self):
+        lines = 0
+        for name in os.listdir(NIST):
+            match = re.fullmatch(r"([a-z]+)_(\d+)", name)
+            if match:
+                with self.subTest(file=name):
+                    levels = get_nist_txt(NIST, *match.groups())
+                    self.assertTrue(levels)
+                    lines += len(levels)
+        self.assertGreater(lines, 100000)
+
+    def test_models_read_bundled_levels(self):
+        for name, conf in (("cpb03_ls#be0.dat", "1s2.2s2"), ("be2_adf04", "1s2")):
+            with self.subTest(file=name):
+                model = colradpy(str(ROOT / "examples" / "input" / name), metas=np.array([0]),
+                                 temp_grid=np.array([10.]), electron_den=np.array([1e13]))
+                model.get_nist_levels_txt()
+                self.assertEqual(model.data["nist"]["levels"][0]["conf"], conf)
 
 
 if __name__ == "__main__":
