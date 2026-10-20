@@ -124,7 +124,7 @@ class energy_balance(object):
         # Calculate Debye length (assume mobility of electrons is higher than all other species)
         self.debye_length = debye_length(
             charges=np.array([-1]),
-            densities=np.array([self.data["user"]["electron_dens"]]),
+            densities=np.array([self.data["user"]["electron_dens"] * 1e6]),  # cm^-3 -> m^-3
             temperatures=np.array([self.data["user"]["electron_temp"]]),
         )
 
