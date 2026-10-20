@@ -1328,9 +1328,13 @@ class colradpy():
             self.data['processed']['driving_populations_norm'] =\
                           not self.data['processed']['driving_populations_norm']
 
+        #Only the excitation columns are normalized, their populations are relative to the
+        #metastable of this ion. Recombination and charge exchange populations are relative
+        #to the parent populations, which are not part of this ion.
+        nmeta = len(self.data['atomic']['metas'])
         if(self.data['processed']['driving_populations_norm']):
-            self.data['processed']['pops'] = self.data['processed']['pops'] /\
-                                             (1 + np.sum(self.data['processed']['pops'],axis=0))
+            self.data['processed']['pops'][:,0:nmeta] = self.data['processed']['pops'][:,0:nmeta] /\
+                                             (1 + np.sum(self.data['processed']['pops'][:,0:nmeta],axis=0))
 
         #setup pec and wavelength stuff start them as lists because
         #we wont know which levels actually have pec values before we loop through them
@@ -1402,9 +1406,9 @@ class colradpy():
             self.data['processed']['pops_no_norm'] = np.sum(self.data['processed']['pop_lvl'],axis=1)
 
             if(self.data['processed']['driving_populations_norm']):
-                self.data['processed']['pop_lvl'] = self.data['processed']['pop_lvl']/   \
-                                                (1+np.sum(np.sum(self.data['processed']['pop_lvl'],axis=1),axis=0))
-            
+                self.data['processed']['pop_lvl'][:,:,0:nmeta] = self.data['processed']['pop_lvl'][:,:,0:nmeta]/   \
+                                                (1+np.sum(np.sum(self.data['processed']['pop_lvl'][:,:,0:nmeta],axis=1),axis=0))
+
             #the F matrix
 
             ##############################################################
@@ -1424,7 +1428,7 @@ class colradpy():
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
                                                   np.einsum('ipk,ik->ipk',
                                                   self.data['rates']['ioniz']['ionization'][self.data['atomic']['metas'],:],
-                              1/(1+np.sum(self.data['processed']['pops_no_norm'][:,self.data['atomic']['metas'],:],axis=0)))
+                              1/(1+np.sum(self.data['processed']['pops_no_norm'][:,0:nmeta,:],axis=0)))
 
                 else:
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
@@ -1538,10 +1542,10 @@ class colradpy():
             self.data['processed']['pops_no_norm'] = np.sum(self.data['processed']['pop_lvl'],axis=1)
 
             if(self.data['processed']['driving_populations_norm']):
-                self.data['processed']['pop_lvl'] = self.data['processed']['pop_lvl']/   \
-                                                (1+np.sum(np.sum(self.data['processed']['pop_lvl'],axis=1),axis=0))
+                self.data['processed']['pop_lvl'][:,:,0:nmeta] = self.data['processed']['pop_lvl'][:,:,0:nmeta]/   \
+                                                (1+np.sum(np.sum(self.data['processed']['pop_lvl'][:,:,0:nmeta],axis=1),axis=0))
 
-            
+
             #the F matrix
 
             self.data['processed']['F'] = np.sum(self.data['processed']['pop_lvl']\
@@ -1556,7 +1560,7 @@ class colradpy():
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
                                                   np.einsum('ipk,ikl->ipkl',
                                                   self.data['rates']['ioniz']['ionization'][self.data['atomic']['metas'],:,:],
-                              1/(1+np.sum(self.data['processed']['pops_no_norm'][:,self.data['atomic']['metas'],:,:],axis=0)))
+                              1/(1+np.sum(self.data['processed']['pops_no_norm'][:,0:nmeta,:,:],axis=0)))
 
                 else:
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
