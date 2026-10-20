@@ -104,3 +104,28 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Editor and operating system temporary files
+*~
+\#*\#
+.#*
+*.swp
+*.swo
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Sphinx build output (docs/Makefile builds into docs/build)
+docs/build/
+
+# LaTeX auxiliary files
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.toc
+
+# pytest cache
+.pytest_cache/
