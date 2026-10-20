@@ -5,6 +5,8 @@ Tutorial
 =============
 This tutorial will take the user through the basics of atomic data needed for Collisional Radiative (CR) modeling.
 The python scripts for these examples can be found in the 'examples' folder.
+The code blocks below are run from the repository root, where they find the bundled
+adf04 files in 'examples/input'.
 
 For a detailed introduction to CR theory see the ColRadPy paper included in the 'user_doc' folder.
 Summers 2006 also provides a more detailed overview of CR theory.
@@ -41,18 +43,12 @@ Ionization balance is outlined in `Ionization Balance`_
 
 Installing ColRadPy
 ===================
-ColRadPy should work with any python 3.6 distribution.
-However, ColRadPy is only tested with the anaconda distribution of python 3.6.
-ColRadPy requires numpy, matplotlib, re, scipy, sys, collections packages.
-For local installation of ColRadPy In the 'colradpy' directory.
+ColRadPy needs Python 3 with NumPy (below 2.5), SciPy and matplotlib.
+From a clone of the repository, install it in editable mode (see :ref:`installation`):
 
+.. code-block:: bash
 
-
-.. code-block:: python
-   :linenos:
-      
-   python setup.py build
-   python setup.py install
+   pip install -e .
 
 
 
@@ -200,12 +196,10 @@ Ionization can significantly change both absolute values of PECs as well as rela
 .. code-block:: python
    :linenos:
 
-    import sys
-    sys.path.append('../') #starting in 'examples' so need to go up one
-    from colradpy_class import colradpy
+    from colradpy import colradpy
     import numpy as np
 
-    fil = 'cpb03_ls#be0.dat' #adf04 file
+    fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
     temperature_arr = np.linspace(1,100,100) #eV
     metastable_levels = np.array([0])   #metastable level, just ground chosen here
     density_arr =     np.array([1.e13,4.e14]) # cm-3
@@ -604,12 +598,10 @@ This means that the XCD will have non-zero values. Remeber the call from before 
 .. code-block:: python
    :linenos:
 
-   import sys
-   sys.path.append('../')
-   from colradpy_class import colradpy
+   from colradpy import colradpy
    import numpy as np
 
-   fil = 'cpb03_ls#be1.dat' #adf04 file
+   fil = 'examples/input/cpb03_ls#be1.dat' #adf04 file
    temperature_arr = np.linspace(1,100,20) #eV
    metastable_levels = np.array([0,1])   #ground and level 1 chosen to be metastable
    density_arr =     np.array([1.e13,8.e13,4.e14]) # cm-3
@@ -826,9 +818,7 @@ The source term could also be used to model the pumping of specific levels with 
 .. code-block:: python
    :linenos:
       
-   import sys
-   sys.path.append('../')
-   from colradpy_class import colradpy
+   from colradpy import colradpy
    import numpy as np
    import matplotlib.pyplot as plt
 
@@ -837,13 +827,13 @@ The source term could also be used to model the pumping of specific levels with 
    td_n0 = np.zeros(30)
    td_n0[0] = 1.
 
-   fil = 'cpb03_ls#be0.dat' #adf04 file
+   fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
    temperature_arr = np.array([10]) #eV
    metastable_levels = np.array([0])   #metastable level, just ground chosen here
    density_arr =     np.array([1.e9]) # cm-3
    be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
 		 use_recombination_three_body = True,use_ionization=True,suppliment_with_ecip=True,
-		 td_t=td_t,td_n0=td_n0,td_source=td_s)
+		 td_t=td_t,td_n0=td_n0)
    be.solve_cr()
    be.solve_time_dependent()
 
@@ -885,7 +875,7 @@ The source term could also be used to model the pumping of specific levels with 
    td_n0[0] = 1.
    td_s = np.zeros(30)
    td_s[0] = 1.
-   fil = 'cpb03_ls#be0.dat' #adf04 file
+   fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
    temperature_arr = np.array([10]) #eV
    metastable_levels = np.array([0])   #metastable level, just ground chosen here
    density_arr =     np.array([1.e8]) # cm-3
@@ -936,10 +926,9 @@ In the future this will be done automatically using the NIST database.
    :linenos:
 
 
-   import sys
-   sys.path.append('../')
-   from colradpy_class import *
+   from colradpy import colradpy
    import numpy as np
+   import matplotlib.pyplot as plt
 
    he = colradpy('./mom97_ls#he1.dat',[0],np.array([20]),np.array([1.e13]),use_recombination=False,
                   use_recombination_three_body = False,use_ionization=True)
