@@ -99,22 +99,82 @@ def get_git_hash(base_path=None):
     # Nothing worked
     return "unknown"
 
+#Wavelengths below this (nm) are kept in vacuum, as in the NIST ASD. The Edlen formula
+#is not valid in the vacuum ultraviolet and has poles at 87.7 and 160.3 nm.
+MIN_AIR_WAVELENGTH = 200.
+
+
+def air_refractive_index(wave_vac, pressure_pa=101325., temperature_c=15.,
+                         water_vapor_pressure_pa=0.):
+    """Refractive index of air from the 1993 revised Edlen formula, as in AtomSpect.
+       See Steck, Rubidium 87 D Line Data, Eq. (3): https://steck.us/alkalidata/rubidium87numbers.pdf
+
+       The defaults are dry standard air (101325 Pa and 15 C). The quoted 3-sigma
+       uncertainty in the index is 3e-8 at 350-650 nm under laboratory conditions.
+
+    :param wave_vac: The wavelengths in nm in vacuum
+    :type wave_vac: array
+
+    :param pressure_pa: Air pressure in Pa
+    :type pressure_pa: float
+
+    :param temperature_c: Air temperature in degrees Celsius
+    :type temperature_c: float
+
+    :param water_vapor_pressure_pa: Partial pressure of water vapor in Pa (not relative humidity)
+    :type water_vapor_pressure_pa: float
+
+    :returns: array --refractive index of air
+
+    """
+    kappa_squared = (1000. / np.asarray(wave_vac, dtype=float))**2
+    dispersion = 8342.54 + 2406147. / (130. - kappa_squared) + 15998. / (38.9 - kappa_squared)
+    pressure_temperature = (pressure_pa / 96095.43
+                            * (1. + 1e-8 * (0.601 - 0.00972 * temperature_c) * pressure_pa)
+                            / (1. + 0.0036610 * temperature_c))
+    humidity = water_vapor_pressure_pa * (0.037345 - 0.000401 * kappa_squared)
+    return 1. + (dispersion * pressure_temperature - humidity) * 1e-8
+
+
+def vac_to_air(wave_vac, pressure_pa=101325., temperature_c=15.,
+               water_vapor_pressure_pa=0., min_air_wavelength=MIN_AIR_WAVELENGTH):
+    """This function converts the vacuum wavelength of spectral lines to
+       the air wavelength, lambda_air = lambda_vac / n. The wavelength is the
+       difference in energy levels of the upper and lower transition, which
+       corresponds to the vacuum wavelength.
+
+       Wavelengths below min_air_wavelength are returned unchanged (in vacuum).
+
+    :param wave_vac: The wavelengths in nm in vacuum
+    :type wave_vac: array
+
+    :param min_air_wavelength: Shortest vacuum wavelength in nm that is converted to air
+    :type min_air_wavelength: float
+
+    The other parameters are those of air_refractive_index.
+
+    :returns: array --wavelengths in nm, in air from min_air_wavelength up
+
+    """
+    wave_vac = np.asarray(wave_vac, dtype=float)
+    in_air = wave_vac >= min_air_wavelength
+    #evaluate the index away from its poles for wavelengths kept in vacuum
+    index = air_refractive_index(np.where(in_air, wave_vac, 500.), pressure_pa,
+                                 temperature_c, water_vapor_pressure_pa)
+    return np.where(in_air, wave_vac / index, wave_vac)
+
+
 def convert_to_air(lam):
-    """This function converts the vacuum wavelength of spectral lines to 
-       the air wavelength. The wavelength is the difference in energy
-       levels of the upper and lower transition. By defualt in the adf04
-       file these energy correspond to the vacuum wavelengths to this
-       must be converted at some point for UV and visible light.
+    """Returns the refractive index of standard air (not a wavelength) at the vacuum
+       wavelengths lam in nm. Kept for compatibility, use vac_to_air for wavelengths.
 
     :param lam: The wavelengths in nm in vacuum
     :type lam: array
 
-    :returns: array --wavelengths in nm in air
+    :returns: array --refractive index of air
 
     """
-    
-    s = 10**3/lam
-    return 1 + 0.0000834254 + 0.02406147 / (130 - s**2) + 0.00015998 / (38.9 - s**2)
+    return air_refractive_index(lam)
 def myprint(d):
     for k, v in d.items():
         if isinstance(v, dict):
@@ -1232,8 +1292,7 @@ class colradpy():
         self.data['processed']['pecs'] = np.asarray(self.data['processed']['pecs'])
 
         self.data['processed']['wave_vac'] = np.asarray(self.data['processed']['wave_vac'])
-        self.data['processed']['wave_air'] = self.data['processed']['wave_vac']/ \
-                                                       convert_to_air(self.data['processed']['wave_vac'])
+        self.data['processed']['wave_air'] = vac_to_air(self.data['processed']['wave_vac'])
         self.data['processed']['pec_levels'] = np.asarray(self.data['processed']['pec_levels'])
 
         if(self.data['user']['temp_dens_pair']):
@@ -1672,8 +1731,7 @@ class colradpy():
                 self.data['processed']['split']['pecs'].append(self.data['processed']['pecs'][i])
 
         self.data['processed']['split']['wave_vac'] = np.copy(np.asarray(self.data['processed']['split']['wave_air']))
-        self.data['processed']['split']['wave_air'] = np.asarray(self.data['processed']['split']['wave_air'])/\
-                                                convert_to_air( np.asarray(self.data['processed']['split']['wave_air']))
+        self.data['processed']['split']['wave_air'] = vac_to_air(self.data['processed']['split']['wave_vac'])
         self.data['processed']['split']['pecs'] =  np.asarray(self.data['processed']['split']['pecs'])
         self.data['processed']['split']['pec_levels'] =  np.asarray(self.data['processed']['split']['pec_levels'])
         self.data['processed']['split']['unsplit_pecs_levels'] =  np.asarray(
@@ -2090,12 +2148,8 @@ class colradpy():
             self.data['processed']['wave_vac_shift'][i] =  1.e7/abs(self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,0]]\
                                                                         - self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,1]])
 
-        self.data['processed']['wave_air_shift'] = self.data['processed']['wave_vac_shift']/ \
-                                                       convert_to_air(self.data['processed']['wave_vac_shift'])
-
-        
-        lt_air = np.where(self.data['processed']['wave_air_shift'] < 185)[0]#find wavelengths below air cut off these have to be at vacc
-        self.data['processed']['wave_air_shift'][lt_air] = self.data['processed']['wave_vac_shift'][lt_air]
+        #wavelengths below the air cut off stay in vacuum
+        self.data['processed']['wave_air_shift'] = vac_to_air(self.data['processed']['wave_vac_shift'])
 
 
         
