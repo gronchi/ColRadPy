@@ -280,9 +280,9 @@ reduced ionization quantity in the supported ADF04 convention is converted as
             \exp[-\chi_{ip}/\Te],\qquad \chi_{ip}=I_p-E_i.
 \end{equation}
 An interpolated reduced coefficient is not itself the final ionization rate.
-The input parentage factor can be applied through \code{scale_file_ioniz}.
-The current implementation applies that scaling in the non-log-temperature
-branch only; selecting log interpolation therefore bypasses this option.
+The input parentage factor can be applied through \code{scale_file_ioniz},
+which multiplies the interpolated reduced coefficients whatever the
+interpolation; the ionization balance passes the option to each stage.
 
 Radiative and dielectronic recombination supplied by a file are collected in
 $\alpha_{ip}^{\rm RR+DR}$. The effective recombination coefficient used at a
@@ -413,14 +413,17 @@ population must then be accounted for as an external source or sink.
 \code{cr_matrix['cr']}; \code{A_ji} is stored with upper-level index first,
 so radiative entries are transposed when inserted into the generator.
 \code{cr_red} later contains only the selected excited-state block.
-The separate \code{cr_loss} array is not the main generator.
+The separate \code{cr_loss} array holds only the level-loss diagonal of
+that generator.
 \end{implnote}
 
-The implementation adds separate CX driving columns without matching losses from those
-columns. This can describe a maintained reservoir. If the additional entries
-are interpreted as evolving particle populations in a closed system, it does
-not conserve their population. The physical reservoir convention must therefore
-be settled before applying Eq.~\eqref{eq:conservation} to a CX-extended matrix.
+The CX driving columns used by the quasistatic solution have no matching
+losses: they attribute emission to CX from a given parent population.
+\routine{solve_time_dependent} instead moves the CX gains to the
+recombining-parent columns and subtracts them from the parent diagonal, so
+CX depletes the evolving parent and the transient generator satisfies
+Eq.~\eqref{eq:conservation}. The CX columns are then empty; their initial
+populations and sources must be zero.
 
 The off-diagonal sign, column sums, and inverse-channel density powers are
 useful checks before any matrix is solved. A linear algebra routine can solve
@@ -518,13 +521,11 @@ without the additional $1/\nelec$ used in some ADAS definitions. Matching
 symbols without matching their density convention produces unit errors.
 \end{implnote}
 
-\begin{caveat}[CX-only construction]
+\begin{implnote}[CX-only construction]
 When CX is enabled but both radiative and three-body recombination are
-disabled, \routine{solve_quasi_static} constructs the CX-column offset from
-\code{recomb_driving_lvls}. That local variable is assigned only when a
-recombination channel is enabled. The CX-only path therefore raises
-\code{UnboundLocalError} before solving the reduced system.
-\end{caveat}
+disabled, the CX columns still follow the parent columns, which the
+generator keeps whether or not recombination is used.
+\end{implnote}
 
 \subsection{Normalization is a choice of driving population}\label{sec:normalization}
 
@@ -981,9 +982,9 @@ The caller converts electron density from cm$^{-3}$ to m$^{-3}$ for the
 Debye helper. The energy solver uses one temperature/density point,
 reconstructs populations from stored eigenpairs, and integrates
 Eq.~\eqref{eq:energy} with BDF.
-After a failed integration it can combine the requested populations with a
-shorter energy solution before merely recording \code{sol.success}. That
-can raise a broadcasting error or silently broadcast incomplete results.
+A failed integration gives a warning with the solver message, and the
+stored times, abundances, energies and temperatures stop at the last time
+reached.
 \end{caveat}
 
 \section{Wavelengths, fine structure and line profiles}\label{sec:spectra}
@@ -1030,9 +1031,10 @@ PEC by $\mathrm{PEC}_{J_uJ_\ell}=\mathrm{PEC}_{\rm LS}W/\sum W$.
 This describes relative LS angular strengths with the associated statistical
 population assumption. It does not add resolved-$J$ collisional dynamics or
 configuration mixing. Development evaluates equivalent Condon--Shortley factors
-and renormalizes them in \routine{split_pec_multiplet}; it does not enforce
-the required equal-spin condition on every line. Intercombination lines
-therefore need separate treatment.
+and renormalizes them in \routine{split_pec_multiplet} for spin-conserving
+dipole multiplets ($|\Delta L|\le1$). Intercombination lines and lines with
+$|\Delta L|>1$, which these factors do not describe, are kept unsplit at the
+wavelength between the statistically weighted term centres.
 
 \subsection{Doppler and natural profiles}
 
@@ -1260,8 +1262,8 @@ interface because a downstream reader can silently drop or misidentify lines.
 The ADF15 wrapper converts nm to Angstroms once; the writer declares every
 line--driver block and assigns distinct selectors. The ADF11 constructor
 collects coefficient files before filling missing QCD/XCD arrays, so their
-order does not require SCD first. Format edge cases, including unusual
-ADF11 separator lines, still need validation against representative files.
+order does not require SCD first. Format edge cases, such as metastable
+resolved ADF11 files, still need validation against representative files.
 \end{implnote}
 
 The HDF5 dumping method uses an optional serialization dependency and can
@@ -1289,12 +1291,9 @@ from implementation defects.
 \endfirsthead
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
-Ionization scaling & Log-temperature interpolation bypasses \code{scale_file_ioniz}; the balance wrapper does not pass the option into each stage. & Section~\ref{sec:rates}\\
-Energy evolution & Integration failure may be hidden by packaging requested populations with a shorter energy solution. & Section~\ref{sec:energy}\\
 Narrow profiles & A float64 wavelength grid can collapse for very small natural widths. & Section~\ref{sec:spectra}\\
-Input edges & Parent-dimension mismatches and uncommon ADF11 separator lines need validation. & Sections~\ref{sec:inputroutes}, \ref{sec:interfaces}\\
-Coupling assumptions & Intercombination splitting and the CX reservoir convention need an explicit physical model. & Sections~\ref{sec:spectra}, \ref{sec:matrix}\\
-CX-only quasistatic solve & With both recombination mechanisms disabled, a recombination-driving variable is used before assignment. & Section~\ref{sec:cxdrivers}\\
+Input edges & Metastable-resolved ADF11 files are not covered by the tests. & Sections~\ref{sec:inputroutes}, \ref{sec:interfaces}\\
+Coupling assumptions & Intercombination and $|\Delta L|>1$ lines are kept unsplit rather than split with a coupling model. & Section~\ref{sec:spectra}\\
 \bottomrule
 \end{longtable}
 
