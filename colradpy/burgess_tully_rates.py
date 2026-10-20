@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.interpolate import interp1d
 
 
 def type1_xconvert(tconvert_grid,energy,c=1.5):
@@ -467,23 +466,27 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
         burgtully_dict['burg_tully']['yval_extrap'] = []
         burgtully_dict['burg_tully']['extrap_col_excit'] = []
         burgtully_dict['burg_tully']['excit_extrap'] =  []
+        #linear extrapolations for transitions without infinite energy points, one entry
+        #for each of the four types (empty when no transition of the type needs it)
+        burgtully_dict['burg_tully']['yval_extrap_lin'] = []
+        burgtully_dict['burg_tully']['excit_extrap_lin'] = []
 
 
         #type 1 stuff
         burgtully_dict['burg_tully']['xval_extrap'].append(type1_xconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type1_energies,c))
         burgtully_dict['burg_tully']['yval_extrap'].append(np.transpose(np.exp(burgtully_dict['burg_tully']['coeffs_a'][0]+
                                                                                np.transpose(burgtully_dict['burg_tully']['xval_extrap'][0])*burgtully_dict['burg_tully']['coeffs_b'][0])))
-        
+
         burgtully_dict['burg_tully']['excit_extrap'].append(type1_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5, type1_energies, burgtully_dict['burg_tully']['yval_extrap'][0],direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][0].size > 0):
-            burgtully_dict['burg_tully']['yval_extrap_lin'] = []
-            burgtully_dict['burg_tully']['excit_extrap_lin'] = []
-            
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][0],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][0],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][0][burgtully_dict['burg_tully']['zero_inds'][0]]))
             burgtully_dict['burg_tully']['excit_extrap_lin'].append(type1_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5, type1_energies[:,burgtully_dict['burg_tully']['zero_inds'][0]], burgtully_dict['burg_tully']['yval_extrap_lin'][0],direct='B'))
+        else:
+            burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
+            burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))
 
 
 
@@ -523,28 +526,14 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
         burgtully_dict['burg_tully']['excit_extrap'].append(type2_yconvert(burgtully_dict['burg_tully']['yval_extrap'][1],direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][1].size > 0):
-
-            #there is the possibility that the other types did not require extrapolation
-            #so the empty list needs to be added here
-            if('yval_extrap_lin' not in burgtully_dict['burg_tully']):
-                burgtully_dict['burg_tully']['yval_extrap_lin'] = []
-                burgtully_dict['burg_tully']['excit_extrap_lin'] = []
-                burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
-                burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))
-                
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][1],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][1],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][1][burgtully_dict['burg_tully']['zero_inds'][1]]))
             burgtully_dict['burg_tully']['excit_extrap_lin'].append(type2_yconvert( burgtully_dict['burg_tully']['yval_extrap_lin'][1],direct='B'))
 
         else:
-            #added for B files where this case first crept in
-            if('yval_extrap_lin' not in burgtully_dict['burg_tully']):
-                burgtully_dict['burg_tully']['yval_extrap_lin'] = []
-                burgtully_dict['burg_tully']['excit_extrap_lin'] = []
-
-            burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))#np.append(np.array([-1]))
-            burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))#np.append(np.array([-1]))
+            burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
+            burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))
 
 
 ####################################################################################################
@@ -580,19 +569,6 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
         burgtully_dict['burg_tully']['excit_extrap'].append(type3_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type3_energies,burgtully_dict['burg_tully']['yval_extrap'][2],direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][2].size > 0):
-
-            #there is the possibility that the other types did not require extrapolation
-            #so the empty list needs to be added here
-            if('yval_extrap_lin' not in burgtully_dict['burg_tully']):
-                burgtully_dict['burg_tully']['yval_extrap_lin'] = []
-                burgtully_dict['burg_tully']['excit_extrap_lin'] = []
-                burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
-                burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))                
-                burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))
-                burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))                
-
-            
-            
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][2],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][2],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][2][burgtully_dict['burg_tully']['zero_inds'][2]]))
@@ -634,28 +610,13 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
         burgtully_dict['burg_tully']['yval_extrap'].append(np.transpose(np.exp(burgtully_dict['burg_tully']['coeffs_a'][3]+
                                                                                np.transpose(burgtully_dict['burg_tully']['xval_extrap'][3])*burgtully_dict['burg_tully']['coeffs_b'][3])))
         
-        burgtully_dict['burg_tully']['excit_extrap'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies,burgtully_dict['burg_tully']['yval_extrap'][3],direct='B'))
+        burgtully_dict['burg_tully']['excit_extrap'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies,burgtully_dict['burg_tully']['yval_extrap'][3],c,direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][3].size > 0):
-
-            #there is the possibility that the other types did not require extrapolation
-            #so the empty list needs to be added here
-            if('yval_extrap_lin' not in burgtully_dict['burg_tully']):
-                burgtully_dict['burg_tully']['yval_extrap_lin'] = []
-                burgtully_dict['burg_tully']['excit_extrap_lin'] = []
-                burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
-                burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
-                burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))                
-                burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))
-                burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))                
-                burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))                
-
-            
-            
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][3],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][3],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][3][burgtully_dict['burg_tully']['zero_inds'][3]]))
-            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies[:,burgtully_dict['burg_tully']['zero_inds'][3]], burgtully_dict['burg_tully']['yval_extrap_lin'][3],direct='B'))
+            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies[:,burgtully_dict['burg_tully']['zero_inds'][3]], burgtully_dict['burg_tully']['yval_extrap_lin'][3],c,direct='B'))
 
 
         else:
@@ -667,13 +628,17 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
             
     if(burgtully_dict['burg_tully']['extrap_temp_inds_low'].size > 0):
+        #Below the calculated temperatures y is extrapolated linearly in x from the two lowest
+        #temperatures. x goes to 0 as T goes to 0, where y and the collision strength are finite.
+        #Transitions whose extrapolation is not positive down to x = 0 keep the collision
+        #strength of the lowest calculated temperature instead.
         burgtully_dict['burg_tully']['excit_extrap_low_lin'] = []
         burgtully_dict['burg_tully']['yval_extrap_low'] = []
         burgtully_dict['burg_tully']['xval_extrap_low'] = []
-        
+        burgtully_dict['burg_tully']['low_constant_inds'] = []
+        lowest = np.argsort(calc_temp_grid)[:2]
+
         for j in range(0,4):
-            t = np.zeros((len(burgtully_dict['burg_tully']['xval_arrs'][j]),
-                           len(burgtully_dict['burg_tully']['extrap_temp_inds_low'])))
             if(j==0):
                 burgtully_dict['burg_tully']['xval_extrap_low'].append(
                     type1_xconvert(user_temp_grid[extrap_temp_inds_low]*11604.5,
@@ -691,15 +656,16 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
                     type4_xconvert(user_temp_grid[extrap_temp_inds_low]*11604.5,
                                    type4_energies,c))
                 
-            for i in range(0,len(burgtully_dict['burg_tully']['xval_arrs'][j])):
+            x = burgtully_dict['burg_tully']['xval_arrs'][j][:,lowest]
+            y = burgtully_dict['burg_tully']['yval_arrs'][j][:,lowest]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                slope = (y[:,1] - y[:,0])/(x[:,1] - x[:,0])
+                t = y[:,[0]] + slope[:,None]*(burgtully_dict['burg_tully']['xval_extrap_low'][j] - x[:,[0]])
+            #y is linear in x, so it is positive down to x = 0 if it is at both ends
+            constant = ~(np.isfinite(t).all(axis=1) & (y[:,0] > 0) & (y[:,0] - slope*x[:,0] > 0))
+            burgtully_dict['burg_tully']['low_constant_inds'].append(np.where(constant)[0])
 
-                t[i,:] = \
-                    interp1d(burgtully_dict['burg_tully']['xval_arrs'][j][i,:],
-                             burgtully_dict['burg_tully']['yval_arrs'][j][i,:],
-                             fill_value='extrapolate', kind='slinear')(
-                        burgtully_dict['burg_tully']['xval_extrap_low'][j][i,:])
-            
-            burgtully_dict['burg_tully']['yval_extrap_low'].append(t)    
+            burgtully_dict['burg_tully']['yval_extrap_low'].append(t)
             if(j==0):
                 burgtully_dict['burg_tully']['excit_extrap_low_lin'].append(type1_yconvert(
                     user_temp_grid[extrap_temp_inds_low]*11604.5, type1_energies,
@@ -715,6 +681,9 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
             if(j==3):
                 burgtully_dict['burg_tully']['excit_extrap_low_lin'].append(type4_yconvert(
                     user_temp_grid[extrap_temp_inds_low]*11604.5, type4_energies,
-                    t, direct= 'B'))
+                    t, c, direct= 'B'))
+
+            burgtully_dict['burg_tully']['excit_extrap_low_lin'][j][constant] = \
+                col_excit[burgtully_dict['burg_tully']['ind_arrs'][j][constant]][:,[lowest[0]]]
 
     return burgtully_dict

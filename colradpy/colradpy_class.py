@@ -560,7 +560,22 @@ class colradpy():
                                         fill_value =  'extrapolate')
 
             ion_excit_interp_grid = ion_excit_interp(self.data['user']['temp_grid']).clip(min=0)
-            
+
+        #Below the file temperatures the reduced rates follow a power law through the two lowest
+        #temperatures (near threshold they go as T^1/2) instead of the interpolator's extrapolation,
+        #which crosses zero. Rates that do not decrease towards lower temperature are held constant.
+        file_temps = self.data['input_file']['temp_grid']/11604.5
+        low = self.data['user']['temp_grid'] < np.min(file_temps)
+        if(low.any()):
+            lowest = np.argsort(file_temps)[:2]
+            lowest_rates = self.data['rates']['ioniz']['ion_excit'][:,lowest]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                power = np.log(lowest_rates[:,1]/lowest_rates[:,0])/np.log(file_temps[lowest[1]]/file_temps[lowest[0]])
+            power[~np.isfinite(power) | (power < 0)] = 0.
+            ion_excit_interp_grid[:,low] = lowest_rates[:,[0]]*\
+                (self.data['user']['temp_grid'][low]/file_temps[lowest[0]])**power[:,None]
+
+        if(not self.data['user']['log_rate_ion']):
             if(self.data['user']['scale_file_ioniz']):
                 for ii in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):
                     scale = np.abs(self.data['atomic']['zpla'][self.data['rates']['ioniz']['ion_transitions'][ii,0]-1,
@@ -792,8 +807,9 @@ class colradpy():
         """This function will make both electron impact excitation and deexcitation rates
            from the values that stored in adf04 file on a user defined temperature grid
            If values are above the last calculate point in the adf04 then a burgess tully
-           extrapolation will be used. There is currently no extrapolation below the first
-           calculated temperature point. THis is something to add in the future.
+           extrapolation will be used. Below the first calculated temperature point the
+           burgess tully values are extrapolated towards their finite limit at T = 0, or the
+           collision strength of the first point is kept where that extrapolation is not positive.
         """
         if(self.data['user']['log_rate_col']):
             tmp = interp1d(np.log(self.data['input_file']['temp_grid']/11604.5),
@@ -817,42 +833,47 @@ class colradpy():
             self.data['rates']['excit']['col_excit_interp'] = tmp(self.data['user']['temp_grid'])
 
 
-        if( ('burg_tully' not in self.data['rates'].keys()) and (np.max(self.data['input_file']\
-                                ['temp_grid'])/11604.5 < np.max(self.data['user']['temp_grid']) )):
+        extrap_hi = np.max(self.data['input_file']['temp_grid'])/11604.5 < np.max(self.data['user']['temp_grid'])
+        extrap_low = np.min(self.data['input_file']['temp_grid'])/11604.5 > np.min(self.data['user']['temp_grid'])
+        if(extrap_hi):
             print('Atleast one user temp point above last calculated temperature using extrapolation be carefull')
-            self.make_burgess_tully()
-            
-        if( ('burg_tully' not in self.data['rates'].keys()) and (np.max(self.data['input_file']\
-                                ['temp_grid'])/11604.5 < np.min(self.data['user']['temp_grid']) )):
-            print('Atleast one user temp point below last calculated temperature using extrapolation be carefull')
+        if(extrap_low):
+            print('Atleast one user temp point below first calculated temperature using extrapolation be carefull')
+        if(extrap_hi or extrap_low):
             self.make_burgess_tully()
 
-
-
-            
-        if(np.max(self.data['input_file']['temp_grid'])/11604.5 < \
-           np.max(self.data['user']['temp_grid'])):
+        if(extrap_hi):
 
             for i in range(0,len(self.data['rates']['burg_tully']['extrap_temp_inds_hi'])):
-                for j in range(0,3):
-                    self.data['rates']['excit']['col_excit_interp']\
-                        [self.data['rates']['burg_tully']['ind_arrs'][j],
-                                      self.data['rates']['burg_tully']['extrap_temp_inds_hi'][i] ] =\
-                                      self.data['rates']['burg_tully']['excit_extrap'][j][:,i]
+                for j in range(0,4):
+                    self.data['rates']['excit']['col_excit_interp']                        [self.data['rates']['burg_tully']['ind_arrs'][j],
+                                      self.data['rates']['burg_tully']['extrap_temp_inds_hi'][i] ] =                                      self.data['rates']['burg_tully']['excit_extrap'][j][:,i]
 
-                for j in range(0,3):
+                for j in range(0,4):
                     if(self.data['rates']['burg_tully']['zero_inds'][j].size >0):
-                        self.data['rates']['excit']['col_excit_interp']\
-                            [self.data['rates']['burg_tully']['ind_arrs'][j]\
-                                           [self.data['rates']['burg_tully']['zero_inds'][j]],
-                                        self.data['rates']['burg_tully']['extrap_temp_inds_hi'][i] ] =\
-                                        self.data['rates']['burg_tully']['excit_extrap_lin'][j][:,i]
+                        self.data['rates']['excit']['col_excit_interp']                            [self.data['rates']['burg_tully']['ind_arrs'][j]                                           [self.data['rates']['burg_tully']['zero_inds'][j]],
+                                        self.data['rates']['burg_tully']['extrap_temp_inds_hi'][i] ] =                                        self.data['rates']['burg_tully']['excit_extrap_lin'][j][:,i]
 
+        if(extrap_low):
+            for j in range(0,4):
+                self.data['rates']['excit']['col_excit_interp'][np.ix_(
+                    self.data['rates']['burg_tully']['ind_arrs'][j],
+                    self.data['rates']['burg_tully']['extrap_temp_inds_low'])] =                     self.data['rates']['burg_tully']['excit_extrap_low_lin'][j]
+            num_constant = sum(map(len, self.data['rates']['burg_tully']['low_constant_inds']))
+            if(num_constant > 0):
+                print(str(num_constant) + ' transitions keep the collision strength of the first ' +
+                      'calculated temperature below it, their burgess tully extrapolation is not positive')
 
-            tttmp = np.where(np.isnan(self.data['rates']['excit']['col_excit_interp']))
-            if(tttmp[0].size>0):
-                print('NaNs in electron excitations where set to zero')
-                self.data['rates']['excit']['col_excit_interp'][tttmp] = 0.
+        tttmp = np.where(np.isnan(self.data['rates']['excit']['col_excit_interp']))
+        if(tttmp[0].size>0):
+            print('NaNs in electron excitations where set to zero')
+            self.data['rates']['excit']['col_excit_interp'][tttmp] = 0.
+
+        #negative collision strengths would give negative rates and populations
+        tttmp = np.where(self.data['rates']['excit']['col_excit_interp'] < 0)
+        if(tttmp[0].size>0):
+            print('Negative electron excitations where set to zero')
+            self.data['rates']['excit']['col_excit_interp'][tttmp] = 0.
                         
             '''
             if(self.data['user']['log_rate_col']):
