@@ -407,6 +407,15 @@ class colradpy():
                 
         self.populate_data(fil)
         self.data['atomic']['metas'] = np.asarray(metas)
+        #the quasistatic model needs the ground level as a metastable, it cannot be an excited level
+        if(self.data['atomic']['metas'].size > 0):
+            levels = self.data['atomic']['metas']
+            if(0 not in levels):
+                raise ValueError('metas must include the ground level 0, got ' + str(levels.tolist()))
+            if(len(np.unique(levels)) != len(levels) or levels.min() < 0 or
+               levels.max() >= len(self.data['atomic']['energy'])):
+                raise ValueError('metas must be different levels of the adf04 file (0 to ' +
+                                 str(len(self.data['atomic']['energy'])-1) + '), got ' + str(levels.tolist()))
 
 
         #check for levels that have identical identifications which can cause a problem for splitting later

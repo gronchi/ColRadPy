@@ -45,8 +45,9 @@ class ionization_balance():
       :param fils: Array of the input adf04 file
       :type fils: string array
 
-      :param metas: List of arrays for the metastable levels in a charge state
-      :type metas: list
+      :param metas: One array for the first stage (later stages inferred from the
+                    preceding SCD parent count), or one array per charge state
+      :type metas: array or list of arrays
 
       :param temp_grid: Array of the temperatures in (eV)
       :type temp_grid: float array
@@ -228,10 +229,13 @@ class ionization_balance():
 
 
             self.data['user']['temp_dens_pair'] = temp_dens_pair
-            self.data['user']['metas'] = np.asarray(metas)        
-            if(self.data['user']['init_abund'].size <1):
-                self.data['user']['init_abund'] = np.zeros((np.sum(list(map(len,metas))) +1))
-                self.data['user']['init_abund'][0] = 1.
+            metas_input = [metas] if np.isscalar(metas) else list(metas)
+            if not metas_input:
+                raise ValueError('metas must select at least one level in the first stage')
+            explicit_metas = not np.isscalar(metas_input[0])
+            if explicit_metas and len(metas_input) != len(fils):
+                raise ValueError('metas must have one level array per adf04 file')
+            self.data['user']['metas'] = []
 
 
 
@@ -291,14 +295,19 @@ class ionization_balance():
                 #choose metastables just based off of ionization potentials in adf04 file
                 #the user can also give a list of metastable states for every ionstage
                 #and this will override the metastables in the adf04 files
-                if(type(metas) == list):
-                    meta = metas[i]
+                if explicit_metas:
+                    meta = np.atleast_1d(np.asarray(metas_input[i], dtype=int))
+                elif i == 0:
+                    meta = np.asarray(metas_input, dtype=int)
                 else:
-                    if(i == 0):
-                        meta = metas
-                    else:
-                        m = np.shape(self.data['gcrs'][str(i -1)]['scd'])[1]
-                        meta = np.linspace(0,m-1,m,dtype=int)
+                    m = self.data['cr_data']['gcrs'][str(i - 1)]['scd'].shape[1]
+                    meta = np.arange(m)
+                #the metastables of a stage take the places of the parents of the stage before
+                if(i > 0 and len(meta) != self.data['cr_data']['gcrs'][str(i - 1)]['scd'].shape[1]):
+                    raise ValueError('stage ' + str(i) + ' has ' + str(len(meta)) + ' metastables but stage ' +
+                                     str(i - 1) + ' ionizes to ' +
+                                     str(self.data['cr_data']['gcrs'][str(i - 1)]['scd'].shape[1]) + ' parents')
+                self.data['user']['metas'].append(meta)
                 #setup the CR
                 print(i)
                 tmp = colradpy(fil=str(fils[i]),metas=meta,temp_grid=temp_grid,electron_den=dens_grid,
@@ -322,6 +331,13 @@ class ionization_balance():
                 self.data['cr_data']['gcrs'][str(i)]['xcd'] = tmp.data['processed']['xcd']
                 if(self.data['user']['use_cx'][i]):
                     self.data['cr_data']['gcrs'][str(i)]['ccd'] = tmp.data['processed']['ccd']
+
+            if self.data['user']['init_abund'].size == 0:
+                gcrs = self.data['cr_data']['gcrs']
+                num_states = gcrs['0']['qcd'].shape[0] + sum(
+                    gcrs[str(i)]['scd'].shape[1] for i in range(len(fils)))
+                self.data['user']['init_abund'] = np.zeros(num_states)
+                self.data['user']['init_abund'][0] = 1.
 
     def ne_tau_times(self, ne_tau):
         """Solution times ne_tau/n_e (s) for the density grid, as solve_matrix_exponential takes
