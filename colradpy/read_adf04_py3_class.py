@@ -289,6 +289,14 @@ def read_adf04(fil):
     if(not has_inf_engy):
         inf_engy = []
 
+    #recombination, ionization and charge exchange connect to the parents of the first line
+    for code, transitions, column in (('R', recomb_transitions, 0), ('S', ion_transitions, 1),
+                                      ('H', cx_transitions, 1)):
+        parents = np.asarray(transitions, dtype=int).reshape(-1, 2)[:,column]
+        if(((parents < 1) | (parents > num_parents)).any()):
+            raise ValueError(code + ' lines give parents ' + str(sorted(set(parents.tolist()))) +
+                             ' but the first line gives ' + str(num_parents) + ' ionization potentials')
+
     #check if energies indexes wrong
     #Can these atomic physics people ever get a file format correct.........
     sort_energy = np.argsort(adf04['atomic']['energy'])#the correct sorted indexes

@@ -662,7 +662,8 @@ class colradpy():
                    " from inside 'suppliment_with_ecip'")
             self.make_ecip()
 
-        if(('ionization' not in self.data['rates']['ioniz']) and (self.data['user']['use_ionization'])):
+        if(('ionization' not in self.data['rates']['ioniz']) and (self.data['user']['use_ionization'] or
+                                                                  self.data['user']['use_recombination_three_body'])):
             print('No ionization rates from files were calculated,'+\
                   ' try to calculate them')
             self.make_ioniz_from_reduced_ionizrates()
@@ -740,14 +741,10 @@ class colradpy():
         #make sure that we can get negative rates
         self.data['rates']['cx']['cx_excit_interp_grid'][np.where(self.data['rates']['cx']['cx_excit_interp_grid'] <0)] = 0.0
 
-        nsigmaplus_cx = 0
-        if(self.data['user']['use_cx']):
-            nsigmaplus_cx = np.unique(self.data['rates']['cx']['cx_transitions'][:,1])
-
-            
+        #one column for each parent, as for recombination
         self.data['rates']['cx']['cx'] = \
             np.zeros((len(self.data['atomic']['energy']),
-                      len(nsigmaplus_cx),
+                      len(self.data['atomic']['ion_pot']),
                       len(self.data['user']['htemp_grid'])))
 
         for q in range(0,len(self.data['rates']['cx']['cx_transitions'])):
@@ -830,6 +827,11 @@ class colradpy():
                         np.zeros((len(self.data['atomic']['energy']),
                                   len(self.data['atomic']['ion_pot']),
                                   len(self.data['user']['temp_grid'])))
+        #detailed balance needs the ionization rates, also when ionization is not in the CR matrix
+        if('ionization' not in self.data['rates']['ioniz']):
+            self.make_ioniz_from_reduced_ionizrates()
+            if(self.data['user']['suppliment_with_ecip']):
+                self.suppliment_with_ecip()
         #statistical weight of each parent
         self.data['rates']['recomb']['w_ion'] = np.array([parent_statistical_weight(term)
                                                           for term in self.data['atomic']['ion_term']])
@@ -1027,17 +1029,12 @@ class colradpy():
         self.data['cr_matrix']['q_ij'] = self.data['cr_matrix']['q_ij'].transpose(1,0,2)
 
         
+        #one column for each parent of the adf04 file (its first line), which the ionization,
+        #recombination and charge exchange rates are made for
         nsigmaplus = len(self.data['atomic']['ion_pot'])
-        if(self.data['user']['use_recombination']):
-            if(len(np.unique(self.data['rates']['recomb']['recomb_transitions'][:,0]))>nsigmaplus):
-               nsigmaplus = len(np.unique(self.data['rates']['recomb']['recomb_transitions'][:,0]))
-        elif(self.data['user']['use_recombination_three_body']):
-            nsigmaplus = np.shape(self.data['rates']['recomb']['recomb_three_body'])[1]
-
-
         nsigmaplus_cx = 0
         if(self.data['user']['use_cx']):
-            nsigmaplus_cx = len(np.unique(self.data['rates']['cx']['cx_transitions'][:,1]))
+            nsigmaplus_cx = nsigmaplus
 
 
 
@@ -1294,24 +1291,18 @@ class colradpy():
         self.data['cr_matrix']['cr_red'] = cr_red
         self.data['processed']['excited_levels'] = levels_to_keep
 
-        recomb_drive_lvls = np.array([])
+        num_parents = len(self.data['atomic']['ion_pot'])
         if(self.data['user']['use_recombination'] or self.data['user']['use_recombination_three_body']):
-            #num_recombs = np.shape(self.data['rates']['recomb']['recombination'])[1]
-            num_recombs = len(self.data['atomic']['ion_pot'])
-            recomb_driving_lvls = len(self.data['atomic']['energy']) + \
-                                  np.linspace(0,num_recombs-1,num_recombs,dtype=int)
+            recomb_driving_lvls = len(self.data['atomic']['energy']) + np.arange(num_parents)
             self.data['cr_matrix']['beta'] = np.append(self.data['cr_matrix']['beta'],
                                             -self.data['cr_matrix']['cr'][levels_to_keep][:,recomb_driving_lvls],axis=1)
 
 
 
         if(self.data['user']['use_cx']):
-            nsigmaplus_cx = 0
-            if(self.data['user']['use_cx']):
-                num_cxs = len(np.unique(self.data['rates']['cx']['cx_transitions'][:,1]))
-
-            cx_driving_lvls = len(self.data['atomic']['energy']) + len(recomb_driving_lvls)+\
-                                  np.linspace(0,num_cxs-1,num_cxs,dtype=int)
+            #the charge exchange columns follow the parent columns of the CR matrix, which it
+            #has whether or not recombination is used
+            cx_driving_lvls = len(self.data['atomic']['energy']) + num_parents + np.arange(num_parents)
             self.data['cr_matrix']['beta'] = np.append(self.data['cr_matrix']['beta'],
                                             -self.data['cr_matrix']['cr'][levels_to_keep][:,cx_driving_lvls],axis=1)
 
@@ -2337,7 +2328,9 @@ class colradpy():
            Solve the CR matrix using the quasistatic approximation
         """
         
-        if(self.data['user']['use_ionization']):
+        #three body recombination is made from the ionization rates by detailed balance, so they
+        #are also made when ionization is not in the CR matrix
+        if(self.data['user']['use_ionization'] or self.data['user']['use_recombination_three_body']):
             self.make_ioniz_from_reduced_ionizrates()
         if(self.data['user']['suppliment_with_ecip']):
             self.make_ecip()
