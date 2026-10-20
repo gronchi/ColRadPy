@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 from urllib import request
 # Import ColRadPy
-sys.path.append('/home/curtis/git/tmp_tmp/')
+sys.path.append(str(Path(__file__).resolve().parents[1])) #the repository, which holds colradpy
 from colradpy import ionization_balance
 
 
@@ -73,6 +73,9 @@ initial_abundances = np.array([1,0,0,0,0,0,0,0,0,0]) #initial fractional abundan
                                                #this array must be the same size as the total
                                                #number of metastables in the system
 source = np.array([0,0,0,0,0,0,0,0,0,0])
+
+#a label for every state of the ionization balance: charge state and metastable
+labels = [(f'C{z}+' if z else 'C0') + f' m{m}' for z in range(len(metas)) for m in metas[z]]
 
 ion_0 = ionization_balance(fils, metas, temp,
                          dens,
@@ -146,20 +149,20 @@ ion_s.solve_source()
 #is only dependent on the ratio of the initial abundances to the source term
 
 fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-fig.subplots_adjust(bottom=0.15,top=0.93,left=0.11,right=0.99)
+fig.subplots_adjust(bottom=0.15,top=0.93,left=0.11,right=0.80)
 ca = np.array(['b','r','g','y','c','olivedrab','deeppink','purple','lime','chocolate'])
 
 for i in range(0,len(initial_abundances)):
 
     plt.plot(time, ion_1.data['processed']['pops_td_source'][i,:,0,0]/\
-             np.sum(ion_1.data['processed']['pops_td_source'][:,:,0,0],axis=0),color=ca[i],linestyle='--',label=str(i))
+             np.sum(ion_1.data['processed']['pops_td_source'][:,:,0,0],axis=0),color=ca[i],linestyle='--',label=labels[i])
     plt.plot(time, ion_e.data['processed']['pops_td_source'][i,:,0,0]/\
              np.sum(ion_e.data['processed']['pops_td_source'][:,:,0,0],axis=0),color='k',linestyle=':')
     
 ax1.set_ylabel('Ionization Fraction (-)',weight='semibold')
 ax1.set_xlabel('Time (s)',weight='semibold')
-plt.title('T$_e$ = 100 eV  n$_e$ = 10$^{13}$ cm$^{-1}$',weight='semibold')
-plt.legend()
+plt.title('T$_e$ = 100 eV  n$_e$ = 10$^{13}$ cm$^{-3}$',weight='semibold')
+plt.legend(loc='upper left', bbox_to_anchor=(1.01, 1.)) #'best' is slow for this many points
 plt.xscale('log')
 
 fig.savefig(OUTPUT_PATH / "carbon_ion_bal.pdf", format='pdf')
@@ -170,16 +173,19 @@ fig.savefig(OUTPUT_PATH / "carbon_ion_bal.pdf", format='pdf')
 #solid line is no source term. The dashed line has only a source term.
 #source terms are into the ground state only for this example
 fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-fig.subplots_adjust(bottom=0.15,top=0.93,left=0.11,right=0.99)
+fig.subplots_adjust(bottom=0.15,top=0.93,left=0.11,right=0.80)
 
 for i in range(0,len(initial_abundances)):
     plt.hlines( ion_0.data['processed']['pops_ss'][i,0,0]/\
                 np.sum(ion_0.data['processed']['pops_ss'][:,0,0],axis=0),0,time[-1],color=ca[i])
     plt.plot(time, ion_s.data['processed']['pops_td_source'][i,:,0,0]/\
-             np.sum(ion_s.data['processed']['pops_td_source'][:,:,0,0],axis=0),color=ca[i],linestyle='--')
+             np.sum(ion_s.data['processed']['pops_td_source'][:,:,0,0],axis=0),color=ca[i],linestyle='--',
+             label=labels[i])
 
 ax1.set_ylabel('Ionization Fraction (-)',weight='semibold')
 ax1.set_xlabel('Time (s)',weight='semibold')
-plt.title('T$_e$ = 100 eV  n$_e$ = 10$^{13}$ cm$^{-1}$',weight='semibold')
-plt.legend()
+plt.title('T$_e$ = 100 eV  n$_e$ = 10$^{13}$ cm$^{-3}$',weight='semibold')
+plt.legend(loc='upper left', bbox_to_anchor=(1.01, 1.)) #'best' is slow for this many points
 plt.xscale('log')
+
+fig.savefig(OUTPUT_PATH / "carbon_ion_bal_steady_state.pdf", format='pdf')
