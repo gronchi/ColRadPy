@@ -137,6 +137,11 @@ class ionization_balance():
         self.data['user']['fils'] = np.asarray(fils)
         self.data['user']['init_abund'] = np.asarray(init_abund)
         self.data['user']['soln_times'] = np.asarray(soln_times)
+        self.data['user']['source'] = np.asarray(source)
+        self.data['user']['ne_tau'] = np.atleast_1d(ne_tau)
+        if(self.data['user']['ne_tau'][0] != -1):
+            print('ne_tau was not equal to -1 so overwiting solution times with ne_tau calculated values')
+            self.data['user']['soln_times'] = self.ne_tau_times(self.data['user']['ne_tau'])
 
 
 
@@ -242,26 +247,16 @@ class ionization_balance():
 
 
 
-            self.data['user']['source'] = np.asarray(source)
             self.data['user']['htemp_grid'] = np.asarray(htemp_grid) #eV
             self.data['user']['hdens_grid'] = np.asarray(hdens_grid) #cm-3
 
             self.data['user']['temp_dens_pair'] = temp_dens_pair
-            self.data['user']['ne_tau'] = ne_tau
             self.data['user']['metas'] = np.asarray(metas)        
             if(self.data['user']['init_abund'].size <1):
                 self.data['user']['init_abund'] = np.zeros((np.sum(list(map(len,metas))) +1))
                 self.data['user']['init_abund'][0] = 1.
 
 
-            if( (self.data['user']['ne_tau'][0] != -1) or (self.data['user']['ne_tau'][0] != -1)):
-                if(self.data['user']['ne_tau'][0] == -1):
-                    nt = ne_tau
-                else:
-                    nt = self.data['user']['ne_tau']
-                td_t = np.einsum('i,j->ij', nt, 1/self.data['user']['dens_grid'])
-                print('ne_tau was not equal to -1 so overwiting solution times with ne_tau calculated values')
-                self.data['user']['soln_times'] = td_t 
 
 
 
@@ -350,6 +345,31 @@ class ionization_balance():
                 self.data['cr_data']['gcrs'][str(i)]['xcd'] = tmp.data['processed']['xcd']
                 if(self.data['user']['use_cx'][i]):
                     self.data['cr_data']['gcrs'][str(i)]['ccd'] = tmp.data['processed']['ccd']
+
+    def ne_tau_times(self, ne_tau):
+        """Solution times ne_tau/n_e (s) for the density grid, as solve_matrix_exponential takes
+           them: one set of times for a single density, otherwise times for each density with
+           shape (densities, len(ne_tau)).
+
+        :param ne_tau: n_e*tau values (cm-3 s)
+        :type ne_tau: float array
+
+        :returns: array --solution times
+
+        """
+        ne_tau = np.atleast_1d(np.asarray(ne_tau, dtype=float))
+        dens = self.data['user']['dens_grid']
+        if(len(dens) == 1):
+            return ne_tau/dens[0]
+        return np.einsum('i,j->ji', ne_tau, 1/dens)
+
+    def default_abundances(self):
+        """Initial abundances: init_abund, or all in the first state of the ion matrix."""
+        if(self.data['user']['init_abund'].size > 0):
+            return self.data['user']['init_abund']
+        n0 = np.zeros(len(self.data['ion_matrix']))
+        n0[0] = 1.
+        return n0
 
     def populate_ion_matrix(self):
         """This will populate the ionization matrix from the various GCR coefficients
@@ -514,7 +534,7 @@ class ionization_balance():
         """
 
         if(n0.size < 1):
-            n0 = self.data['user']['init_abund']
+            n0 = self.default_abundances()
         if(td_t.size < 1):
             td_t = self.data['user']['soln_times']
 
@@ -547,28 +567,27 @@ class ionization_balance():
         :param td_t: Solution times
         :type td_t: float array
 
+        :param ne_tau: n_e*tau values (cm-3 s); when given, the solution times are ne_tau/n_e
+        :type ne_tau: float array
+
 
         populates the pops, eigen_val and eigen_vec
 
         """
 
         if(n0.size < 1):
-            n0 = self.data['user']['init_abund']
-        if(td_t.size < 1):
+            n0 = self.default_abundances()
+        ne_tau = np.atleast_1d(ne_tau)
+        if(ne_tau[0] != -1):
+            print('ne_tau was not equal to -1 so overwiting solution times with ne_tau calculated values')
+            td_t = self.ne_tau_times(ne_tau)
+            self.data['user']['soln_times'] = td_t
+        elif(td_t.size < 1):
             td_t = self.data['user']['soln_times']
 
-        if( (self.data['user']['ne_tau'][0] != -1) or (self.data['user']['ne_tau'][0] != -1)):
-            if(self.data['user']['ne_tau'][0] == -1):
-                nt = ne_tau
-            else:
-                nt = self.data['user']['ne_tau']
-            td_t = np.einsum('i,j->ij', nt, 1/self.data['user']['dens_grid'])
-            print('ne_tau was not equal to -1 so overwiting solution times with ne_tau calculated values')
-            self.data['user']['soln_times'] = td_t 
-            
         if(s0.size < 1):
             if(self.data['user']['source'].size < 1):
-                s0 = np.zeros((np.sum(list(map(len,self.data['user']['metas']))) +1))
+                s0 = np.zeros(len(self.data['ion_matrix']))
             else:
                 s0 = self.data['user']['source']
 
