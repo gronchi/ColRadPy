@@ -919,6 +919,11 @@ class colradpy():
                 print(str(num_constant) + ' transitions keep the collision strength of the first ' +
                       'calculated temperature below it, it is far above their threshold')
 
+        #transitions whose collision strengths are all zero in the file have zero rates (the
+        #logs of their extrapolations are NaN)
+        all_zero = (self.data['rates']['excit']['col_excit'] == 0).all(axis=1)
+        self.data['rates']['excit']['col_excit_interp'][all_zero] = 0.
+
         tttmp = np.where(np.isnan(self.data['rates']['excit']['col_excit_interp']))
         if(tttmp[0].size>0):
             print('NaNs in electron excitations where set to zero')

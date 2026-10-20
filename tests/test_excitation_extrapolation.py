@@ -10,6 +10,7 @@ import contextlib
 import io
 from pathlib import Path
 import unittest
+import warnings
 
 import numpy as np
 
@@ -30,8 +31,7 @@ def file_temperatures(name):
 def solve(name, temperatures, rates_only=False):
     model = colradpy(str(INPUT / name), metas=np.array([0]), temp_grid=np.asarray(temperatures),
                      electron_den=np.array([1e13]))
-    # Degenerate levels in bundled data produce a pre-existing zero-energy
-    # wavelength warning; extreme temperatures overflow Boltzmann factors.
+    # Extreme temperatures overflow Boltzmann factors.
     with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
         if rates_only:
             model.make_ioniz_from_reduced_ionizrates()
@@ -153,6 +153,38 @@ class IonizationExtrapolationTests(unittest.TestCase):
             self.assertTrue(np.isfinite(processed[key]).all(), key)
         self.assertTrue((processed["pops"] >= 0).all())
         self.assertTrue((processed["pecs"] >= 0).all())
+
+
+class FloatingPointWarningTests(unittest.TestCase):
+    """The bundled files have no infinite energy points, so the Burgess-Tully coefficients
+    take log(0) for every transition; this selected the two-point extrapolation but gave
+    divide-by-zero and invalid-value warnings on every run."""
+
+    def rates(self, name, zero=None):
+        model = colradpy(str(INPUT / name), metas=np.array([0]),
+                         temp_grid=np.array([0.01, 10., 5000.]), electron_den=np.array([1e13]))
+        if zero is not None:
+            model.data["rates"]["excit"]["col_excit"][zero] = 0.
+        printed = io.StringIO()
+        with warnings.catch_warnings(), contextlib.redirect_stdout(printed):
+            warnings.simplefilter("error", RuntimeWarning)
+            model.make_electron_excitation_rates()
+        return model.data["rates"]["excit"]["col_excit_interp"], printed.getvalue()
+
+    def test_no_warnings_above_and_below_the_file_temperatures(self):
+        for name in FILES:
+            with self.subTest(file=name):
+                rates, printed = self.rates(name)
+                self.assertTrue(np.isfinite(rates).all())
+                self.assertNotIn("NaN", printed)
+
+    def test_transitions_without_collision_strengths(self):
+        # A transition whose collision strengths are all zero (7 in OpenADAS mom97_ls#c0) has
+        # zero rates; its NaN extrapolations were reported as NaNs set to zero.
+        rates, printed = self.rates("cpb03_ls#be0.dat", zero=5)
+        np.testing.assert_array_equal(rates[5], 0)
+        self.assertNotIn("NaN", printed)
+        self.assertTrue((rates[[4, 6]] > 0).all())
 
 
 if __name__ == "__main__":

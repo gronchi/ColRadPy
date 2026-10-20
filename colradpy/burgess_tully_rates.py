@@ -1,4 +1,18 @@
+import functools
+
 import numpy as np
+
+
+def _ignore_log_of_zero(func):
+    """Runs func without floating point warnings for logs of zero. Transitions without an
+    infinite energy point (stored as 0) and zero collision strengths give log(0) = -inf; the
+    resulting inf and NaN coefficients select the transitions that are extrapolated from the
+    last two calculated points instead, so these warnings are expected."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return func(*args, **kwargs)
+    return wrapper
 
 
 #Below the calculated temperatures, a transition is extrapolated when its lowest calculated
@@ -300,6 +314,7 @@ def calc_coeffs_lin_b(xval_arr,yval_arr,coeff_lin_m):
 
 
 
+@_ignore_log_of_zero
 def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_excit,energy,w,a_val,S,L,inf_engy,c=1.5):
 
     """ Calculates excitation rates extrapolated to temperatures beyond the calculated
