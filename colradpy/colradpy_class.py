@@ -1676,7 +1676,10 @@ class colradpy():
            A source term can be included to mimick erosion of fresh atoms or injection of neutral gas or maybe even LIF
 
            Uses same CR matrix ".data['cr_matrix']['cr']" used to define the reduced CR matrix that the quasistatic solution solves.
-           
+           With charge exchange, the charge exchange takes population from the evolving parents: its rates are moved from
+           the charge exchange columns to the parent columns, with the matching loss from the parents, so the solution
+           conserves particles. td_n0 and td_source must then be zero for the charge exchange columns.
+
            Creates a new dictionary under ['processed'] call ['td']
            Stores eigenvalues and eigenvectors that were required for the solution (Theres also physics there see ColRadPy paper).
            Stores the time changing populations.
@@ -1692,12 +1695,34 @@ class colradpy():
             self.data['processed'] = {}
         self.data['processed']['td'] = {}
 
+        #Charge exchange takes population from the evolving parents. The quasistatic solution keeps
+        #it in separate columns to give the charge exchange driven PECs and CCD; here its rates
+        #into the levels are moved to the parent columns, with the matching loss from the parents,
+        #so the time dependent solution conserves particles. The charge exchange columns are empty.
+        matrix = self.data['cr_matrix']['cr']
+        if(self.data['user']['use_cx']):
+            nlev = len(self.data['atomic']['energy'])
+            nparents = len(self.data['atomic']['ion_pot'])
+            parents = nlev + np.arange(nparents)
+            cx_cols = nlev + nparents + np.arange(nparents)
+            for name in ('td_n0', 'td_source'):
+                values = np.asarray(self.data['user'][name])
+                if(values.size > 0 and np.any(values[cx_cols] != 0)):
+                    raise ValueError(name + ' has non-zero entries ' + str(cx_cols) + ' for the charge ' +
+                                     'exchange columns; charge exchange acts on the parents, whose ' +
+                                     'entries are ' + str(parents))
+            matrix = matrix.copy()
+            cx = matrix[:nlev][:, cx_cols]
+            matrix[:nlev, parents] += cx
+            matrix[parents, parents] -= cx.sum(axis=0)
+            matrix[:, cx_cols] = 0
+
         #check if a source term has been provided, if a source term has been provided solve the problem with s asource
         if(self.data['user']['td_source'].size >0):
             #solve the matrix with a source term
             self.data['processed']['td']['td_pop'],self.data['processed']['td']['eigenvals'],\
             self.data['processed']['td']['eigenvectors'] =\
-            solve_matrix_exponential_source(self.data['cr_matrix']['cr'],
+            solve_matrix_exponential_source(matrix,
                                             self.data['user']['td_n0'],
                                             self.data['user']['td_source'],
                                             self.data['user']['td_t'])
@@ -1707,7 +1732,7 @@ class colradpy():
 
             self.data['processed']['td']['td_pop'],self.data['processed']['td']['eigenvals'],\
             self.data['processed']['td']['eigenvectors'] = \
-            solve_matrix_exponential(self.data['cr_matrix']['cr'],
+            solve_matrix_exponential(matrix,
                                             self.data['user']['td_n0'],
                                             self.data['user']['td_t'])
 
