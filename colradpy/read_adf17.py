@@ -14,11 +14,11 @@ if(len(first_ln_inds) < 5):
     print('The first line of the file is in the wrong format')
 
 ##############################################################################################################
-adf17['input_file']['sequence']    = re.search('\w+',first_ln[first_ln_inds[0]+1:]).group()
-adf17['input_file']['nuc_chg']    = int(re.search('\w+',first_ln[first_ln_inds[1]+1:]).group())
-adf17['input_file']['num_parent'] = int(re.search('\w+',first_ln[first_ln_inds[2]+1:]).group())
-adf17['input_file']['num_dens']   = int(re.search('\w+',first_ln[first_ln_inds[3]+1:]).group())
-adf17['input_file']['num_temp']   = int(re.search('\w+',first_ln[first_ln_inds[4]+1:]).group())
+adf17['input_file']['sequence']    = re.search(r'\w+',first_ln[first_ln_inds[0]+1:]).group()
+adf17['input_file']['nuc_chg']    = int(re.search(r'\w+',first_ln[first_ln_inds[1]+1:]).group())
+adf17['input_file']['num_parent'] = int(re.search(r'\w+',first_ln[first_ln_inds[2]+1:]).group())
+adf17['input_file']['num_dens']   = int(re.search(r'\w+',first_ln[first_ln_inds[3]+1:]).group())
+adf17['input_file']['num_temp']   = int(re.search(r'\w+',first_ln[first_ln_inds[4]+1:]).group())
 
 
 f.readline() #there is a blank line
@@ -49,11 +49,11 @@ adf17['input_file']['dens_grid'] = dens_arr
 #reading the temperatures
 temp_line = f.readline()
 temp_arr = np.asarray([y.replace('D','e') for y in
-            [x.strip(' ') for x in re.split('\d  ',re.split('=',temp_line)[1])]],dtype='float64')
+            [x.strip(' ') for x in re.split(r'\d  ',re.split('=',temp_line)[1])]],dtype='float64')
 while(len(temp_arr) < adf17['input_file']['num_temp']):
     temp_line = f.readline()
     temp_arr = np.append(temp_arr,np.asarray([y.replace('D','e') for y in
-            [x.strip(' ') for x in re.split('\d  ',re.split('=',temp_line)[1])]],dtype='float64'))
+            [x.strip(' ') for x in re.split(r'\d  ',re.split('=',temp_line)[1])]],dtype='float64'))
 adf17['input_file']['temp_grid'] = temp_arr
 
 f.readline() #black line
@@ -66,7 +66,7 @@ adf17['input_file']['num_spin_parent'] =  float(re.split('=',re.split('   ',pare
 f.readline()# ----------------line
 
 spin_sys_line = f.readline()
-spin_sys = float(re.split('\.', re.split('=',spin_sys_line.replace(' ', ''))[1])[0])
+spin_sys = float(re.split(r'\.', re.split('=',spin_sys_line.replace(' ', ''))[1])[0])
 n_shells = int(re.split('=',spin_sys_line.replace(' ', ''))[2])
 
 f.readline() # -------------------line

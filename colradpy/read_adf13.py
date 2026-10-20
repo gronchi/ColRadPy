@@ -19,8 +19,8 @@ def read_adf13(fil):
     #reading the first line
     q = f.readline()
     adf13['input_file']['num_trans'] = int(re.split('/',q)[0])
-    adf13['input_file']['element'] = re.split( '\+',re.split('IONI',re.split('/',q)[1])[0])[0]
-    adf13['input_file']['charge_state'] = int(re.split( '\+',re.split('IONI',re.split('/',q)[1])[0])[1])
+    adf13['input_file']['element'] = re.split( r'\+',re.split('IONI',re.split('/',q)[1])[0])[0]
+    adf13['input_file']['charge_state'] = int(re.split( r'\+',re.split('IONI',re.split('/',q)[1])[0])[1])
 
 
 
@@ -29,19 +29,19 @@ def read_adf13(fil):
 
 
 
-    tmp = 'A' in re.split('\s+',grid_line)[1]
+    tmp = 'A' in re.split(r'\s+',grid_line)[1]
 
     if(tmp):
-        adf13['input_file']['num_temp'] = int(re.split('\s+',grid_line)[3])
-        adf13['input_file']['num_dens'] = int(re.split('\s+',grid_line)[2])
-        adf13['input_file']['orig_file'] = re.split('\s+',grid_line)[6]
-        adf13['input_file']['meta_indx'] = re.split('\s+',grid_line)[12]
+        adf13['input_file']['num_temp'] = int(re.split(r'\s+',grid_line)[3])
+        adf13['input_file']['num_dens'] = int(re.split(r'\s+',grid_line)[2])
+        adf13['input_file']['orig_file'] = re.split(r'\s+',grid_line)[6]
+        adf13['input_file']['meta_indx'] = re.split(r'\s+',grid_line)[12]
 
     else:
-        adf13['input_file']['num_temp'] = int(re.split('\s+',grid_line)[4])
-        adf13['input_file']['num_dens'] = int(re.split('\s+',grid_line)[3])
-        adf13['input_file']['orig_file'] = re.split('\s+',grid_line)[7]
-        adf13['input_file']['meta_indx'] = re.split('\s+',grid_line)[13]
+        adf13['input_file']['num_temp'] = int(re.split(r'\s+',grid_line)[4])
+        adf13['input_file']['num_dens'] = int(re.split(r'\s+',grid_line)[3])
+        adf13['input_file']['orig_file'] = re.split(r'\s+',grid_line)[7]
+        adf13['input_file']['meta_indx'] = re.split(r'\s+',grid_line)[13]
 
 
 
@@ -54,15 +54,15 @@ def read_adf13(fil):
     while 'C-' not in grid_line:
         if(tmp):
 
-            adf13['input_file']['wave_air'].append(float(re.split('A',re.split('\s+',grid_line)[1])[0])) 
+            adf13['input_file']['wave_air'].append(float(re.split('A',re.split(r'\s+',grid_line)[1])[0])) 
         else:
-            adf13['input_file']['wave_air'].append(float(re.split('\s+',grid_line)[1]))
+            adf13['input_file']['wave_air'].append(float(re.split(r'\s+',grid_line)[1]))
         #read in the density grid
         adf13['input_file']['dens_grid'] = np.array([])
         while adf13['input_file']['dens_grid'].size <adf13['input_file']['num_dens']:
             den_line = f.readline()
             den_line = den_line.rstrip()
-            adf13['input_file']['dens_grid'] = np.append(adf13['input_file']['dens_grid'], np.array(list(map(float,re.split('\s+',den_line)[1:])))  )
+            adf13['input_file']['dens_grid'] = np.append(adf13['input_file']['dens_grid'], np.array(list(map(float,re.split(r'\s+',den_line)[1:])))  )
 
 
         #read in the temperature grid
@@ -71,13 +71,13 @@ def read_adf13(fil):
 
             temp_line = f.readline()
             temp_line = temp_line.rstrip()
-            adf13['input_file']['temp_grid'] = np.append(adf13['input_file']['temp_grid'], np.array(list(map(float,re.split('\s+',temp_line)[1:])))  )
+            adf13['input_file']['temp_grid'] = np.append(adf13['input_file']['temp_grid'], np.array(list(map(float,re.split(r'\s+',temp_line)[1:])))  )
 
         grid_line = f.readline()
         t = []
         while 'A' not in grid_line and 'C-' not in grid_line:
 
-            t.append(np.array(list(map(float,re.split('\s+',grid_line.rstrip())[1:]))))
+            t.append(np.array(list(map(float,re.split(r'\s+',grid_line.rstrip())[1:]))))
             grid_line = f.readline()
             
         adf13['input_file']['sxb'].append(np.reshape(np.concatenate(t),(adf13['input_file']['num_dens'],adf13['input_file']['num_temp'])))
