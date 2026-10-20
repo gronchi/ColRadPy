@@ -1562,7 +1562,7 @@ class colradpy():
                     #6.62607015e-34*299792458=1.9865e-25*(100 [m-1/cm-1])=1.9865e-23
                     self.data['processed']['td']['pls'].append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] - \
                                                                       self.data['atomic']['energy'][i])*1.9865e-23*\
-                                           (self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*self.data['processed']['td']['td_pop'][j]/ \
+                                           (self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*self.data['processed']['td']['td_pop'][levels_to_keep[j]]/ \
                                                         self.data['user']['dens_grid']/1.e6))
                     
 
