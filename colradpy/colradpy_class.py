@@ -1386,8 +1386,10 @@ class colradpy():
                     #line power, photon energy * PEC, in W cm3
                     pls.append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] - self.data['atomic']['energy'][i])*                               J_PER_WAVENUMBER*(self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*                                                        self.data['processed']['pops'][j]/                                                         self.data['user']['dens_grid']))
 
-                    self.data['processed']['wave_vac'].append(1.e7/abs(self.data['atomic']['energy'][levels_to_keep[j]]\
-                                                                        - self.data['atomic']['energy'][i]))
+                    #levels with equal energies (degenerate in the file) have an infinite wavelength
+                    with np.errstate(divide='ignore'):
+                        self.data['processed']['wave_vac'].append(1.e7/abs(self.data['atomic']['energy'][levels_to_keep[j]]\
+                                                                            - self.data['atomic']['energy'][i]))
 
                     self.data['processed']['pec_levels'].append( np.array([levels_to_keep[j],i]))
 
@@ -2258,8 +2260,10 @@ class colradpy():
         self.data['processed']['wave_vac_shift'] = np.zeros(len(self.data['processed']['pec_levels_shift']))
 
         for i in range(0,len(self.data['processed']['pec_levels_shift'])):
-            self.data['processed']['wave_vac_shift'][i] =  1.e7/abs(self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,0]]\
-                                                                        - self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,1]])
+            #levels with equal energies have an infinite wavelength
+            with np.errstate(divide='ignore'):
+                self.data['processed']['wave_vac_shift'][i] =  1.e7/abs(self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,0]]\
+                                                                            - self.data['atomic']['energy'][self.data['processed']['pec_levels_shift'][i,1]])
 
         #wavelengths below the air cut off stay in vacuum
         self.data['processed']['wave_air_shift'] = vac_to_air(self.data['processed']['wave_vac_shift'])

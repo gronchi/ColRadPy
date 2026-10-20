@@ -26,9 +26,7 @@ CLOSED = ["1s2", "2s2", "2p6", "3s2", "3p6"]
 def split_model(name, already_j=False):
     model = colradpy(str(INPUT / name), metas=np.array([0]), temp_grid=np.array([10.]),
                      electron_den=np.array([1e13]))
-    # Degenerate levels in bundled data produce a pre-existing zero-energy
-    # wavelength warning, outside this check's scope.
-    with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+    with contextlib.redirect_stdout(io.StringIO()):
         model.solve_cr()
         # Without get_nist_levels_txt or split_structure_terms_to_levels first.
         model.shift_j_res_energy_to_nist(already_j=already_j)
