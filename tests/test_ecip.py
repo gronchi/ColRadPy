@@ -9,6 +9,8 @@ import unittest
 import numpy as np
 from numpy.polynomial.laguerre import laggauss
 
+import colradpy
+from colradpy.r8necip import r8necip
 from colradpy.r8yip import R8YIP, r8ecip
 
 
@@ -56,6 +58,13 @@ class EcipTests(unittest.TestCase):
         np.testing.assert_allclose(rates[kept], (reduced * np.exp(-exponent))[kept], rtol=1e-12)
         np.testing.assert_array_equal(rates[~kept], 0.0)
         self.assertTrue((reduced > 0).all())
+
+    def test_r8necip_not_implemented(self):
+        with self.assertRaises(NotImplementedError):
+            r8necip(0, 1.5e5, np.array([0.0]), np.array([1.0]), np.array([1e4]))
+        # The package still provides the ECIP functions through it.
+        self.assertIs(colradpy.r8ecip, r8ecip)
+        self.assertIs(colradpy.r8necip, r8necip)
 
 
 if __name__ == "__main__":
