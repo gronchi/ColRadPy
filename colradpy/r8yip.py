@@ -76,7 +76,14 @@ def R8YIP(XI,DELTA):
     R8YIP = R8YIP * np.exp( W )
     return R8YIP
 
-def r8ecip(IZC, ion_pot, energy, zpla, temperature_grid):
+def r8ecip(IZC, ion_pot, energy, zpla, temperature_grid, reduced=False):
+    """ECIP ionization rate coefficients (cm3 s-1) of levels to one parent.
+
+    :param reduced: return the reduced rates exp(Y)*S, Y = dE/kT, which do not underflow
+                    and so are not cut off at large Y. The rates S are zero above Y = 180.
+    :type reduced: bool
+
+    """
 
     MXT = 5
     P1 = 157890.0
@@ -111,7 +118,9 @@ def r8ecip(IZC, ion_pot, energy, zpla, temperature_grid):
                 C2 = ( C1 * ( B - B1 * C1 * np.log( B1 ) ) + 0.65343E0 * ( 1.0E0 - 1.0E0 / B1**3 ) * C4 / EN ) * F
                 AI = AI + W[J] * C2
 
-            if (Y > 180.0E0):
+            if(reduced):
+                R8ECIP = 8.68811E-8 * np.sqrt( ATE ) * ZETA * AI / XI
+            elif (Y > 180.0E0):
                 R8ECIP = 0.0E0
             else:
                 R8ECIP = 8.68811E-8 * np.sqrt( ATE ) * np.exp( -Y ) * ZETA * AI / XI

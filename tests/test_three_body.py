@@ -17,6 +17,7 @@ from scipy import constants
 from colradpy import colradpy
 from colradpy.colradpy_class import L_LETTERS, parent_statistical_weight
 from colradpy.read_adf04_py3_class import read_adf04
+from colradpy.r8yip import r8ecip
 
 
 INPUT = Path(__file__).resolve().parents[1] / "examples" / "input"
@@ -120,6 +121,40 @@ class ThreeBodyTests(unittest.TestCase):
                 three_body = model.data["rates"]["recomb"]["recomb_three_body"][0, 0]
                 self.assertTrue((three_body > 0).all() and np.isfinite(three_body).all())
                 self.check_detailed_balance(model)
+
+    def test_ecip_only_levels_at_low_temperature(self):
+        # ECIP rates are zero above dE/kT = 180; three-body recombination into levels
+        # whose ionization comes only from ECIP uses the reduced rates, which are not.
+        model = solve("be2_adf04", [0.01, 0.1, 1.])
+        ioniz = model.data["rates"]["ioniz"]
+        exponent = model.ecip_exponent()
+        file_levels = ioniz["ion_transitions"][ioniz["ion_transitions"][:, 1] == 1, 0] - 1
+        ecip_only = np.setdiff1d(np.where(ioniz["ecip_reduced"][:, 0, 0] > 0)[0], file_levels)
+        self.assertGreater(len(ecip_only), 0)
+        cut = exponent[ecip_only, 0] > 180
+        self.assertTrue(cut.any())
+        np.testing.assert_array_equal(ioniz["ionization"][ecip_only, 0][cut], 0.0)
+        three_body = model.data["rates"]["recomb"]["recomb_three_body"][ecip_only, 0]
+        self.assertTrue((three_body > 0).all())
+        np.testing.assert_array_equal(ioniz["ionization_reduced"][ecip_only, 0],
+                                      ioniz["ecip_reduced"][ecip_only, 0])
+        self.check_detailed_balance(model)
+
+    def test_ecip_rates_from_reduced_rates(self):
+        model = solve("cpb03_ls#be1.dat", [0.01, 0.1, 1., 10.])
+        ioniz = model.data["rates"]["ioniz"]
+        exponent = model.ecip_exponent()
+        made = ioniz["ecip_reduced"] > 0
+        kept = made & (exponent <= 180)
+        np.testing.assert_allclose(ioniz["ecip"][kept],
+                                   (ioniz["ecip_reduced"] * np.exp(-exponent))[kept], rtol=1e-12)
+        np.testing.assert_array_equal(ioniz["ecip"][made & (exponent > 180)], 0.0)
+        # The same as r8ecip without the reduced option.
+        atomic = model.data["atomic"]
+        level = np.where(made[:, 0, 0])[0][0]
+        rates = r8ecip(atomic["charge_state"], atomic["ion_pot"][0], atomic["energy"][[level]],
+                       atomic["zpla"][[level], 0], model.data["user"]["temp_grid"] * 11604.5)
+        np.testing.assert_allclose(ioniz["ecip"][level, 0], rates[0], rtol=1e-12)
 
     def test_file_ionization_kept_below_its_grid(self):
         # The lowest temperature is below the file grid, where the ground-state

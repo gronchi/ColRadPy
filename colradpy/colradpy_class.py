@@ -521,10 +521,27 @@ class colradpy():
             self.data['atomic']['zpla'][:] = 1
             self.data['atomic']['zpla1'][:] = 1.000
         
-        self.data['rates']['ioniz']['ecip'][inds_below] = ecip_rates(self.data['atomic']['energy'][inds_below],
+        #reduced rates exp(dE/kT)*S, which do not underflow at low temperature and are kept for
+        #three body recombination
+        self.data['rates']['ioniz']['ecip_reduced'] = np.zeros_like(self.data['rates']['ioniz']['ecip'])
+        self.data['rates']['ioniz']['ecip_reduced'][inds_below] = ecip_rates(self.data['atomic']['energy'][inds_below],
                                                   self.data['atomic']['ion_pot'],self.data['atomic']['zpla'][inds_below],
                                                   self.data['atomic']['zpla1'][inds_below],self.data['atomic']['charge_state'],
-                                                  self.data['user']['temp_grid'])
+                                                  self.data['user']['temp_grid'], reduced=True)
+        #the rates, zero for exponents above 180 as in r8ecip
+        exponent = self.ecip_exponent()
+        with np.errstate(over='ignore', invalid='ignore'):
+            self.data['rates']['ioniz']['ecip'] = np.where(
+                (exponent > 180.) | (self.data['rates']['ioniz']['ecip_reduced'] == 0), 0.,
+                self.data['rates']['ioniz']['ecip_reduced']*np.exp(-exponent))
+
+    def ecip_exponent(self):
+        """Exponent dE/kT of the ECIP rates, as calculated in r8ecip, with shape
+           (levels, parents, temperatures).
+        """
+        return np.einsum('ij,k->ijk', self.data['atomic']['ion_pot'][None,:] -
+                         self.data['atomic']['energy'][:,None],
+                         9.11269E-06*157890.0/(self.data['user']['temp_grid']*11604.5))
 
 
     def make_burgess_tully(self):
@@ -650,10 +667,13 @@ class colradpy():
             self.data['rates']['ioniz']['ionization_reduced'] = \
                                         self.reduced_ionization(self.data['rates']['ioniz']['ionization'])
 
-        #exponent dE/kT of the ECIP rates, as calculated in r8ecip
-        ecip_exponent = np.einsum('ij,k->ijk', self.data['atomic']['ion_pot'][None,:] -
-                                  self.data['atomic']['energy'][:,None],
-                                  9.11269E-06*157890.0/(self.data['user']['temp_grid']*11604.5))
+        if('ecip_reduced' in self.data['rates']['ioniz']):
+            ecip_reduced = self.data['rates']['ioniz']['ecip_reduced']
+        else:
+            #ECIP rates made elsewhere, those r8ecip sets to zero above an exponent of 180 stay zero
+            ecip = self.data['rates']['ioniz']['ecip']
+            ecip_reduced = np.exp(np.log(ecip, out=np.full_like(ecip, -np.inf), where=ecip > 0) +
+                                  self.ecip_exponent())
         for p in range(0,len(self.data['atomic']['ion_pot'])):
             #there was a stupid problem beacuse {X} only designates ecip not other ionization
             ion_inds = np.where( self.data['atomic']['zpla'][:,p] > -1)[0]
@@ -666,11 +686,7 @@ class colradpy():
             to_use = np.intersect1d(ecip_inds,ion_inds)
             self.data['rates']['ioniz']['ionization'][to_use,p,:] =\
                                         self.data['rates']['ioniz']['ecip'][to_use,p,:]
-            #r8ecip sets rates to zero for exponents above 180, which stay zero
-            ecip = self.data['rates']['ioniz']['ecip'][to_use,p,:]
-            self.data['rates']['ioniz']['ionization_reduced'][to_use,p,:] = \
-                np.exp(np.log(ecip, out=np.full_like(ecip, -np.inf), where=ecip > 0) +
-                       ecip_exponent[to_use,p,:])
+            self.data['rates']['ioniz']['ionization_reduced'][to_use,p,:] = ecip_reduced[to_use,p,:]
 
     def reduced_ionization(self, ionization):
         """Reduced ionization rates exp(dE/kT)*S of ionization rates S with shape

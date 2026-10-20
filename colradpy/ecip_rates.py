@@ -1,7 +1,7 @@
 import numpy as np
 from colradpy.r8necip import *
 ####################################################################################################
-def ecip_rates(energy,ion_pot,zpla,zpla1,charge_state,temp_grid):
+def ecip_rates(energy,ion_pot,zpla,zpla1,charge_state,temp_grid,reduced=False):
     """This function gives energy levels to r8necip for ECIP ionization to be
 calculated for and then returns ECIP rates for each energy level on the temperature
 grid provided.
@@ -24,6 +24,9 @@ grid provided.
     :param temp_grid: Temperature grid to return ECIP rates on
     :type temp_grid: array
 
+    :param reduced: return the reduced rates exp(dE/kT)*S, see r8ecip
+    :type reduced: bool
+
     :returns: array --ECIP rates on the temperature grid
 
     """
@@ -36,5 +39,5 @@ grid provided.
 
         ecip[ion_inds,p,:] = r8ecip(charge_state, ion_pot[p],
                          energy[ion_inds],zpla[ion_inds,p],
-                          temp_grid*11604.5)
+                          temp_grid*11604.5, reduced)
     return ecip
