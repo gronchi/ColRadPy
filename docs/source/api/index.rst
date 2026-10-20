@@ -32,6 +32,7 @@ Readers and writers of ADAS and NIST data.
    read_adf04_py3_class
    read_adf11
    read_adf13
+   read_adf17
    write_adf15
    nist_read_txt
    nist_read
