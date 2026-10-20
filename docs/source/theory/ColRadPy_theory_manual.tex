@@ -1,0 +1,1342 @@
+% =========================================================================
+% ColRadPy Theory Manual -- development branch working tree
+% Build: python docs/source/theory/scripts/build_theory_manual.py
+% Figures: python docs/source/theory/scripts/theory_examples.py
+% =========================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=2.5cm,headheight=14pt]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage[section]{placeins}
+\usepackage{booktabs,tabularx,longtable,array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{fancyhdr}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=green!40!black,urlcolor=blue!50!black]{hyperref}
+\newcommand{\vb}[1]{\boldsymbol{#1}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\routine}[1]{\textsf{\detokenize{#1}}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\ee}{\mathrm{e}}
+\newcommand{\nelec}{n_{\mathrm e}}
+\newcommand{\nh}{n_{\mathrm h}}
+\newcommand{\Te}{T_{\mathrm e}}
+\newcommand{\units}[1]{\,\mathrm{#1}}
+\newcommand{\revision}{\texttt{development}}
+\definecolor{notebg}{RGB}{243,247,252}
+\definecolor{noteframe}{RGB}{42,111,176}
+\definecolor{warnbg}{RGB}{253,245,236}
+\definecolor{warnframe}{RGB}{217,130,43}
+\definecolor{aqua}{HTML}{2F9E8F}
+\newsavebox{\notebox}
+\newenvironment{implnote}[1][Implementation]{%
+  \par\smallskip\noindent\begin{lrbox}{\notebox}\setlength{\fboxsep}{6pt}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}\small\textbf{#1.}\ }{%
+  \end{minipage}\end{lrbox}\setlength{\fboxsep}{6pt}\fcolorbox{noteframe}{notebg}{\usebox{\notebox}}\par\smallskip}
+\newenvironment{caveat}[1][Caveat]{%
+  \par\smallskip\noindent\begin{lrbox}{\notebox}\setlength{\fboxsep}{6pt}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}\small\textbf{#1.}\ }{%
+  \end{minipage}\end{lrbox}\setlength{\fboxsep}{6pt}\fcolorbox{warnframe}{warnbg}{\usebox{\notebox}}\par\smallskip}
+\numberwithin{equation}{section}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\emergencystretch}{1.5em}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small ColRadPy Theory Manual}
+\fancyhead[R]{\small\nouppercase{\leftmark}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\hypersetup{pdftitle={ColRadPy Theory Manual},pdfsubject={Collisional radiative kinetics in the development branch}}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries ColRadPy\par}
+\vspace{0.6cm}
+{\LARGE Theory Manual\par}
+\vspace{0.4cm}
+{\large Collisional radiative kinetics and spectral emission\par}
+\vspace{2cm}
+\begin{tabular}{rl}
+Code version & 1.1 (\code{setup.py})\\
+Source branch & \revision\\
+Source record & HEAD and file hashes in \code{provenance.json}\\
+Code author & C. A. Johnson\\
+Project paper & C. A. Johnson, S. D. Loch and D. A. Ennis\\
+Manual date & October 2026
+\end{tabular}
+\vfill
+\begin{minipage}{0.82\textwidth}\small
+This manual develops the rate equations, the elimination of excited states,
+generalized collisional radiative coefficients, time-dependent and charge-state
+solutions, line emission, and the energy-balance extension. Equations are mapped
+to the routines that implement them. Blue notes explain implementation choices;
+orange notes identify current limitations or qualifications. The worked checks
+execute the development working tree; file hashes and the recorded HEAD are
+given in \code{docs/source/theory/figures/provenance.json}.
+\end{minipage}
+\vspace{1.5cm}
+\end{titlepage}
+\pagenumbering{roman}
+\hypersetup{pageanchor=true}
+\begingroup\footnotesize\setlength{\parskip}{0pt}\tableofcontents\endgroup
+\clearpage\pagenumbering{arabic}
+
+\section{Purpose and model scope}\label{sec:intro}
+
+ColRadPy converts level-resolved atomic data into populations, photon emission
+coefficients, and effective rates for charge-state evolution. The basic input
+is an ADAS ADF04 description of one ion: level energies, radiative probabilities,
+electron-impact collision strengths, and any supplied parent-resolved ionization,
+recombination, or charge-exchange data. The project paper introduces this
+generalized collisional radiative (GCR) approach and compares selected results
+with ADAS calculations~\cite{johnson}.
+Implementation statements throughout this manual refer to the development
+working tree used to generate its figures and checks~\cite{source}.
+
+The plasma parameters are prescribed. Electrons are Maxwellian at a specified
+temperature, atomic processes are represented by rate coefficients, and emitted
+photons escape. Ground and metastable populations can be retained as independent
+drivers. The principal calculation does not solve radiative transfer, a spatial
+transport equation, or the electron distribution function. Its rate coefficients
+can instead be passed to a transport or plasma model.
+
+The collisional radiative regime lies between two useful limits. At sufficiently
+low density, excitation is balanced mainly by radiative decay, giving the
+coronal limit. At high density, reversible collisions tend toward a Boltzmann
+distribution within a charge stage; ionization and three-body recombination
+also tend toward Saha balance when their inverse processes and statistical
+weights are consistent. These are limits to test, not assumptions that every
+fusion or astrophysical plasma automatically satisfies.
+
+\subsection{Two calculations with different meanings}
+
+The quasistatic calculation sets derivatives of selected excited populations
+to zero while retaining the ground and metastables as drivers. It produces
+linear response coefficients. The fully time-dependent calculation propagates
+the entire supplied rate matrix from an initial vector. A separate
+ionization-balance calculation joins effective coefficients from adjacent
+charge stages. Keeping these distinctions prevents an excited-state
+response per parent from being mistaken for a normalized ion fraction.
+
+\begin{implnote}[Operating status]
+The development implementation uses current NumPy membership and integration
+APIs, guarded matrix-exponential propagation, and density-scaled XCD. The
+worked checks use the runtime recorded in the provenance file. Passing these
+checks does not validate every atomic dataset or extrapolation regime.
+\end{implnote}
+
+\subsection{Calculation flow}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+ box/.style={draw=noteframe,rounded corners=2pt,fill=notebg,align=center,font=\small,minimum height=9mm,text width=68mm},
+ side/.style={draw=warnframe,rounded corners=2pt,fill=warnbg,align=center,font=\small,minimum height=12mm,text width=48mm},
+ arr/.style={-{Stealth[length=2mm]},thick}]
+\node[box] (data) at (0,0) {ADF04 atomic data; levels, parents, $A$, $\Upsilon$, $S$, $R$};
+\node[box] (rates) at (0,-1.45) {Interpolate coefficients; detailed balance and optional ECIP};
+\node[box] (matrix) at (0,-2.9) {Assemble the density-weighted rate matrix $C$};
+\node[box] (qs) at (-3.9,-4.6) {Quasistatic elimination of excited levels\\ $N_e=-C_{ee}^{-1}C_{er}N_r$};
+\node[side] (td) at (3.9,-4.6) {Full time evolution\\ $N(t)=\exp(Ct)N(0)$};
+\node[box] (gcr) at (-3.9,-6.25) {PECs and effective SCD, ACD, QCD, XCD, CCD};
+\node[side] (spec) at (3.9,-6.25) {Line emission; NIST energy matching, LS splitting, profiles};
+\node[box] (balance) at (-3.9,-7.9) {Join charge stages into an ionization-balance matrix};
+\node[side] (energy) at (3.9,-7.9) {Optional charge-state energy evolution};
+\draw[arr] (data)--(rates); \draw[arr] (rates)--(matrix);
+\draw[arr] (matrix)--(qs); \draw[arr] (matrix)--(td);
+\draw[arr] (qs)--(gcr); \draw[arr] (td)--(spec);
+\draw[arr] (gcr)--(balance); \draw[arr] (gcr)--(spec);
+\draw[arr] (balance)--(energy);
+\end{tikzpicture}
+\caption{The calculation paths are related but do not share the same population
+normalization. The full matrix can also include parent or reservoir states;
+their interpretation must be specified.}
+\label{fig:flow}
+\end{figure}
+
+\section{Notation, indexing and units}\label{sec:units}
+
+Let $N_i^{(z)}$ denote the number density of level $i$ in charge state $z$.
+Indices $i,j$ generally label bound levels; $\rho,\sigma$ label retained
+ground or metastable levels; $p,q$ label parents in charge state $z+1$.
+The subscripts $e$ and $r$ on matrix blocks denote eliminated excited and
+retained states, respectively. They do not denote electron density.
+
+The defining matrix convention is
+\begin{equation}\label{eq:matrix-convention}
+ \frac{\dd N_i}{\dd t}=\sum_j C_{ij}N_j,
+ \qquad C_{ij}:\ j\longrightarrow i.
+\end{equation}
+Thus a column is a source state and a row is a destination. Off-diagonal
+rates are nonnegative for a physical model. This convention differs from
+some stored coefficient arrays, as listed in Section~\ref{sec:gcr}.
+
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{lXl}
+\toprule Quantity & Meaning & Units\\\midrule
+$\Te,T_i$ & Temperature represented as an energy & eV\\
+$E_i,\ I_p$ & Tabulated level energies and parent thresholds & $\mathrm{cm}^{-1}$\\
+$\nelec,\nh,N_i$ & Electron, neutral-donor and level densities & $\mathrm{cm}^{-3}$\\
+$A_{u\ell}$ & Spontaneous emission probability & $\mathrm{s}^{-1}$\\
+$q,S,\alpha^{\rm RR+DR},K$ & Two-body coefficients & $\mathrm{cm}^{3}\,\mathrm{s}^{-1}$\\
+$\alpha^{(3)}$ & Three-body recombination coefficient & $\mathrm{cm}^{6}\,\mathrm{s}^{-1}$\\
+$C$ & Density-weighted rate matrix & $\mathrm{s}^{-1}$\\
+$\Upsilon$ & Effective collision strength & dimensionless\\
+$\lambda$ & Internal wavelength & nm\\
+PEC & Photon emission coefficient & $\mathrm{cm}^{3}\,\mathrm{s}^{-1}$\\
+SCD, ACD, QCD, XCD, CCD & Effective two-body-form coefficients & $\mathrm{cm}^{3}\,\mathrm{s}^{-1}$\\
+\bottomrule
+\end{tabularx}
+\caption{Core conventions. Effective coefficients may themselves depend on
+density. The energy-transfer helper functions use SI densities and masses.}
+\end{table}
+
+The conversions needed repeatedly are
+\begin{align}
+ \Delta E_{\rm eV}&=\frac{\Delta E_{\rm cm^{-1}}}{8065.54}, &
+ T_{\rm K}&\simeq11604.5\,T_{\rm eV},\label{eq:conversion}\\
+ \lambda_{\rm vac,nm}&=\frac{10^7}{|E_u-E_\ell|_{\rm cm^{-1}}}, &
+ n_{\rm m^{-3}}&=10^6n_{\rm cm^{-3}}.
+\end{align}
+The code uses several slightly different rounded energy-conversion constants.
+For reproducibility, the exact expressions in a routine take precedence over
+a claim that all those constants are identical.
+
+ADF04 level and parent identifiers are one-based. Python level indices are
+zero-based; \code{metas=[0,2]} retains the first and third bound levels.
+The complement is then $[1,3,4,\ldots]$, not the contiguous interval beginning
+at the number of metastables. A parent identifier is also not interchangeable
+with the position at which that identifier was discovered in a file.
+
+\section{Atomic data and rate coefficients}\label{sec:rates}
+
+\subsection{Level structure and statistical weights}
+
+The ADF04 reader stores configurations, multiplicities, orbital labels,
+energies, and a weight-related field \code{atomic['w']}. The matrix builder
+uses $g_i=2w_i+1$. In an LS-resolved file the level weight is
+$(2S+1)(2L+1)$; in a resolved-$J$ description it is $2J+1$.
+The parent term must be interpreted consistently with that resolution.
+The header provides parent ionization thresholds, while level annotations
+describe parentage channels. They need not enumerate identical sets of
+observed pathways~\cite{adf04}.
+
+\begin{implnote}[Parent weights]
+\routine{parent_statistical_weight} parses LS and resolved-$J$ parent terms,
+including fractional $J$, and uses $g_p=(2S+1)(2L+1)$ or $g_p=2J+1$ as
+appropriate. Header parent counts and discovered pathway IDs still require
+care: an entry can have explicit ionization data even when its parentage
+annotations are incomplete.
+\end{implnote}
+
+\subsection{Maxwellian electron-impact excitation}
+
+For an electron-energy distribution $f_E(E)$ normalized to unity,
+\begin{equation}
+ q_{\ell u}=\int_{\Delta E}^{\infty}\sigma_{\ell u}(E)
+       \sqrt{\frac{2E}{m_e}}\,f_E(E)\,\dd E .
+\end{equation}
+The tabulated effective collision strength $\Upsilon_{\ell u}(T)$ packages
+the Maxwellian average in a convenient dimensionless form. The implemented
+rate conversion for $u>\ell$ is
+\begin{align}
+ q_{u\ell}(\Te)&=\frac{2.1716\times10^{-8}}{g_u}
+        \sqrt{\frac{13.6058}{\Te}}\,\Upsilon_{\ell u}(\Te),\label{eq:qdown}\\
+ q_{\ell u}(\Te)&=\frac{g_u}{g_\ell}
+       \exp\!\left(-\frac{\Delta E}{\Te}\right)q_{u\ell}(\Te).
+       \label{eq:qup}
+\end{align}
+Here $\Delta E$ and $\Te$ have the same energy units. Both coefficients
+are in $\mathrm{cm}^3\,\mathrm{s}^{-1}$. Their ratio enforces collisional
+detailed balance: $N_u/N_\ell=(g_u/g_\ell)\exp(-\Delta E/\Te)$ when
+collisions dominate and no other mechanism fixes the ratio.
+
+\begin{implnote}
+\routine{make_electron_excitation_rates} interpolates $\Upsilon$ onto the
+user grid. \routine{populate_cr_matrix} constructs the upward and downward
+rates and multiplies them by electron density. The source uses
+$8065$ rather than $8065.54$ in one excitation Boltzmann factor.
+\end{implnote}
+
+\subsection{Spontaneous decay, ionization and recombination}
+
+For a radiative transition $u\to\ell$, the population-transfer rate is
+$A_{u\ell}N_u$, with no electron-density multiplier. The total radiative
+loss is $\Gamma_u=\sum_{\ell<u}A_{u\ell}$.
+
+Let $S_{ip}$ denote ionization from bound level $i$ to parent $p$. The
+reduced ionization quantity in the supported ADF04 convention is converted as
+\begin{equation}\label{eq:reduced-ion}
+ S_{ip}(\Te)=\widetilde S_{ip}(\Te)
+            \exp[-\chi_{ip}/\Te],\qquad \chi_{ip}=I_p-E_i.
+\end{equation}
+An interpolated reduced coefficient is not itself the final ionization rate.
+The input parentage factor can be applied through \code{scale_file_ioniz}.
+The current implementation applies that scaling in the non-log-temperature
+branch only; selecting log interpolation therefore bypasses this option.
+
+Radiative and dielectronic recombination supplied by a file are collected in
+$\alpha_{ip}^{\rm RR+DR}$. The effective recombination coefficient used at a
+particular density is
+\begin{equation}\label{eq:recomb}
+ R_{ip}(\Te,\nelec)=\alpha_{ip}^{\rm RR+DR}(\Te)
+                       +\nelec\alpha_{ip}^{(3)}(\Te).
+\end{equation}
+Its contribution to a matrix element is $\nelec R_{ip}$, so the three-body
+term enters with two factors of electron density. Zero or missing file data
+must be distinguished from a reliable physical assertion that a process is absent.
+
+ECIP is an optional approximate completion of missing ionization channels.
+\routine{ecip_rates} prepares the allowed parent channels and passes Kelvin
+temperatures to \routine{r8ecip}. \routine{suppliment_with_ecip} chooses
+channels using parent annotations and zero entries in the assembled
+ionization array. This is an approximation to missing atomic data, not a
+substitute for a convergence study or a higher-quality calculated rate.
+
+\subsection{Three-body recombination and Saha detailed balance}\label{sec:saha}
+
+Equilibrium of $i+e\rightleftharpoons p+e+e$ requires
+\begin{equation}
+ N_i^*\nelec S_{ip}=N_p^*\nelec^2\alpha_{ip}^{(3)}.
+\end{equation}
+Using the electron translational partition factor gives
+\begin{align}
+ \frac{\alpha_{ip}^{(3)}}{S_{ip}}
+ &=\frac{g_i}{g_p}\frac{h^3}{2(2\pi m_e k_BT_{\rm K})^{3/2}}
+                   \exp\!\left(\frac{\chi_{ip}}{\Te}\right)\nonumber\\
+ &\simeq \frac{g_i}{g_p}\frac{1.6564\times10^{-22}}{\Te^{3/2}}
+                   \exp\!\left(\frac{\chi_{ip}}{\Te}\right)
+                   \units{cm^3}.\label{eq:saha}
+\end{align}
+The last numerical form takes $\Te$ in eV and includes the free-electron
+spin factor of two. The implementation uses the close approximation
+$1.656742\times10^{-22}$.
+
+\begin{implnote}[Stable low-temperature evaluation]
+Three-body recombination uses the reduced ionization coefficient directly,
+avoiding a product of an underflowed ionization rate and an overflowing
+inverse exponential. This gives a finite positive result at a fixed positive
+temperature when the reduced coefficient is finite and positive; it does not
+establish a universal $T\to0$ limit.
+\end{implnote}
+
+\begin{implnote}[Standalone LTE helpers]
+\routine{boltzmann_population} returns ground-relative level populations or
+total-normalized fractions. \routine{saha_population} includes both stage
+partition functions, ionization energy, electron mass, and electron density;
+it returns $N_{z+1}/N_z$ or the two-stage ionized fraction. Energies are in
+cm$^{-1}$, temperature in eV, and electron density in cm$^{-3}$.
+\end{implnote}
+
+\subsection{Thermal charge exchange}
+
+A donor species at temperature $T_h$ and density $\nh$ can capture an
+electron into bound level $i$ from parent $p$. Writing its coefficient
+$K_{ip}(T_h)$, the gain is $\nh K_{ip}N_p^{\rm CX}$. The density multiplier
+is the donor density, not automatically the electron density. The routine
+\routine{make_cx_rates_from_file} interpolates the donor-temperature grid.
+The user-supplied donor and electron grids must be compatible with the selected
+grid or paired layout.
+
+\section{Interpolation and asymptotic continuation}\label{sec:interpolation}
+
+The interpolation option parser separates a leading \code{log} flag from
+the SciPy interpolation kind. In these routines, the flag selects
+\emph{logarithmic temperature coordinates}; it does not generally take
+the logarithm of the rate coefficient. For example,
+\begin{equation}
+ \widehat r(\Te)=\mathcal I\!\left[\ln T_k,r_k\right](\ln\Te)
+\end{equation}
+still interpolates the ordinates $r_k$ directly. Log-temperature
+interpolation alone therefore does not guarantee positive extrapolated rates.
+
+The Burgess--Tully helpers compress an unbounded temperature coordinate into
+$0\le x<1$. With $\theta=k_BT/\Delta E$ and a positive scaling parameter
+$c$ (default 1.5), the four implemented transforms are
+\begin{table}[htbp]\centering
+\begin{tabular}{cll}\toprule Type & $x(\theta)$ & Transformed ordinate $y$\\\midrule
+1 & $1-\ln c/\ln(\theta+c)$ & $\Upsilon/\ln(\theta+\ee)$\\
+2 & $\theta/(\theta+c)$ & $\Upsilon$\\
+3 & $\theta/(\theta+c)$ & $(1+\theta)\Upsilon$\\
+4 & $1-\ln c/\ln(\theta+c)$ & $\Upsilon/\ln(\theta+c)$\\\bottomrule
+\end{tabular}
+\caption{Coordinate and ordinate definitions in \code{burgess_tully_rates.py}.
+The original routines use Kelvin and wavenumbers to form $\theta$.}
+\end{table}
+An available infinite-energy point constrains the transformed high-temperature
+continuation. Otherwise the code fits the final calculated points in
+transformed space. The inverse transform is necessary to recover $\Upsilon$.
+
+\begin{implnote}[Continuation in development]
+The caller applies all four high-temperature categories and uses one aligned
+fallback slot per category. Below the file grid it applies a nonnegative
+transformed continuation or retains the first collision strength for
+transitions whose data start far above threshold. This numerical policy
+prevents negative rates but does not establish atomic-data accuracy outside
+the calculated range.
+\end{implnote}
+
+\section{The collisional radiative matrix}\label{sec:matrix}
+
+For bound levels $i\ne j$, define $q_{j\to i}$ as the corresponding
+electron-impact coefficient. Then
+\begin{align}
+ C_{ij}&=A_{j\to i}+\nelec q_{j\to i},\label{eq:bound-offdiag}\\
+ C_{ii}&=-\sum_{j\ne i}(A_{i\to j}+\nelec q_{i\to j})
+                  -\nelec\sum_pS_{ip}.\label{eq:bound-diag}
+\end{align}
+Here forbidden or upward spontaneous transitions have $A=0$.
+For adjacent-charge parents,
+\begin{equation}
+ C_{p i}=\nelec S_{ip},\qquad C_{i p}=\nelec R_{ip}.
+\end{equation}
+The corresponding parent diagonal loses recombination into the lower stage.
+A closed collection of states satisfies
+\begin{equation}\label{eq:conservation}
+ \sum_i C_{ij}=0\quad\hbox{for every source column }j,
+ \qquad \frac{\dd}{\dd t}\sum_i N_i=0.
+\end{equation}
+Column sums need not vanish in a deliberately open subsystem; the missing
+population must then be accounted for as an external source or sink.
+
+\begin{implnote}
+\routine{populate_cr_matrix} stores the main generator in
+\code{cr_matrix['cr']}; \code{A_ji} is stored with upper-level index first,
+so radiative entries are transposed when inserted into the generator.
+\code{cr_red} later contains only the selected excited-state block.
+The separate \code{cr_loss} array is not the main generator.
+\end{implnote}
+
+The implementation adds separate CX driving columns without matching losses from those
+columns. This can describe a maintained reservoir. If the additional entries
+are interpreted as evolving particle populations in a closed system, it does
+not conserve their population. The physical reservoir convention must therefore
+be settled before applying Eq.~\eqref{eq:conservation} to a CX-extended matrix.
+
+The off-diagonal sign, column sums, and inverse-channel density powers are
+useful checks before any matrix is solved. A linear algebra routine can solve
+a matrix with negative or incorrectly scaled atomic rates without identifying
+the underlying physical error.
+
+\section{Quasistatic elimination of excited levels}\label{sec:quasistatic}
+
+Partition the population vector into retained states $N_r$ and excited states
+$N_e$. The full system is
+\begin{equation}\label{eq:blocks}
+ \frac{\dd}{\dd t}\begin{pmatrix}N_r\\N_e\end{pmatrix}
+ =\begin{pmatrix}C_{rr}&C_{re}\\C_{er}&C_{ee}\end{pmatrix}
+  \begin{pmatrix}N_r\\N_e\end{pmatrix}.
+\end{equation}
+When excited-state relaxation is fast compared with evolution of the drivers,
+\begin{equation}\label{eq:qs}
+ 0=C_{ee}N_e+C_{er}N_r,
+ \qquad N_e=-C_{ee}^{-1}C_{er}N_r.
+\end{equation}
+This requires an invertible, relaxing excited block. Including a long-lived
+state in the eliminated set can invalidate the approximation even if the
+numerical inverse exists. Time-scale separation should be assessed from the
+excited-block decay rates and the time scale of the retained dynamics.
+
+Substitution into the retained equations gives the Schur complement
+\begin{equation}\label{eq:schur}
+ C_{\rm eff}=C_{rr}-C_{re}C_{ee}^{-1}C_{er}.
+\end{equation}
+This formula is the common origin of the effective coefficients below. For a
+closed model, correctly eliminating excited states preserves column-sum
+conservation in the retained equations.
+
+\subsection{Choosing retained levels and testing time-scale separation}\label{sec:metastables}
+
+The paper emphasizes that a spectroscopically metastable level and a level
+that must be retained dynamically are not identical concepts~\cite{johnson}.
+A weak spontaneous decay can produce a large population, but collisions and
+ionization can shorten its actual relaxation time. Conversely, a collection
+of ordinary excited levels can participate in a slow, strongly coupled mode.
+The retained set is therefore a modeling choice for the density, temperature,
+initial condition and diagnostic being considered.
+
+For constant matrix blocks, write the instantaneous quasistatic response as
+$N_e^{\rm qs}(t)=-C_{ee}^{-1}C_{er}N_r(t)$ and let
+$\delta=N_e-N_e^{\rm qs}$. The exact lag equation is
+\begin{align}
+ \dot\delta&=C_{ee}\delta-\dot N_e^{\rm qs},\\
+ \delta(t)&=\ee^{C_{ee}t}\delta(0)
+       -\int_0^t\ee^{C_{ee}(t-u)}\dot N_e^{\rm qs}(u)\,\dd u.
+       \label{eq:qs-lag}
+\end{align}
+There are two distinct errors: an initial excited-state relaxation transient
+and the lag behind a changing driver. After the first decays, a small ratio
+of excited relaxation time to driver-evolution time supports the
+approximation. The decaying eigenvalues and eigenvectors of $C_{ee}$ help
+assess this, although a nonnormal matrix can amplify transients and a gap in
+eigenvalues alone is not a complete error bound. Changing plasma conditions
+also changes the response matrix itself and contributes to
+$\dot N_e^{\rm qs}$.
+
+A useful practical test is to start full and reduced models from consistent
+retained populations, vary the retained set, and compare the predicted line
+emission over the required observation times. A ground-only quasistatic
+model eliminates every other bound state, including levels that might need
+their own evolving populations. A large excited population identifies a
+candidate for examination, but a small population can still be an important
+feeder of a diagnostic line. Eigenmodes are combinations of levels; each
+eigenvalue should not be labeled as the lifetime of one level without
+examining its eigenvector.
+
+\subsection{Separate excitation, recombination and CX drivers}\label{sec:cxdrivers}
+
+The excited-state forcing can be separated as
+\begin{equation}
+ 0=C_{ee}N_e+C_{e m}N_m+\nelec R_{e p}N_p
+                                +\nh K_{e p}N_p^{\rm CX}.
+\end{equation}
+Define the dimensionless response matrices
+\begin{align}
+ F&=-C_{ee}^{-1}C_{em}, &
+ G&=-C_{ee}^{-1}\nelec R_{ep}, &
+ H&=-C_{ee}^{-1}\nh K_{ep},\label{eq:responses}\\
+ N_e&=FN_m+GN_p+HN_p^{\rm CX}.\nonumber
+\end{align}
+Each column states a response to one independently prescribed driving
+population. These are not probabilities whose sums must all be one.
+
+\begin{implnote}
+\routine{solve_quasi_static} constructs
+\code{beta}$=-C_{er}$ and computes \code{pops}$=C_{ee}^{-1}\code{beta}$.
+The excitation columns come first, followed by recombination and then CX
+columns when enabled. \code{processed['F']} denotes an excitation response
+without the additional $1/\nelec$ used in some ADAS definitions. Matching
+symbols without matching their density convention produces unit errors.
+\end{implnote}
+
+\begin{caveat}[CX-only construction]
+When CX is enabled but both radiative and three-body recombination are
+disabled, \routine{solve_quasi_static} constructs the CX-column offset from
+\code{recomb_driving_lvls}. That local variable is assigned only when a
+recombination channel is enabled. The CX-only path therefore raises
+\code{UnboundLocalError} before solving the reduced system.
+\end{caveat}
+
+\subsection{Normalization is a choice of driving population}\label{sec:normalization}
+
+For a single ground driver, an excitation response $F_i=N_i/N_0$ can be
+converted to a fraction relative to the ion total:
+\begin{equation}
+ \frac{N_0}{N_{\rm ion}}=\frac{1}{1+\sum_iF_i},\qquad
+ \frac{N_i}{N_{\rm ion}}=\frac{F_i}{1+\sum_jF_j}.
+\end{equation}
+This transformation changes the denominator of an excitation coefficient.
+It is not applicable without modification to $G_i=N_i/N_p$, whose parent
+belongs to another charge state. The independent drivers are explicitly
+distinguished in GCR emissivity definitions~\cite{adasreport}.
+
+\begin{implnote}[Normalization in development]
+With one retained metastable, excitation columns are normalized by default;
+recombination and CX columns remain relative to their independent parents.
+With more than one retained metastable, excitation normalization defaults
+off. The \code{default_pop_norm} option controls this choice. For example,
+an excited level with $A=1\,\mathrm{s}^{-1}$ and parent-driven injection
+$\nelec\alpha=2\,\mathrm{s}^{-1}$ retains the required response $N_e/N_p=2$.
+\end{implnote}
+
+\subsection{Unsummed contributions and dominant feeding mechanisms}\label{sec:feeding}
+
+Paper Section 2.3 retains the individual terms of the excited-state solution
+to identify important populating channels~\cite{johnson}. Let $a$ label an
+excitation, recombination or CX driver, and write
+$\beta_{ja}=-C_{ja}$ for the negative of its driving-block entry into
+eliminated level $j$. Define
+\begin{equation}\label{eq:unsummed}
+ U_{ija}=(C_{ee}^{-1})_{ij}\beta_{ja}
+ \quad\hbox{(no sum over $j$)},\qquad
+ N_i=\sum_a\sum_j U_{ija}N_a.
+\end{equation}
+The sum over $j$ gives the response of level $i$ to driver $a$; leaving it
+unsummed assigns that response to the level where the driver injects
+population into the eliminated manifold. For a fixed driver with a
+nonzero total response, the fractions
+\begin{equation}
+ f_{j\mid i,a}=\frac{U_{ija}}{\sum_k U_{ika}}
+\end{equation}
+identify the injection channels carrying the largest contribution. This
+interpretation requires physical nonnegative rates and a relaxing excited
+block. A common normalization applied to one driver's response cancels in
+these fractions, but different drivers must be weighted by their actual
+populations before they are combined.
+
+\begin{implnote}[The stored contribution tensor]
+The implementation stores $U$ in \code{processed['pop_lvl']} with axes
+\emph{destination excited level, injection excited level, driver,
+temperature, density}. Both excited-level indices refer to the reduced
+level map, not to physical bound-level numbers. Summing the second axis
+reconstructs \code{processed['pops']} under the same normalization.
+Paired mode replaces the last two axes by one pair index.
+\end{implnote}
+
+An entry with $j=i$ represents direct injection into the observed upper
+level, followed by its full response through $C_{ee}^{-1}$. An entry with
+$j\ne i$ represents injection elsewhere followed by redistribution or a
+cascade. These are algebraic injection-channel contributions, not exclusive
+microscopic paths or counts of the last collision: the inverse already
+contains repeated transfers. This qualification matters when interpreting
+the paper's direct-excitation and cascade illustrations for Mo I.
+
+The same accounting can resolve effective rates. For example, level $i$
+contributes $S_{ip}F_{i\rho}$ to indirect ionization, and contributes
+$C_{\rho i}G_{ip}/\nelec$ to capture feeding retained level $\rho$. Keeping
+these terms unsummed can guide a reduced atomic model, provided its emission
+and effective-rate errors are checked afterward.
+
+\section{Photon emission and power coefficients}\label{sec:emission}
+
+For an optically thin line $u\to\ell$, the angle-integrated photon
+emissivity is
+\begin{equation}
+ \epsilon_{u\ell}=A_{u\ell}N_u
+ \quad[\mathrm{photons}\,\mathrm{cm}^{-3}\,\mathrm{s}^{-1}].
+\end{equation}
+Using Eq.~\eqref{eq:responses}, the three types of coefficient are
+\begin{align}
+ \mathrm{PEC}^{\rm exc}_{u\ell,\rho}&=A_{u\ell}F_{u\rho}/\nelec,\\
+ \mathrm{PEC}^{\rm rec}_{u\ell,p}&=A_{u\ell}G_{up}/\nelec,\\
+ \mathrm{PEC}^{\rm CX}_{u\ell,p}&=A_{u\ell}H_{up}/\nh.\label{eq:pec-cx}
+\end{align}
+Consequently the emitted photon rate is
+\begin{equation}\label{eq:emissivity}
+ \epsilon_{u\ell}=\nelec\sum_\rho N_\rho\mathrm{PEC}^{\rm exc}_{u\ell,\rho}
+  +\nelec\sum_pN_p\mathrm{PEC}^{\rm rec}_{u\ell,p}
+  +\nh\sum_pN_p^{\rm CX}\mathrm{PEC}^{\rm CX}_{u\ell,p}.
+\end{equation}
+For an isotropic emitter, a line-of-sight photon radiance is
+$\int\epsilon_{u\ell}\,\dd s/(4\pi)$. The $4\pi$ factor is an observation
+convention and is not already part of $A_{u\ell}N_u$.
+
+\begin{implnote}[CX PEC convention]
+The implementation divides \emph{all} computed driving columns by $\nelec$ when forming
+\code{processed['pecs']}. Its stored CX columns therefore contain
+$A H/\nelec=(\nh/\nelec)\mathrm{PEC}^{\rm CX}$ as defined above.
+Use electron density with that stored response, or explicitly convert to a
+donor-normalized coefficient before using Eq.~\eqref{eq:emissivity}.
+\end{implnote}
+
+If $E_\gamma=hc/\lambda_{\rm vac}$, the radiated power coefficient associated
+with any PEC is
+\begin{align}
+ P[\mathrm W\,\mathrm{cm}^3]
+    &=E_\gamma[\mathrm J]\,\mathrm{PEC},\\
+ P[\mathrm W\,\mathrm m^3]
+    &=E_\gamma[\mathrm J]\,\mathrm{PEC}\times10^{-6}.\label{eq:power}
+\end{align}
+Sum excitation columns over lines for a PLT-like cooling coefficient and
+recombination columns for a PRB-like coefficient, retaining the driver index.
+A total plasma cooling rate additionally needs the corresponding densities.
+The stored \code{prb} sums recombination-driven line power; CX-driven power
+is recorded separately as \code{prc}.
+
+\begin{implnote}[Power outputs]
+Quasistatic and time-dependent line power use the physical upper-level
+population and the exact photon energy from the level-energy difference.
+Their coefficients are in W\,cm$^3$ and satisfy line power $=E_\gamma$
+times PEC for the same line and driver.
+\end{implnote}
+
+\subsection{S/XB: ionizations per emitted photon}\label{sec:sxb}
+
+Table 1 of the paper includes the diagnostic ratio S/XB, which relates
+ionization to excitation-driven line emission~\cite{johnson}. For a single
+retained driver $\rho$, define the total effective ionization coefficient
+$\mathcal S_\rho=\sum_p\mathcal S_{\rho p}$. For line $u\to\ell$,
+\begin{equation}\label{eq:sxb}
+ (S/XB)_{u\ell,\rho}
+    =\frac{\mathcal S_\rho}{\mathrm{PEC}^{\rm exc}_{u\ell,\rho}}.
+\end{equation}
+Both coefficients use the same electron-density and driving-population
+convention, so the ratio is dimensionless: ionizations per excitation photon.
+The numerator can instead be restricted to a specified destination parent,
+provided that restricted meaning is stated.
+
+For multiple retained populations, form the rate ratio before interpreting
+it as a diagnostic:
+\begin{equation}
+ (S/XB)_{u\ell}[N_m]
+ =\frac{\sum_\rho N_\rho\mathcal S_\rho}
+        {\sum_\rho N_\rho\mathrm{PEC}^{\rm exc}_{u\ell,\rho}}.
+\end{equation}
+This is not an unweighted average of the individual metastable ratios.
+Different metastable fractions can produce different ionization-to-photon
+ratios at the same temperature and density.
+
+If excitation dominates the observed line and S/XB is approximately constant
+through the emitting column, its photon radiance $I_{u\ell}$ gives
+\begin{equation}
+ \int\dot n_{\rm ion}\,\dd s=(S/XB)_{u\ell}\,4\pi I_{u\ell}.
+\end{equation}
+If the ratio varies spatially, the local ionization rate must instead be
+integrated with the corresponding emissivity. Interpreting that column
+ionization rate as a surface erosion or influx rate additionally requires a
+geometry and transport model: escape without ionization, repeated
+recombination and ionization, and recombination/CX photons can invalidate a
+simple one-ionization-per-entering-particle interpretation. A zero excitation
+PEC does not define a finite ratio.
+
+\begin{implnote}[Computing S/XB from development output]
+Use a parent sum of \code{scd} and the matching excitation column of
+\code{pecs}, with consistent normalization. Despite its docstring, the
+quasistatic routine does not store a computed SXB array. The repository has a
+separate \routine{read_adf13} reader for tabulated SXB data. The paper's
+compact coefficient notation should not be used to mix a per-driver photon
+rate in s$^{-1}$ with an ionization coefficient in cm$^3$/s.
+\end{implnote}
+
+\section{Generalized collisional radiative coefficients}\label{sec:gcr}
+
+Effective coefficients combine direct processes with paths through eliminated
+excited states. Their definition is a reduction of the generator, not simply
+a sum of raw atomic rates. All formulas in this section assume the
+unnormalized responses of Eq.~\eqref{eq:responses} and explicitly prescribed
+retained populations.
+
+\subsection{SCD: effective ionization}
+
+For a retained bound level $\rho$ and destination parent $p$,
+\begin{equation}
+ \mathcal S_{\rho p}=S_{\rho p}+\sum_iS_{ip}F_{i\rho}.
+\end{equation}
+The second term describes excitation or redistribution followed by ionization.
+Both terms have coefficient units. Its matrix contribution from $\rho$ to
+$p$ is $\nelec\mathcal S_{\rho p}$.
+
+\subsection{ACD and CCD: effective capture}
+
+The capture coefficient from parent $p$ into retained level $\rho$ is
+\begin{equation}
+ \mathcal A_{\rho p}=R_{\rho p}
+              -\sum_{ij}C_{\rho i}(C_{ee}^{-1})_{ij}R_{jp}.
+\end{equation}
+The second term incorporates capture into excited levels followed by their
+collisional redistribution and radiative cascades. Replacing $R$ by $K$
+defines $\mathcal C_{\rho p}$, the CCD coefficient. The rate multipliers are
+$\nelec$ and $\nh$, respectively. In an ionization matrix expressed per
+electron density, the CCD entry carries $\nh/\nelec$.
+
+\subsection{QCD: redistribution within a retained bound manifold}
+
+For two different retained bound levels,
+\begin{equation}
+ \mathcal Q_{\sigma\to\rho}
+ =\frac{C_{\rho\sigma}+\sum_iC_{\rho i}F_{i\sigma}}{\nelec},
+ \qquad \rho\ne\sigma.
+\end{equation}
+This includes direct mixing and indirect paths through the excited manifold.
+The diagonal is kept zero in the stored QCD array; its population loss is
+inserted separately when the charge-state matrix is assembled.
+
+\subsection{XCD: redistribution between parent metastables}\label{sec:xcd}
+
+A parent $p$ can recombine into an excited level of the lower stage and then
+ionize into a different parent $q$. The coefficient for this path is
+\begin{equation}\label{eq:xcd}
+ \mathcal X_{p\to q}=-\sum_{ij}C_{qi}(C_{ee}^{-1})_{ij}R_{jp}
+       =-\nelec\sum_{ij}S_{iq}(C_{ee}^{-1})_{ij}R_{jp},\qquad p\ne q.
+\end{equation}
+The factor $\nelec$ in the second form is essential. Dimensional analysis gives
+\begin{equation}
+ [\nelec S][C_{ee}^{-1}][R]
+  =(\mathrm{s}^{-1})(\mathrm s)(\mathrm{cm}^3\,\mathrm{s}^{-1})
+  =\mathrm{cm}^3\,\mathrm{s}^{-1}.
+\end{equation}
+This is equivalent to dividing the parent-to-parent off-diagonal block of
+the Schur complement by electron density. The recombination rows must use
+the same excited-level ordering as $C_{ee}$.
+The explicit electron-density factor is also present in the paper's
+Table 1 definition of XCD~\cite{johnson}.
+
+\begin{implnote}[XCD in development]
+The contraction uses $\nelec S$ and selects recombination rows by the actual
+eliminated-level map, including noncontiguous metastable selections such as
+$[0,2]$. The resulting coefficient has units cm$^3$/s and agrees with the
+parent block of the direct Schur complement divided by electron density.
+\end{implnote}
+
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{lXXl}\toprule
+Array & First index & Second index & Rate multiplier\\\midrule
+\code{scd} & source bound metastable & destination parent & $\nelec$\\
+\code{acd} & destination bound metastable & source parent & $\nelec$\\
+\code{ccd} & destination bound metastable & source CX parent & $\nh$\\
+\code{qcd} & source bound metastable & destination bound metastable & $\nelec$\\
+\code{xcd} & source parent & destination parent & $\nelec$\\\bottomrule
+\end{tabularx}
+\caption{Stored coefficient orientation. Equal matrix dimensions can conceal
+an accidental transpose, so checking shapes alone is insufficient.}
+\end{table}
+
+\section{Time-dependent evolution and matrix exponentials}\label{sec:time}
+
+For fixed plasma conditions and an optional constant source $s$,
+\begin{equation}\label{eq:ode}
+ \dot N=CN+s,\qquad
+ N(t)=\ee^{Ct}N(0)+\int_0^t\ee^{C(t-u)}s\,\dd u.
+\end{equation}
+If $C=V\Lambda V^{-1}$ has a complete eigenbasis, the source-free result is
+$V\ee^{\Lambda t}V^{-1}N(0)$. Each source-driven mode obeys
+\begin{equation}
+ v_k(t)=v_k(0)\ee^{\lambda_kt}+c_k\phi(\lambda_k,t),\quad
+ c=V^{-1}s,\quad
+ \phi(\lambda,t)=\begin{cases}
+  (\ee^{\lambda t}-1)/\lambda,&\lambda\ne0,\\t,&\lambda=0.
+ \end{cases}\label{eq:source-mode}
+\end{equation}
+For small $|\lambda t|$, evaluating the numerator with \code{expm1} avoids
+subtracting nearly equal floating-point numbers. Small $|\lambda|$ by itself
+does not make a mode negligible: its decay is governed by $|\lambda t|$.
+An alternative formulation is the augmented exponential
+\begin{equation}\label{eq:augmented}
+ \begin{pmatrix}N(t)\\1\end{pmatrix}
+ =\exp\!\left[t\begin{pmatrix}C&s\\0&0\end{pmatrix}\right]
+                 \begin{pmatrix}N(0)\\1\end{pmatrix}.
+\end{equation}
+For constant $C$, these formulas propagate the initial state at $t=0$;
+the first requested output time is not a new integration origin.
+
+\subsection{Complex modes and real populations}
+
+A real, nonsymmetric rate matrix can have complex conjugate eigenvalues.
+For example, a conservative three-state cycle has
+\begin{equation}
+ C=\begin{pmatrix}-1&0&1\\1&-1&0\\0&1&-1\end{pmatrix},\qquad
+ \lambda=0,\ -\tfrac32\pm\tfrac{\sqrt3}{2}\,\mathrm i.
+\end{equation}
+The complex modes are legitimate and must be retained in the reconstruction.
+For real initial data and a real source, their imaginary contributions cancel
+in the exact populations. Taking the real part of eigenvectors or eigenvalues
+changes the dynamics. Taking the real part of a reconstructed population is
+justified only after a numerical assessment of its imaginary residual.
+Real-arithmetic matrix-exponential methods avoid those complex intermediates.
+
+\subsection{Defective and ill-conditioned eigenbases}
+
+Not every valid generator is diagonalizable. An equal-rate chain is a useful
+counterexample:
+\begin{equation}\label{eq:chain}
+ C=\begin{pmatrix}-1&0&0\\1&-1&0\\0&1&0\end{pmatrix},\quad
+ N(0)=\begin{pmatrix}1\\0\\0\end{pmatrix},\quad
+ N(t)=\begin{pmatrix}\ee^{-t}\\t\ee^{-t}\\1-(1+t)\ee^{-t}\end{pmatrix}.
+\end{equation}
+The $t\ee^{-t}$ term comes from a Jordan block. A nominal inverse of numerical
+eigenvectors can return plausible values that omit this term. Near a defective
+matrix, eigenvector conditioning matters more than the visual separation of
+eigenvalues alone. A robust algorithm should assess that conditioning and use
+a matrix-exponential or equivalent stable method when needed.
+
+\begin{implnote}[Transient algorithms]
+The transient solvers check eigenvector conditioning and compare selected
+populations against a matrix exponential. Untrusted points are recomputed
+with \routine{scipy.linalg.expm}; a constant source uses an augmented matrix.
+Real populations are returned, and slow physical modes are retained according
+to their evolution over the requested times rather than an absolute rate
+cutoff. The cached evaluator needs the original rate matrix to perform the
+same exponential fallback.
+\end{implnote}
+
+\subsection{Stationary solutions}
+
+A normalized stationary population of a closed model satisfies
+\begin{equation}
+ C\pi=0,\qquad \vb1^{\mathsf T}\pi=1,\qquad \pi_i\ge0.
+\end{equation}
+For a unique equilibrium, one redundant balance equation can be replaced by
+the normalization equation. Rescaling balance equations helps avoid loss of
+weak-rate constraints. If multiple disconnected closed classes exist, their
+relative weights depend on the initial condition; normalization alone does
+not determine a unique distribution.
+
+The stationary solver first tries the smallest-magnitude eigenmode and checks
+its residual, normalization and conditioning. An unreliable projection is
+replaced by a normalized stationary solve. The ionization-balance wrapper
+calls this routine directly.
+
+\section{Ionization balance across charge stages}\label{sec:ionbalance}
+
+Collect all retained metastables across the modeled stages into a vector $x$.
+At fixed plasma parameters,
+\begin{equation}
+ \dot x=Mx+s,\qquad M=\nelec B.
+\end{equation}
+Here $B$ is a coefficient matrix with units cm$^3$/s. Its adjacent-stage
+blocks contain SCD upward and ACD downward. QCD connects retained levels
+within the lower stage, and XCD contributes connections within the parent
+stage through the lower stage. A given stage can therefore receive both its
+own QCD and XCD contributions computed from the preceding charge state.
+
+For each off-diagonal transition, the same coefficient is subtracted from
+the source diagonal. Consequently $\vb1^{\mathsf T}B=0$ in a closed
+calculation. The CX downward blocks use
+$(\nh/\nelec)\mathcal C$ inside $B$, so the final multiplication by electron
+density recovers the physical multiplier $\nh$.
+
+\begin{implnote}
+\routine{populate_ion_matrix} stores $B$ in \code{ion_matrix}, despite that
+name suggesting a density-weighted rate. \routine{solve_no_source} and
+\routine{solve_source} multiply by the electron-density grid before invoking
+the matrix-exponential solvers. Do not apply the density multiplier a second
+time when interpreting their populations.
+\end{implnote}
+
+\subsection{Ionization age}
+
+For constant electron density, define $\tau=\nelec t$. If
+$B$ has no density dependence, a solution at fixed temperature can be written
+as $x(\tau)=\exp(B\tau)x(0)$. In a full GCR model, quenching and three-body
+terms can make $B$ density-dependent, so equal ionization age does not
+necessarily imply equal charge-state fractions at different densities.
+
+\begin{implnote}[Ionization-age grids]
+The wrapper constructs times as $t=\tau/\nelec$ with axes
+\emph{density, time} when there are multiple densities; one density uses a
+one-dimensional time array. This agrees with the matrix-exponential solver's
+grid convention, including singleton axes.
+\end{implnote}
+
+\subsection{Input routes and retained manifolds}\label{sec:inputroutes}
+
+\routine{ionization_balance} can build coefficients from ADF04 models or read
+precomputed ADF11/HDF5 data. The number of retained metastables is a
+stage-dependent quantity. A ragged collection such as $[\,[0,1],\,[0,1,2],]$
+must not be forced into a rectangular numeric array. The order of input files
+also carries charge-stage information and should be explicit in a calculation
+record. The current readers and constructors impose additional restrictions
+listed in Section~\ref{sec:limitations}.
+
+\begin{implnote}[Constructor defaults]
+For ADF04, a flat metastable array selects levels in the first stage; later
+selections use the preceding SCD parent count. A per-stage list may have
+unequal lengths. Default initial abundances are sized after the GCR stages
+are loaded, including the final parent stage, and place all population in
+the first state. ADF11 and HDF5 source solves use the same default-abundance
+helper after their ionization matrix is constructed.
+\end{implnote}
+
+\section{Charge-state energy balance}\label{sec:energy}
+
+The energy-balance extension first solves the charge-state fractions $x_z(t)$,
+then evolves a kinetic-energy variable per modeled particle,
+\begin{equation}
+ \mathcal E_z=\frac32x_zT_z.
+\end{equation}
+It transports that variable between charge states with the same ionization
+matrix and adds exchange with a prescribed background ion bath at $T_b$:
+\begin{equation}\label{eq:energy}
+ \dot{\mathcal E}_z=\sum_{z'}M_{zz'}\mathcal E_{z'}
+      -\frac23\nu_z\mathcal E_z+\nu_zx_zT_b.
+\end{equation}
+The convention for $\nu_z$ is an energy-transfer frequency:
+$\tfrac32x_z\dot T_z=-\nu_zx_z(T_z-T_b)$ when the population is fixed.
+The temperature-relaxation frequency is therefore $2\nu_z/3$.
+This is kinetic-temperature exchange, not a complete plasma energy equation
+including radiation, electron heating, and ionization-potential energy losses.
+
+\subsection{Charged and neutral energy transfer}
+
+The charged helper implements
+\begin{align}
+ v_s^2&=2eT_s/m_s,\\
+ \nu_{ab}&=\frac{n_b Z_a^2Z_b^2e^4\ln\Lambda}
+ {\pi^{3/2}\epsilon_0^2m_am_b(v_a^2+v_b^2)^{3/2}}.
+\end{align}
+In these expressions temperatures are numeric values in eV, $eT$ is an SI
+energy, masses are in kg, and $n_b$ is in m$^{-3}$. The helper evaluates
+\begin{align}
+ \lambda_D^{-2}&=\sum_s\frac{n_sZ_s^2e^2}{\epsilon_0 eT_s},\\
+ b_{\rm cl}&=\frac{|Z_aZ_b|e^2}
+ {4\pi\epsilon_0\mu(v_a^2+v_b^2)/2}, &
+ b_{\rm q}&=\frac{\hbar}{\mu\sqrt{v_a^2+v_b^2}},\\
+ \ln\Lambda&=\ln\frac{\lambda_D}{\max(b_{\rm cl},b_{\rm q})},
+ \qquad \mu=\frac{m_am_b}{m_a+m_b}.
+\end{align}
+The screened, weakly coupled collision model is not reliable when its
+assumptions fail or its logarithm ceases to be physically meaningful.
+
+For the neutral, the implemented polarization-scattering approximation uses
+\begin{equation}
+ K_{\rm mt}=2.21\pi\alpha_{\rm f}c
+     \sqrt{\frac{m_e}{\mu}\,a_{\rm pol}a_0^4},\qquad
+ \nu_{nb}=\frac{3n_b\mu}{m_n+m_b}K_{\rm mt}.
+\end{equation}
+Here $a_{\rm pol}$ is the numeric polarizability in Bohr-radius cubed and
+$\alpha_{\rm f}$ is the fine-structure constant. This elastic approximation
+does not include every long-range or inelastic energy-transfer mechanism.
+
+\begin{caveat}[Energy extension]
+The caller converts electron density from cm$^{-3}$ to m$^{-3}$ for the
+Debye helper. The energy solver uses one temperature/density point,
+reconstructs populations from stored eigenpairs, and integrates
+Eq.~\eqref{eq:energy} with BDF.
+After a failed integration it can combine the requested populations with a
+shorter energy solution before merely recording \code{sol.success}. That
+can raise a broadcasting error or silently broadcast incomplete results.
+\end{caveat}
+
+\section{Wavelengths, fine structure and line profiles}\label{sec:spectra}
+
+\subsection{Wavelengths and NIST energy matching}
+
+Vacuum wavelength follows Eq.~\eqref{eq:conversion}. For a chosen air
+convention, $\lambda_{\rm air}=\lambda_{\rm vac}/n(\lambda_{\rm vac})$.
+The air-wavelength helper uses a pressure- and temperature-adjusted
+dispersion expression:
+\begin{align}
+ D(\xi)&=8342.54+\frac{2406147}{130-\xi^2}
+                       +\frac{15998}{38.9-\xi^2},\quad
+ \xi=1000/\lambda_{\rm vac,nm},\\
+ n&=1+10^{-8}\!\left[D(\xi)\frac{P}{96095.43}
+ \frac{1+10^{-8}(0.601-0.00972T_C)P}{1+0.0036610T_C}
+ -P_w(0.037345-0.000401\xi^2)\right].
+\end{align}
+Here $P$ and water-vapor pressure $P_w$ are in Pa and $T_C$ is in Celsius;
+the defaults are 101325 Pa, 0 Pa and 15\,$^\circ$C.
+This empirical expression is not a wavelength-independent physical law.
+It has mathematical poles near 87.706 and 160.334 nm. Development retains
+vacuum wavelengths below 200 nm and applies an air conversion only above
+that threshold. An optical air convention is thus separate from the vacuum
+convention used for UV emission.
+
+NIST matching changes line positions by replacing matched level energies.
+It does not recompute collision strengths or establish that LS splitting
+reproduces a resolved collisional radiative calculation. Configurations,
+term labels, $J$ values, and ambiguous repeated labels must be matched
+consistently. The development path uses the public NumPy string API and
+constructs split structure when needed before shifting levels.
+
+\subsection{Statistical splitting of LS multiplets}
+
+For a spin-allowed electric-dipole LS transition, relative component
+strengths can be expressed through an angular factor
+\begin{equation}
+ W_{J_uJ_\ell}\ \propto\ (2J_u+1)(2J_\ell+1)
+ \begin{Bmatrix}L_u&J_u&S\\J_\ell&L_\ell&1\end{Bmatrix}^{\!2}.
+\end{equation}
+Normalize the allowed factors over the multiplet and distribute the term
+PEC by $\mathrm{PEC}_{J_uJ_\ell}=\mathrm{PEC}_{\rm LS}W/\sum W$.
+This describes relative LS angular strengths with the associated statistical
+population assumption. It does not add resolved-$J$ collisional dynamics or
+configuration mixing. Development evaluates equivalent Condon--Shortley factors
+and renormalizes them in \routine{split_pec_multiplet}; it does not enforce
+the required equal-spin condition on every line. Intercombination lines
+therefore need separate treatment.
+
+\subsection{Doppler and natural profiles}
+
+For an emitter of mass $m$ at temperature $T_i$,
+\begin{equation}
+ \Delta\nu_D=\frac{\nu_0}{c}\sqrt{\frac{2eT_i}{m}},\qquad
+ \phi_D(\nu)=\frac{\exp[-(\nu-\nu_0)^2/\Delta\nu_D^2]}
+                   {\sqrt\pi\Delta\nu_D}.
+\end{equation}
+This is a Gaussian with standard deviation $\Delta\nu_D/\sqrt2$ and FWHM
+$2\sqrt{\ln2}\,\Delta\nu_D$. The broadening API takes $T_i$ in eV and
+the emitter mass in kg.
+
+For lifetime broadening of an upper and lower state,
+\begin{equation}
+ \Delta\nu_L=\frac{\Gamma_u+\Gamma_\ell}{2\pi},\qquad
+ \gamma=\frac{\Delta\nu_L}{2},\qquad
+ \phi_L(\nu)=\frac{\gamma/\pi}{(\nu-\nu_0)^2+\gamma^2}.
+\end{equation}
+The Lorentzian FWHM is $\Delta\nu_L$. Density-dependent pressure broadening
+requires additional physics; it is not supplied merely by this lifetime width.
+
+For a profile tabulated per wavelength rather than per frequency, preserve
+area with $\phi_\lambda=\phi_\nu|\dd\nu/\dd\lambda|$ and consistent length
+units. The code evaluates a frequency-shaped kernel on a wavelength grid and
+renormalizes its finite-grid area numerically. That construction is a useful
+narrow-line profile but should not be assumed identical to an exact
+Jacobian-transformed wide profile. Grid width and resolution control omitted
+wings and numerical normalization.
+
+\begin{caveat}[Profile grid resolution]
+Natural broadening now imports the required constants, passes half the
+physical FWHM to the Lorentzian, and uses the current trapezoidal API.
+Very narrow profiles can still collapse on a float64 wavelength grid in nm;
+a frequency-offset grid is needed for those cases.
+\end{caveat}
+
+\section{Relation to the published ColRadPy study}\label{sec:paper}
+
+\subsection{The reported ADAS comparison}
+
+The original paper reports a comparison with ADAS for C$^{2+}$, chosen
+because metastables are present in both the modeled ion and its C$^{3+}$
+parents~\cite{johnson}. The authors report agreement of level populations
+and GCR coefficients within numerical rounding over their tested parameter
+ranges. That is a published result for the calculation described in the
+paper. It is not a new benchmark of the development implementation, and the manuscript
+does not provide the full inputs and grids needed here to reproduce every
+reported comparison. The current limitations in this manual remain relevant
+despite that historical comparison.
+
+\subsection{Be I and Mo I: choosing the dynamical manifold}
+
+The paper's full time-dependent model evolves every included level, whereas
+its conventional comparison retains selected ground/metastable populations
+and eliminates the other levels quasistatically. Its case studies illustrate
+why the adequacy of a retained set depends on the species and conditions:
+
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{l l X}
+\toprule Published case & Plasma conditions & Reported observation\\\midrule
+Be I, paper Fig. 3 & $\Te=20$ eV, $\nelec=10^{13}$ cm$^{-3}$ &
+Retaining the important metastable substantially improves the time-dependent
+line-emission prediction over a ground-only reduction.\\
+Mo I, paper Fig. 4 & $\Te=8$ eV, $\nelec=5\times10^{11}$ cm$^{-3}$ &
+Even the paper's ten-metastable reduction does not reproduce the full
+time-dependent line history.\\
+\bottomrule
+\end{tabularx}
+\caption{Results reported by Johnson et al.~\cite{johnson}, not rerun for
+this manual. They do not establish universal numbers of retained levels
+for either species.}
+\end{table}
+
+The Be example exhibits a separation between slowly relaxing modes and the
+faster excited manifold. The Mo example has a more gradual spectrum of
+relaxation rates, making a small retained set less successful. This motivates
+the explicit lag and emission-convergence tests of
+Section~\ref{sec:metastables}. A ground-only reduction also loses the ability
+to represent an independently evolving metastable fraction.
+
+Paper Figures 2 and 5 examine Mo I emission near 379.8 and 550.6 nm through
+unsummed feeding terms and population-weighted metastable contributions.
+The useful diagnostic distinction is between strong direct ground injection
+and substantial feeding through other populated levels; an unweighted PEC
+column alone does not give either line's contribution to the measured
+intensity. The required weighting is Eq.~\eqref{eq:emissivity}.
+
+The study assumes initially ground-state atoms in its time-dependent
+application and discusses how emission can evolve as metastable populations
+build up after a particle leaves a surface. Those initial conditions are a
+physical assumption about the injected species. ColRadPy's rate equations
+accept a general initial vector; the time required to form metastables
+should not automatically be equated with a distance from a surface without
+particle motion and geometry.
+
+\subsection{Extrapolation and possible model reduction}
+
+The Mo I collision calculation used in the paper ends near 17 eV, motivating
+its high-temperature Burgess--Tully illustration. This is a limit of that
+dataset, not a temperature limit of ColRadPy. The infinite-energy information
+constrains a continuation but does not validate an arbitrary extrapolation
+far from the calculated range. The current call-path limitations are
+described in Section~\ref{sec:interpolation}.
+
+The paper also discusses bundling as a possible way to reduce the dynamical
+size of complex heavy-species systems. Choosing a short list of retained
+metastables is not by itself a population-preserving bundling algorithm.
+No automatic bundled model or reproduction of those proposed future
+calculations is supplied by this manual.
+
+\begin{implnote}[Paper-to-manual coverage]
+Paper Section 2.1 corresponds to Sections~\ref{sec:matrix}--\ref{sec:emission};
+Section 2.2 and Table 1 to Sections~\ref{sec:sxb} and \ref{sec:gcr};
+Section 2.3 to Section~\ref{sec:feeding}; Section 3.1 to
+Section~\ref{sec:interpolation}; and the retained-state comparisons in
+Section 4.1 to Section~\ref{sec:metastables} and this section.
+The energy extension, profiles, and implementation caveats in this manual
+cover additional source-code behavior beyond that six-page article.
+\end{implnote}
+
+\section{Analytic examples and development checks}\label{sec:checks}
+
+\subsection{A two-level density scan}
+
+For a two-level ion with upward and downward coefficients $q_{01},q_{10}$
+and radiative rate $A$, the stationary, ion-total-normalized excited fraction is
+\begin{equation}
+ f_1=\frac{\nelec q_{01}}{A+\nelec(q_{01}+q_{10})},\qquad
+ \mathrm{PEC}_{10}=\frac{Aq_{01}}{A+\nelec(q_{01}+q_{10})}.
+\end{equation}
+At low density, PEC approaches $q_{01}$ and $f_1$ is proportional to density.
+At high density, $f_1\to q_{01}/(q_{01}+q_{10})$ while PEC falls inversely
+with density. The photon rate per emitting ion approaches $Af_1$, not zero.
+This distinction explains why a falling PEC is not itself vanishing emission.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/two_level.pdf}
+\caption{An analytic illustration with $A=10^7\,\mathrm{s}^{-1}$,
+$q_{01}=10^{-8}$ and $q_{10}=3\times10^{-8}$ cm$^3$/s. The dashed line is
+the high-density fraction $1/4$. These are illustrative coefficients, not
+a fit to a specific atom or an execution of the ColRadPy atomic-data path.}
+\end{figure}
+
+\subsection{A conservative chain and a slow mode}
+
+The generator in Eq.~\eqref{eq:chain} is closed and has a known exact
+solution. An independent SciPy matrix exponential reproduces it; direct
+execution of the development solver agrees with both it and the analytic
+solution while conserving population.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/chain.pdf}
+\caption{Equal-rate chain: solid curves are analytic populations; dashed
+curves are development results. The right panel tests the conserved sum.
+Agreement includes the $t\ee^{-t}$ contribution from the defective basis.}
+\end{figure}
+
+A second generator, $C=[[-r,0],[r,0]]$ with $r=10^{-12}\,\mathrm{s}^{-1}$,
+has $N_0(10^{12}\,\mathrm s)=\ee^{-1}$ for $N(0)=(1,0)$.
+The development source solver with a zero source reproduces this slow
+evolution and agrees with source-free dynamics.
+
+\subsection{XCD checked by direct elimination}
+
+The bundled Be II file is solved with metastables $[0,1]$, temperatures
+$[5,20]$ eV and densities $[10^{12},10^{14}]$ cm$^{-3}$, with both
+recombination mechanisms and ionization enabled. At the first grid point,
+form the parent block of Eq.~\eqref{eq:schur} using a linear solve rather
+than the stored inverse. Divide its off-diagonal rate by $\nelec$ and
+compare with stored XCD$[1,0]$. Both quantities are in cm$^3$/s; a separate
+noncontiguous-metastable test covers row selection.
+
+\begin{table}[htbp]\centering\small
+\input{figures/results.tex}
+\caption{Executed development checks. The first two rows are dimensionless
+populations. Both XCD values have units cm$^3$/s.}
+\end{table}
+
+The generator records the development branch HEAD, working-tree status,
+package-module hashes, Python and library versions in \code{provenance.json}.
+Grid parameters and numerical results are recorded in \code{checks.json}.
+The analytic figures and checks establish specific limits and agreements.
+They are not a certification of all atomic datasets, an ADAS benchmark, or
+a reproduction of a particular tungsten dataset.
+
+\section{Data products and external interfaces}\label{sec:interfaces}
+
+\subsection{Array layout}
+
+For an ordinary temperature--density grid, thermodynamic axes trail the
+physical indices: $(\ldots,N_T,N_n)$. Paired mode uses
+$(\ldots,N_{\rm pair})$, evaluating corresponding temperature and density
+entries rather than their Cartesian product. Typical arrays are
+\begin{align*}
+ \code{pops}&:\ (N_e,N_{\rm driver},N_T,N_n),\\
+ \code{pecs}&:\ (N_{\rm line},N_{\rm driver},N_T,N_n),\\
+ \code{scd},\code{acd}&:\ (N_m,N_p,N_T,N_n),\\
+ \code{qcd}&:\ (N_m,N_m,N_T,N_n),\\
+ \code{xcd}&:\ (N_p,N_p,N_T,N_n).
+\end{align*}
+The paired layout removes one grid axis. An excited-level axis is not a
+physical bound-level index; use the stored level map. Likewise the driving
+column index combines several process types and does not universally mean
+an ionization parent.
+
+\subsection{ADF04, ADF11, ADF13, ADF15 and HDF5}
+
+ADF04 is a level-resolved atomic-data format, whereas ADF11 holds effective
+charge-state coefficients on temperature and density grids. The ADF11 reader
+stores logarithmic data and the ionization-balance path interpolates the
+logged grids and coefficients before converting to physical values.
+File naming and block interpretation identify coefficient families.
+The separate ADF13 reader loads tabulated SXB ratios; it does not add a new
+SXB computation to the quasistatic solution.
+
+ADF15 records line photon emission coefficients with wavelength and driver
+identifiers. Its wavelength convention is Angstroms~\cite{adf15}, so a
+conversion from internal nm must occur exactly once. The number of output
+blocks must include every emitted line--driver pair; each block needs an
+unambiguous index and process/driver metadata. These are part of the scientific
+interface because a downstream reader can silently drop or misidentify lines.
+
+\begin{implnote}[Export and reading]
+The ADF15 wrapper converts nm to Angstroms once; the writer declares every
+line--driver block and assigns distinct selectors. The ADF11 constructor
+collects coefficient files before filling missing QCD/XCD arrays, so their
+order does not require SCD first. Format edge cases, including unusual
+ADF11 separator lines, still need validation against representative files.
+\end{implnote}
+
+The HDF5 dumping method uses an optional serialization dependency and can
+select PECs, GCR coefficients, and additional arrays. Record the data version,
+source file and hash, selected metastables, units, grid ordering, normalization
+convention, and any rate supplementation with each saved result.
+
+\section{Validity boundaries and implementation checklist}\label{sec:limitations}
+
+\subsection{Physical assumptions}
+
+The model assumes a specified Maxwellian electron bath, rates appropriate
+to the supplied atomic resolution, and escaping photons. The quasistatic
+approximation additionally requires fast excited-state relaxation.
+Statistical LS multiplet splitting assumes the relevant coupling and
+population pattern. ECIP approximates missing ionization; extrapolation
+does not create new atomic accuracy. The energy extension describes trace
+species kinetics in a prescribed background. These assumptions are separate
+from implementation defects.
+
+\subsection{Development limitations}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{7.6cm}>{\raggedright\arraybackslash}p{3.0cm}}
+\toprule Area & Current qualification & Discussed in\\\midrule
+\endfirsthead
+\toprule Area & Current qualification & Discussed in\\\midrule
+\endhead
+Ionization scaling & Log-temperature interpolation bypasses \code{scale_file_ioniz}; the balance wrapper does not pass the option into each stage. & Section~\ref{sec:rates}\\
+Energy evolution & Integration failure may be hidden by packaging requested populations with a shorter energy solution. & Section~\ref{sec:energy}\\
+Narrow profiles & A float64 wavelength grid can collapse for very small natural widths. & Section~\ref{sec:spectra}\\
+Input edges & Parent-dimension mismatches and uncommon ADF11 separator lines need validation. & Sections~\ref{sec:inputroutes}, \ref{sec:interfaces}\\
+Coupling assumptions & Intercombination splitting and the CX reservoir convention need an explicit physical model. & Sections~\ref{sec:spectra}, \ref{sec:matrix}\\
+CX-only quasistatic solve & With both recombination mechanisms disabled, a recombination-driving variable is used before assignment. & Section~\ref{sec:cxdrivers}\\
+\bottomrule
+\end{longtable}
+
+The table is a guide to interpreting this development implementation. Before using a result,
+check coefficient signs, state and parent maps, column-sum conservation,
+population normalization, line-energy consistency, density powers, and the
+exported units. For a transient solve, compare against an independent matrix
+exponential at representative grid points and verify the initial condition.
+For a quasistatic solve, substitute the calculated excited populations back
+into the balance equation. Agreement with these identities does not establish
+the accuracy of the input atomic calculations, but a failure identifies a
+problem before comparison with an experiment.
+
+\appendix
+\section{Source-code map for development}\label{app:source}
+
+The map below is generated from the same development working tree as the
+numerical checks. Paths are relative to the repository root.
+
+\input{figures/source_map.tex}
+\clearpage
+\begin{thebibliography}{9}
+\bibitem{johnson} C. A. Johnson, S. D. Loch and D. A. Ennis,
+``ColRadPy: A Python collisional radiative solver,''
+\emph{Nuclear Materials and Energy} (2019).
+\href{https://doi.org/10.1016/j.nme.2019.01.013}{doi:10.1016/j.nme.2019.01.013}.
+The repository includes a six-page author manuscript as
+\code{docs/source/files/colradpy_paper.pdf}.
+\bibitem{adasreport} ADAS, \emph{OPEN-ADAS report 1}, especially the
+generalized collisional radiative definitions and separate emission drivers.
+\url{https://www.adas.ac.uk/adaseu_site/reports/open_1.pdf}.
+\bibitem{adf04} ADAS User Manual, Appendix A, \emph{ADF04: resolved specific
+ion data collections}.
+\url{https://www.adas.ac.uk/man/appxa-04.pdf}.
+\bibitem{adf15} ADAS User Manual, Appendix A, \emph{ADF15: photon emissivity
+coefficients}.
+\url{https://www.adas.ac.uk/man/appxa-15.pdf}.
+\bibitem{source} ColRadPy development branch working tree used for this
+manual. The recorded HEAD, source-file hashes and runtime versions are in
+\code{docs/source/theory/figures/provenance.json}.
+\bibitem{numpy24} NumPy developers, \emph{NumPy 2.4.0 release notes},
+expired deprecations and removed APIs.
+\url{https://numpy.org/doc/2.4/release/2.4.0-notes.html}.
+\end{thebibliography}
+\end{document}
