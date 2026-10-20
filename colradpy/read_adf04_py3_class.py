@@ -21,6 +21,14 @@ import copy
 def first_substring(strings, substring):
     return next(i for i, string in enumerate(strings) if substring in string[0])
 
+def adf04_float(text):
+    """Number written in the adf04 form 1.23+08 or 1.23-08 (exponent without E), or a plain
+       number such as 1.000 or 1.23E+08, with an optional sign."""
+    text = str(text).strip()
+    if(not re.search('[eEdD]', text)):
+        text = re.sub(r'(?<=[\d.])([+-])(?=\d)', r'E\1', text)
+    return float(text.replace('D', 'E').replace('d', 'e'))
+
 def config_format(config_arr):
     conf = config_arr[0]
     if(len(config_arr)>1):
@@ -61,9 +69,9 @@ def read_adf04(fil):
 
         adf04['atomic']['ion_term'] = np.asarray(ion_term)
 
-    except:
-        print("**Failed first line of the adf04**\n\n"+first_line+"\n\nfile is formatted incorrectly failed line.\nCHECK WHITE SPACE.\nIt should be formatted as below (Neutral Tungsten example). \nIf more than one ionization metastable,\nadd more ionization potentials and terms after the first\nW+ 0        74         1       63427.7(6D3)")
-        sys.exit(1)
+    except Exception as err:
+        f.close()
+        raise ValueError("**Failed first line of the adf04**\n\n"+first_line+"\n\nfile is formatted incorrectly failed line.\nCHECK WHITE SPACE.\nIt should be formatted as below (Neutral Tungsten example). \nIf more than one ionization metastable,\nadd more ionization potentials and terms after the first\nW+ 0        74         1       63427.7(6D3)" + "\n\nError: " + str(err)) from err
 
     ############################################################################
     #
@@ -82,7 +90,7 @@ def read_adf04(fil):
         tmp_line =   first_line
         zpla = []
         zpla1 = []
-        zz_check = np.array([-1])
+        num_parents = len(adf04['atomic']['ion_pot'])
         while('-1' not in tmp_line or '-1\n' not in tmp_line):
             level_num = level_num + 1
             tmp_line = f.readline().rstrip()#remove trailing
@@ -119,7 +127,7 @@ def read_adf04(fil):
                 
 
                 if( tmp[tmp_inds[config_stop]].count(')') > 1):
-                    w.append(float(re.split('[(]',tmp[tmp_inds[config_stop]])[2][0:4]))
+                    w.append(float(re.split('[()]',tmp[tmp_inds[config_stop]])[3]))
                     offset = -1
                 else:
                     w.append(float(re.split('[)]',re.split('[(]',tmp[tmp_inds[config_stop+1]])[0])[0]))
@@ -130,19 +138,17 @@ def read_adf04(fil):
                 zz1 = np.ones(len(adf04['atomic']['ion_pot']))*-1
                 
 
+                #{parent}fractional parentage: the column of a parent is its index - 1
                 for i in range(config_stop+3+offset,len(tmp_inds)):
                     if ('X' not in tmp[tmp_inds[i]]):
                         zpla1_line = int(re.split('[}]',tmp[tmp_inds[i]])[0][1])
                         zpla_line = float(re.split('[}]',tmp[tmp_inds[i]])[1])
-                        if(zpla1_line not in zz_check):
-                            if(zz_check[0] < 0):
-                                zz_check[0] = int(zpla1_line)
-                            else:
-                                zz_check = np.append(zz_check,zpla1_line)
-
-                        
-                        zz[np.where(zz_check==zpla1_line)[0]] = zpla1_line
-                        zz1[np.where(zz_check==zpla1_line)[0]] = zpla_line
+                        if(not 1 <= zpla1_line <= num_parents):
+                            raise ValueError('level ' + str(level_num) + ' ionizes to parent ' + str(zpla1_line) +
+                                             ' but the first line gives ' + str(num_parents) +
+                                             ' ionization potentials')
+                        zz[zpla1_line-1] = zpla1_line
+                        zz1[zpla1_line-1] = zpla_line
 
                 zpla.append(zz1)
                 zpla1.append(zz)
@@ -154,10 +160,10 @@ def read_adf04(fil):
         adf04['atomic']['energy'] = np.asarray(energy)
         adf04['atomic']['zpla'] = np.asarray(zpla)
         adf04['atomic']['zpla1'] = np.asarray(zpla1)
-        adf04['atomic']['ion_pot_lvl'] = zz_check
-    except:
-        print("\n**FAILED LEVEL " +str(level_num)+"**\n\n"+"\n\nOne or more configuration/energy lines in the adf04 file are formatted incorrectly.\nIt should be formatted as below (C+3 example). \nIf more than one ionization metastable,\nadd more apla,zpla after the first ie. {2}1.00\n      2 1S2 2P1           (2)1( 2.5)    64555.4   {1}1.000")
-        sys.exit(1)
+        adf04['atomic']['ion_pot_lvl'] = np.arange(1, num_parents+1)
+    except Exception as err:
+        f.close()
+        raise ValueError("\n**FAILED LEVEL " +str(level_num)+"**\n\n"+"\n\nOne or more configuration/energy lines in the adf04 file are formatted incorrectly.\nIt should be formatted as below (C+3 example). \nIf more than one ionization metastable,\nadd more apla,zpla after the first ie. {2}1.00\n      2 1S2 2P1           (2)1( 2.5)    64555.4   {1}1.000" + "\n\nError: " + str(err)) from err
     ############################################################################
     #
     # end reading level info start reading temperature grid
@@ -167,18 +173,21 @@ def read_adf04(fil):
         temp_line = f.readline().rstrip()#remove trailing because people cant follow directions
         temp_line_arr = np.asarray(re.split('[ ]',temp_line))
         temp_line_inds = np.where( temp_line_arr!='')[0]
+        #ZEFF, ITYP and the temperatures (K)
+        ityp = int(adf04_float(temp_line_arr[temp_line_inds[1]]))
         adf04_temp_grid = []
         for i in range(2,len(temp_line_inds)):
-            if( '+' in temp_line_arr[temp_line_inds[i]]):
-                temp_tmp = temp_line_arr[temp_line_inds[i]].replace('+','E')
-            elif('-' in temp_line_arr[temp_grid_inds[i]]):
-                temp_tmp = temp_line_arr[temp_line_inds[i]].replace('-','E-')
-            adf04_temp_grid.append(float(temp_tmp))
+            adf04_temp_grid.append(adf04_float(temp_line_arr[temp_line_inds[i]]))
         adf04['input_file']['temp_grid'] = {}
         adf04['input_file']['temp_grid'] = np.asarray(adf04_temp_grid)
-    except:
-        print("\n**FAILED TEMPERATURE GRID**\n\n" +temp_line+"\n\nadf04 temperature grid formatted incorrectly.\nShould be formatted as below (C+3 example).\n  4.0    3       8.00+03 1.60+04 3.20+04 8.00+04 1.60+05 3.20+05 8.00+05 1.60+06 3.20+06 8.00+06 1.60+07")
-        sys.exit(1)
+    except Exception as err:
+        f.close()
+        raise ValueError("\n**FAILED TEMPERATURE GRID**\n\n" +temp_line+"\n\nadf04 temperature grid formatted incorrectly.\nShould be formatted as below (C+3 example).\n  4.0    3       8.00+03 1.60+04 3.20+04 8.00+04 1.60+05 3.20+05 8.00+05 1.60+06 3.20+06 8.00+06 1.60+07" + "\n\nError: " + str(err)) from err
+    if(ityp != 3):
+        f.close()
+        raise ValueError('adf04 ITYP = ' + str(ityp) + ' is not supported: ColRadPy reads effective collision '
+                         'strengths (upsilons) against electron temperature, ITYP = 3. ITYP = 1 gives '
+                         'collision strengths against threshold parameter and 4 non-Maxwellian rates.')
     ################################################################################
     #
     # end reading temp grid start reading in the atomic data from the adf04 file
@@ -199,6 +208,7 @@ def read_adf04(fil):
     #declare the a value stuff
     a_val = []
     inf_engy= []
+    has_inf_engy = False
     while('-1' not in tmp or '-1\n' not in tmp):
         level_num = level_num + 1
         tmp_line = f.readline().rstrip()#remove trailing whitespace from some adf04 files :'(
@@ -210,42 +220,26 @@ def read_adf04(fil):
             # Transition numbers
             col_transitions.append(np.array([int(tmp[tmp_inds[0]]),int(tmp[tmp_inds[1]])]))
             # A-values
-            if( '+' in tmp[tmp_inds[2]]):
-                a_val.append(float(tmp[tmp_inds[2]].replace('+','E')))
-            elif('-' in tmp[tmp_inds[2]]):
-                a_val.append(float(tmp[tmp_inds[2]].replace('-','E-')))
-            #collisional values
-            col_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
+            a_val.append(adf04_float(tmp[tmp_inds[2]]))
+            #collisional values, and the infinite energy point that may follow them, which can
+            #be joined to the last value when it is negative (1.23-03-4.56+01)
+            num_temp = len(adf04['input_file']['temp_grid'])
+            col_excit_row = np.zeros(num_temp)
+            inf_engy_line = 0.
             for i in range(0,len(tmp_inds) - 3):
-
-                if(len(tmp[tmp_inds[i+3]]) < 9):
-
-                    if(i>len(adf04['input_file']['temp_grid'])-1):
-                        if( '+' in tmp[tmp_inds[i+3]]):
-                            inf_engy.append(float(tmp[tmp_inds[i+3]].replace('+','E')))
-                        elif('-' in tmp[tmp_inds[i+3]]):
-                            inf_engy.append(float(tmp[tmp_inds[i+3]].replace('-','E-')))
+                token = tmp[tmp_inds[i+3]]
+                if(len(token) < 9):
+                    if(i>num_temp-1):
+                        inf_engy_line = adf04_float(token)
+                        has_inf_engy = True
                     else:
-                        if( '+' in tmp[tmp_inds[i+3]]):
-                            col_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('+','E'))
-                        elif('-' in tmp[tmp_inds[i+3]]):
-                            col_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('-','E-'))
-
-                        
+                        col_excit_row[i] = adf04_float(token)
                 else:
-
-                    last_temp = tmp[tmp_inds[i+3]][0:7]
-                    inf_temp =  tmp[tmp_inds[i+3]][8:15]
-                    if( '+' in last_temp):
-                        col_excit_row[i] = float(last_temp.replace('+','E'))
-                    elif('-' in last_temp):
-                        col_excit_row[i] = float(last_temp.replace('-','E-'))
-                    
-                    if( '+' in inf_temp):
-                        inf_engy.append(float(inf_temp.replace('+','E')))
-                    elif('-' in inf_temp):
-                        inf_engy.append(float(inf_temp.replace('-','E-')))
-
+                    col_excit_row[i] = adf04_float(token[0:7])
+                    inf_engy_line = adf04_float(token[7:])
+                    has_inf_engy = True
+            #one infinite energy point for every transition, 0 when it is not given
+            inf_engy.append(inf_engy_line)
             col_excit.append(col_excit_row)
             #infinite energy
 
@@ -260,10 +254,7 @@ def read_adf04(fil):
 
             recomb_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
             for i in range(0,len(adf04['input_file']['temp_grid'])):
-                if( '+' in tmp[tmp_inds[i+3]]):
-                    recomb_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('+','E'))
-                elif('-' in tmp[tmp_inds[i+3]]):
-                    recomb_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('-','E-'))
+                recomb_excit_row[i] = adf04_float(tmp[tmp_inds[i+3]])
             recomb_excit.append(recomb_excit_row)
 
     ######################################################################
@@ -276,10 +267,7 @@ def read_adf04(fil):
             ion_transitions.append(np.array([int(tmp[tmp_inds[1]]),int(tmp[tmp_inds[2]])]))
             ion_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
             for i in range(0,len(adf04['input_file']['temp_grid'])):
-                if( '+' in tmp[tmp_inds[i+3]]):
-                    ion_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('+','E'))
-                elif('-' in tmp[tmp_inds[i+3]]):
-                    ion_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('-','E-'))
+                ion_excit_row[i] = adf04_float(tmp[tmp_inds[i+3]])
             ion_excit.append(ion_excit_row)
 
     ######################################################################
@@ -293,12 +281,13 @@ def read_adf04(fil):
             cx_transitions.append(np.array([int(tmp[tmp_inds[1]]),int(tmp[tmp_inds[2]])]))
             cx_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
             for i in range(0,len(adf04['input_file']['temp_grid'])):
-                if( '+' in tmp[tmp_inds[i+3]]):
-                    cx_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('+','E'))
-                elif('-' in tmp[tmp_inds[i+3]]):
-                    cx_excit_row[i] = float(tmp[tmp_inds[i+3]].replace('-','E-'))
+                cx_excit_row[i] = adf04_float(tmp[tmp_inds[i+3]])
             cx_excit.append(cx_excit_row)
 
+
+    f.close()
+    if(not has_inf_engy):
+        inf_engy = []
 
     #check if energies indexes wrong
     #Can these atomic physics people ever get a file format correct.........
@@ -362,10 +351,13 @@ def read_adf04(fil):
         adf04['atomic']['zpla'] =         adf04['atomic']['zpla'][sort_energy]
         adf04['atomic']['zpla1'] =        adf04['atomic']['zpla1'][sort_energy]
 
-        #there are some instances where the level transistions are backwards
-        #again can the atomic people get anything right?
+    #there are some instances where the level transistions are backwards (lower level first),
+    #the upper level is always written first here
+    col_transitions = np.asarray(col_transitions)
+    if(col_transitions.size > 0):
         ttt = np.where(col_transitions[:,0] < col_transitions[:,1])[0]
         if(ttt.size>0):
+            print(str(ttt.size) + ' transitions in the adf04 file give the lower level first, they were swapped')
             ttmp = col_transitions[ttt,0]
             col_transitions[ttt,0] = col_transitions[ttt,1]
             col_transitions[ttt,1] = ttmp
