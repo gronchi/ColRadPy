@@ -138,6 +138,8 @@ class ionization_balance():
         self.data['user']['init_abund'] = np.asarray(init_abund)
         self.data['user']['soln_times'] = np.asarray(soln_times)
         self.data['user']['source'] = np.asarray(source)
+        self.data['user']['htemp_grid'] = np.asarray(htemp_grid) #eV
+        self.data['user']['hdens_grid'] = np.asarray(hdens_grid) #cm-3
         self.data['user']['ne_tau'] = np.atleast_1d(ne_tau)
         if(self.data['user']['ne_tau'][0] != -1):
             print('ne_tau was not equal to -1 so overwiting solution times with ne_tau calculated values')
@@ -154,67 +156,45 @@ class ionization_balance():
         
 ########################################################################################################################
         if(adf11_files):#adf11 specific formatting
-            self.data['input_file'] = {}            
+            self.data['input_file'] = {}
+            self.data['user']['temp_dens_pair'] = False
+            if(type(use_cx) != bool):
+                self.data['user']['use_cx'] = np.asarray(use_cx, dtype=bool)
             for i in range(0,len(fils)):
-                self.data['user']['temp_dens_pair'] = False
-                
-
-
                 adf11 = read_adf11(fils[i])
-
-
+                #the class comes from the file name, not from its directories
+                cls = adf11['input_file']['class']
 
                 if(type(use_cx) == bool):
                     self.data['user']['use_cx'] = np.ones(len(adf11['input_file']['metas'])-1,dtype=bool)
-                    self.data['user']['use_cx'][:] = False
-                
+                    self.data['user']['use_cx'][:] = use_cx
 
+                if(cls not in ('scd', 'acd', 'qcd', 'xcd', 'ccd')):
+                    continue
+                self.data['input_file'][cls] = adf11['input_file']
                 for j in range(0,len(adf11['input_file']['metas'])-1):
                     if( str(j) not in self.data['cr_data']['gcrs']):
                         self.data['cr_data']['gcrs'][str(j)] = {}
+                    self.data['cr_data']['gcrs'][str(j)][cls] = interp_rates_adf11(adf11['input_file']['temp_grid'],
+                                                                                   adf11['input_file']['dens_grid'],
+                                                                                   temp_grid,dens_grid,
+                                                                                   adf11['input_file'][str(j)])
 
-                    if( 'scd' in fils[i]):
-                        self.data['cr_data']['gcrs'][str(j)]['scd'] = interp_rates_adf11(adf11['input_file']['temp_grid'],
-                                                                                         adf11['input_file']['dens_grid'],
-                                                                          temp_grid,dens_grid,adf11['input_file'][str(j)])
-                        self.data['input_file']['scd'] = adf11['input_file']
-                        
-                    if( 'acd' in fils[i]):
-                        self.data['cr_data']['gcrs'][str(j)]['acd'] = interp_rates_adf11(adf11['input_file']['temp_grid'],
-                                                                                         adf11['input_file']['dens_grid'],
-                                                                          temp_grid,dens_grid,adf11['input_file'][str(j)])
-                        self.data['input_file']['acd'] = adf11['input_file']
-                        
-                    if( 'qcd' in fils[i]):
-                        self.data['cr_data']['gcrs'][str(j)]['qcd']= interp_rates_adf11(adf11['input_file']['temp_grid'],
-                                                                                        adf11['input_file']['dens_grid'],
-                                                                         temp_grid,dens_grid,adf11['input_file'][str(j)])
-                        self.data['input_file']['qcd'] = adf11['input_file']
-                        
-                    if( 'xcd' in fils[i]):
-                        self.data['cr_data']['gcrs'][str(j)]['xcd']= interp_rates_adf11(adf11['input_file']['temp_grid'],
-                                                                                        adf11['input_file']['dens_grid'],
-                                                                         temp_grid,dens_grid,adf11['input_file'][str(j)])
-                        self.data['input_file']['xcd'] = adf11['input_file']                               
-                    if( 'ccd' in fils[i]):        
-                        self.data['cr_data']['gcrs'][str(j)]['ccd']= interp_rates_adf11(adf11['input_file']['temp_grid'],
-                                                                                        adf11['input_file']['dens_grid'],
-                                                                         temp_grid,dens_grid,adf11['input_file'][str(j)])
-                        self.data['input_file']['ccd'] = adf11['input_file']                        
-                        
-                    if('qcd' not in self.data['cr_data']['gcrs'][str(j)]):
-
-                        self.data['cr_data']['gcrs'][str(j)]['qcd'] = np.zeros( (np.shape(self.data['cr_data']['gcrs'][str(j)]['scd'])[0],
-                                                                                 np.shape(self.data['cr_data']['gcrs'][str(j)]['scd'])[0],
-                                                                                 len(temp_grid),
-                                                                                 len(dens_grid)) )
-
-                    if('xcd' not in self.data['cr_data']['gcrs'][str(j)]):
-
-                        self.data['cr_data']['gcrs'][str(j)]['xcd'] = np.zeros( (np.shape(self.data['cr_data']['gcrs'][str(j)]['scd'])[0],
-                                                                                 np.shape(self.data['cr_data']['gcrs'][str(j)]['scd'])[0],
-                                                                                 len(temp_grid),
-                                                                                 len(dens_grid)) )
+            #coefficients that were not given are made after all the files are read, so the
+            #order of the files does not matter
+            for j in range(0,len(self.data['cr_data']['gcrs'])):
+                gcrs = self.data['cr_data']['gcrs'][str(j)]
+                for cls in ('scd', 'acd'):
+                    if(cls not in gcrs):
+                        raise ValueError('ADF11 ionization balances need scd and acd files, there is no ' +
+                                         cls + ' for stage ' + str(j))
+                num_met, num_ion = np.shape(gcrs['scd'])[0:2]
+                if('qcd' not in gcrs):
+                    gcrs['qcd'] = np.zeros((num_met, num_met, len(temp_grid), len(dens_grid)))
+                if('xcd' not in gcrs):
+                    gcrs['xcd'] = np.zeros((num_ion, num_ion, len(temp_grid), len(dens_grid)))
+                if(self.data['user']['use_cx'][j] and 'ccd' not in gcrs):
+                    raise ValueError('use_cx needs ccd files, there is no ccd for stage ' + str(j))
 
 
         elif(hdf5_files):
@@ -246,9 +226,6 @@ class ionization_balance():
 
 
 
-
-            self.data['user']['htemp_grid'] = np.asarray(htemp_grid) #eV
-            self.data['user']['hdens_grid'] = np.asarray(hdens_grid) #cm-3
 
             self.data['user']['temp_dens_pair'] = temp_dens_pair
             self.data['user']['metas'] = np.asarray(metas)        
