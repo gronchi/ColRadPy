@@ -64,23 +64,42 @@ class ExcitationExtrapolationTests(unittest.TestCase):
         rates = model.data["rates"]
         bt = rates["burg_tully"]
         upsilon = rates["excit"]["col_excit_interp"]
-        tabulated = rates["excit"]["col_excit"]
         np.testing.assert_array_equal(bt["extrap_temp_inds_low"], [0, 1, 2])
-        for j in range(4):
-            constant = bt["ind_arrs"][j][bt["low_constant_inds"][j]]
-            np.testing.assert_array_equal(upsilon[constant, :3],
-                                          np.repeat(tabulated[constant, :1], 3, axis=1))
-        # Type 2 collision strengths are y and linear in x below the calculated temperatures.
-        inds = np.setdiff1d(np.arange(len(bt["ind_arrs"][1])), bt["low_constant_inds"][1])
+        # Type 2 collision strengths are y, whose log is linear in x below the
+        # calculated temperatures (through the two lowest of them) when those
+        # reach the threshold region.
+        inds = np.delete(bt["ind_arrs"][1], bt["low_constant_inds"][1])
         self.assertGreater(len(inds), 10)
-        transitions = rates["excit"]["col_transitions"][bt["ind_arrs"][1][inds]] - 1
+        transitions = rates["excit"]["col_transitions"][inds] - 1
         energy = model.data["atomic"]["energy"]
         energies = np.array([energy[transitions[:, 0]], energy[transitions[:, 1]]])
         x = type2_xconvert(np.concatenate([low, calculated[:2]]) * 11604.5, energies)
-        y = upsilon[bt["ind_arrs"][1][inds]][:, [0, 1, 2, 3, 4]]
-        slope = (y[:, 4] - y[:, 3]) / (x[:, 4] - x[:, 3])
-        np.testing.assert_allclose(y[:, :3], y[:, [3]] + slope[:, None] * (x[:, :3] - x[:, [3]]),
-                                   rtol=1e-8)
+        log_y = np.log(upsilon[inds][:, :5])
+        slope = (log_y[:, 4] - log_y[:, 3]) / (x[:, 4] - x[:, 3])
+        np.testing.assert_allclose(log_y[:, :3], log_y[:, [3]] + slope[:, None] * (x[:, :3] - x[:, [3]]),
+                                   rtol=1e-8, atol=1e-10)
+        # Collision strengths falling towards the lowest calculated temperature keep falling.
+        falling = slope > 0
+        self.assertGreater(falling.sum(), 10)
+        self.assertTrue((np.diff(upsilon[inds][falling][:, :4], axis=1) > 0).all())
+
+    def test_far_above_threshold_held_constant(self):
+        # be2_adf04 has transitions between nearly degenerate levels whose lowest
+        # calculated temperature (0.86 eV) is thousands of times their energy.
+        calculated = file_temperatures("be2_adf04")
+        model = solve("be2_adf04", np.concatenate([[1e-3, 0.1], calculated]), rates_only=True)
+        rates = model.data["rates"]
+        bt = rates["burg_tully"]
+        upsilon = rates["excit"]["col_excit_interp"]
+        tabulated = rates["excit"]["col_excit"]
+        held = np.concatenate([bt["ind_arrs"][j][bt["low_constant_inds"][j]] for j in range(4)])
+        self.assertEqual(len(held), 40)
+        np.testing.assert_array_equal(upsilon[held, :2], np.repeat(tabulated[held, :1], 2, axis=1))
+        energy = model.data["atomic"]["energy"]
+        upper, lower = rates["excit"]["col_transitions"][held].T - 1
+        self.assertTrue((calculated[0] > 0.7 * np.abs(energy[upper] - energy[lower]) / 8065.54).all())
+        self.assertIn(168, held)
+        self.assertEqual(upsilon[168, 0], 28.)
 
     def test_type_4_above_calculated_temperatures(self):
         model = solve("be2_adf04", [10., 1e3, 1e4], rates_only=True)

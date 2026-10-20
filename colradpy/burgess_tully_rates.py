@@ -1,6 +1,12 @@
 import numpy as np
 
 
+#Below the calculated temperatures, a transition is extrapolated when its lowest calculated
+#temperature is in the threshold region, x <= X_THRESHOLD (kT up to about the transition
+#energy). Collision strengths calculated only far above threshold are held constant.
+X_THRESHOLD = 0.5
+
+
 def type1_xconvert(tconvert_grid,energy,c=1.5):
     """This function extrapolates excitation rates through the burgess-tully method
        see On the anlysis of collision strengths and rate coefficients A burgess and J.A. Tully
@@ -628,10 +634,10 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
             
     if(burgtully_dict['burg_tully']['extrap_temp_inds_low'].size > 0):
-        #Below the calculated temperatures y is extrapolated linearly in x from the two lowest
-        #temperatures. x goes to 0 as T goes to 0, where y and the collision strength are finite.
-        #Transitions whose extrapolation is not positive down to x = 0 keep the collision
-        #strength of the lowest calculated temperature instead.
+        #Below the calculated temperatures log(y) is extrapolated linearly in x from the two lowest
+        #temperatures, as above them. y stays positive and follows the trend of the data down to
+        #x = 0 (T = 0), where it and the collision strength are finite. Data that start far above
+        #threshold (x near 1) say nothing about it, so those collision strengths are held constant.
         burgtully_dict['burg_tully']['excit_extrap_low_lin'] = []
         burgtully_dict['burg_tully']['yval_extrap_low'] = []
         burgtully_dict['burg_tully']['xval_extrap_low'] = []
@@ -659,10 +665,12 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
             x = burgtully_dict['burg_tully']['xval_arrs'][j][:,lowest]
             y = burgtully_dict['burg_tully']['yval_arrs'][j][:,lowest]
             with np.errstate(divide='ignore', invalid='ignore'):
-                slope = (y[:,1] - y[:,0])/(x[:,1] - x[:,0])
-                t = y[:,[0]] + slope[:,None]*(burgtully_dict['burg_tully']['xval_extrap_low'][j] - x[:,[0]])
-            #y is linear in x, so it is positive down to x = 0 if it is at both ends
-            constant = ~(np.isfinite(t).all(axis=1) & (y[:,0] > 0) & (y[:,0] - slope*x[:,0] > 0))
+                log_y = np.log(y[:,0])
+                slope = (np.log(y[:,1]) - log_y)/(x[:,1] - x[:,0])
+            #without two positive values (zero collision strengths) y keeps its lowest value
+            slope[~np.isfinite(slope)] = 0.
+            t = np.exp(log_y[:,None] + slope[:,None]*(burgtully_dict['burg_tully']['xval_extrap_low'][j] - x[:,[0]]))
+            constant = ~(x[:,0] <= X_THRESHOLD)
             burgtully_dict['burg_tully']['low_constant_inds'].append(np.where(constant)[0])
 
             burgtully_dict['burg_tully']['yval_extrap_low'].append(t)

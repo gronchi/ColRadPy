@@ -808,8 +808,9 @@ class colradpy():
            from the values that stored in adf04 file on a user defined temperature grid
            If values are above the last calculate point in the adf04 then a burgess tully
            extrapolation will be used. Below the first calculated temperature point the
-           burgess tully values are extrapolated towards their finite limit at T = 0, or the
-           collision strength of the first point is kept where that extrapolation is not positive.
+           burgess tully values are extrapolated in log towards their finite limit at T = 0,
+           or the collision strength is held constant if the calculated temperatures are all
+           far above the transition threshold.
         """
         if(self.data['user']['log_rate_col']):
             tmp = interp1d(np.log(self.data['input_file']['temp_grid']/11604.5),
@@ -862,7 +863,7 @@ class colradpy():
             num_constant = sum(map(len, self.data['rates']['burg_tully']['low_constant_inds']))
             if(num_constant > 0):
                 print(str(num_constant) + ' transitions keep the collision strength of the first ' +
-                      'calculated temperature below it, their burgess tully extrapolation is not positive')
+                      'calculated temperature below it, it is far above their threshold')
 
         tttmp = np.where(np.isnan(self.data['rates']['excit']['col_excit_interp']))
         if(tttmp[0].size>0):
