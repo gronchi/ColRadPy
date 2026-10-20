@@ -65,7 +65,7 @@ ax1.plot(beii.data['user']['temp_grid'],
 ax1.legend()
 ax1.set_title('QCD plot')
 ax1.set_xlabel('Temperature (eV)')
-ax1.set_ylabel('QCD * 10$^5$ (cm$^{-3}$ s$^{-1}$)')
+ax1.set_ylabel('QCD * 10$^5$ (cm$^{3}$ s$^{-1}$)')
 fig.savefig(OUTPUT_PATH / "gcr_example_be1_qcd_plot.pdf", format='pdf')
 
 
@@ -74,24 +74,24 @@ fig, ax1 = plt.subplots(**SUBPLOT_KWARGS)
 fig.subplots_adjust(**SUBPLOT_ADJUST_KWARGS)
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['scd'][0,0,:,0],
-         label = 'metastable cross coupling coefficient 1->1+')
+         label = 'effective ionization coefficient 1->1+')
 
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['scd'][0,1,:,0],
-         label = 'metastable cross coupling coefficient 1->2+')
+         label = 'effective ionization coefficient 1->2+')
 
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['scd'][1,0,:,0],
-         label = 'metastable cross coupling coefficient 2->1+')
+         label = 'effective ionization coefficient 2->1+')
 
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['scd'][1,1,:,0],
-         label = 'metastable cross coupling coefficient 2->2+')
+         label = 'effective ionization coefficient 2->2+')
 
 ax1.legend(fontsize='x-small',loc='best')
 ax1.set_title('SCD plot')
 ax1.set_xlabel('Temperature (eV)')
-ax1.set_ylabel('SCD (ion cm$^{-3}$ s$^{-1}$)')
+ax1.set_ylabel('SCD (ion cm$^{3}$ s$^{-1}$)')
 fig.savefig(OUTPUT_PATH / "gcr_example_be1_scd_plot.pdf", format='pdf')
 
 
@@ -100,24 +100,24 @@ fig, ax1 = plt.subplots(**SUBPLOT_KWARGS)
 fig.subplots_adjust(bottom=0.15,top=0.92,left=0.075,right=0.965)
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['acd'][0,0,:,0],
-         label = 'metastable cross coupling coefficient 1+->1')
+         label = 'effective recombination coefficient 1+->1')
 
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['acd'][0,1,:,0],
-         label = 'metastable cross coupling coefficient 2+->1')
+         label = 'effective recombination coefficient 2+->1')
 
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['acd'][1,0,:,0],
-         label = 'metastable cross coupling coefficient 1+->2')
+         label = 'effective recombination coefficient 1+->2')
 
 ax1.plot(beii.data['user']['temp_grid'],
          beii.data['processed']['acd'][1,1,:,0],
-         label = 'metastable cross coupling coefficient 2+->2')
+         label = 'effective recombination coefficient 2+->2')
 
 ax1.legend(fontsize='x-small',loc='best')
 ax1.set_title('ACD plot')
 ax1.set_xlabel('Temperature (eV)')
-ax1.set_ylabel('ACD (rec cm$^{-3}$ s$^{-1}$)')
+ax1.set_ylabel('ACD (rec cm$^{3}$ s$^{-1}$)')
 fig.savefig(OUTPUT_PATH / "gcr_example_be1_acd_plot.pdf", format='pdf')
 
 
@@ -129,10 +129,10 @@ ax1.plot(beii.data['user']['temp_grid'],
          label = 'metastable cross coupling coefficient 1+->2+')
 
 ax1.plot(beii.data['user']['temp_grid'],
-         beii.data['processed']['scd'][1,0,:,0],
+         beii.data['processed']['xcd'][1,0,:,0],
          label = 'metastable cross coupling coefficient 2+->1+')
 ax1.legend(fontsize='x-small',loc='best')
 ax1.set_title('XCD plot')
 ax1.set_xlabel('Temperature (eV)')
-ax1.set_ylabel('XCD (cm$^{-3}$ s$^{-1}$)')
+ax1.set_ylabel('XCD (cm$^{3}$ s$^{-1}$)')
 fig.savefig(OUTPUT_PATH / "gcr_example_be1_xcd_plot.pdf", format='pdf')
