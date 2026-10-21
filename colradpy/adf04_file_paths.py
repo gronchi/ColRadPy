@@ -27,7 +27,10 @@ b_file = np.array(['b0_adf04','b1_adf04','b2_adf04','b3_adf04'])
 
 
 
-urllib.request.urlretrieve(url+h_arr[1], 'h1_adf04') 
+#download only when run as a script: importing the module (e.g. for the API documentation)
+#must not reach the network or write files
+if __name__ == '__main__':
+    urllib.request.urlretrieve(url+h_arr[1], 'h1_adf04')
 
 
 
