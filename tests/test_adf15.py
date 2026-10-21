@@ -174,6 +174,27 @@ class Adf15Tests(unittest.TestCase):
         text = write(args, num_recomb=0)
         self.assertIn("/TYPE = CHEXC    /INDM =+2/ISEL =    4", text)
 
+    def test_read_as_adas_does(self):
+        # The ADAS reader (xxdata_15) stops without a + or : in the first 15 characters, as in
+        # 'C + 2' or 'AR+16', and takes blocks with a blank FILMEM for superstage blocks, whose
+        # keys it then misses, and stops. ColRadPy wrote 'Be 0' and a blank FILMEM.
+        pecs = np.full((1, 1, 1, 1), 1e-10)
+        grids = (np.array([1e13]), np.array([10.]), np.array([0]), np.array([]))
+        for element, charge, ion in (("Be", 0, "Be+ 0"), ("C ", 2, "C + 2"), ("Ar", 16, "Ar+16")):
+            with self.subTest(ion=ion):
+                text = write(([0], np.array([5000.]), pecs, element, charge) + grids,
+                             user={"file_loc": "C:\\data\\adf04\\cpb03_ls#be0.dat"})
+                first, header = text.splitlines()[:2]
+                self.assertIn("+", first[:15])
+                slash = first.index("/")
+                self.assertEqual(first[slash + 1:slash + 6], ion)   # a2,'+',i2
+                self.assertIn(" /FILMEM = cpb03_ls/TYPE = ", header)
+        header = write(([0], np.array([5000.]), pecs, "Be", 0) + grids).splitlines()[1]
+        self.assertIn(" /FILMEM = colradpy/TYPE = ", header)
+        # ADAS reads eight values on each line (8d9.2)
+        with self.assertWarnsRegex(UserWarning, "8 values on each line"):
+            write(([0], np.array([5000.]), pecs, "Be", 0) + grids, num=10)
+
     def test_values_that_cannot_be_written(self):
         base = np.full((1, 1, 1, 1), 1e-10)
         common = ("Be", 0, np.array([1e13]), np.array([10.]), np.array([0]), np.array([]))

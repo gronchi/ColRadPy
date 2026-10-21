@@ -1,5 +1,6 @@
 import numpy as np
 import itertools
+import re
 import warnings
 
 
@@ -8,6 +9,11 @@ import warnings
 MIN_PEC = 1.e-74
 #Wavelengths in A must fit the f9 field of the block header.
 MAX_WAVELENGTH = 1.e8
+#ADAS reads the values as 8d9.2, eight on each line
+VALUES_PER_LINE = 8
+#FILMEM of the block headers: ADAS keeps 8 characters, and its reader (xxdata_15) takes blocks
+#with a blank FILMEM for superstage blocks and stops
+FILMEM_LENGTH = 8
 
 
 # group subset of an array
@@ -36,6 +42,15 @@ def _write_values(f, values, num):
     """Write values as e9.2 fields, 'num' entries per line."""
     for chunk in grouper(num, values):
         f.write(''.join(map('{:9.2E}'.format, chunk)) + '\n')
+
+
+def _filmem(user):
+    """The FILMEM of the block headers: the name of the adf04 file, without its extension."""
+    name = ''
+    if(type(user) == dict and user.get('file_loc')):
+        name = re.split(r'[\\/]', str(user['file_loc']))[-1].rsplit('.', 1)[0]
+        name = re.sub(r'\s', '', name)
+    return (name or 'colradpy')[:FILMEM_LENGTH]
 
 
 def _comment(text):
@@ -103,6 +118,10 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
     """
 
     pec_inds = np.atleast_1d(pec_inds)
+    filmem = _filmem(user)
+    if(num != VALUES_PER_LINE):
+        warnings.warn('ADAS reads ' + str(VALUES_PER_LINE) + ' values on each line of adf15 files (8d9.2), '
+                      'its readers will not read the ' + str(num) + ' written on each line')
     pecs = np.array(pecs, dtype=float)[pec_inds]#only take PECs requested, a copy
     wave = np.asarray(wave, dtype=float)[pec_inds]#only take wavelengths requested
 
@@ -125,8 +144,11 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
     with open(fil_name,'w') as f:
 
         #first line in the adf15 file format, the number of blocks
-        f.write('{:5d}'.format(len(wave)*num_drivers) + '    /' + element_sym + \
-                ' ' + str(charge_state) + ' PHOTON EMISSIVITY COEFFICIENTS/\n')
+        #the ion as ADAS writes it, a2,'+',i2 (C + 2, AR+16): the ADAS reader needs the + (or
+        #a :) and stops otherwise
+        f.write('{:5d}'.format(len(wave)*num_drivers) + '    /' +
+                '{:<2s}+{:2d}'.format(str(element_sym).strip(), int(charge_state)) +
+                ' PHOTON EMISSIVITY COEFFICIENTS/\n')
 
         isel = 0
         for j in range(0,num_drivers):#loop over driving populations
@@ -146,7 +168,7 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                 #header information for the PEC, important things here are the wavelength
                 # number of temps and dens and metastable level
                 f.write(wave_fields[i] + ' A' + '{:4d}{:4d}'.format(len(dens), len(temp)) +
-                        ' /FILMEM =         /TYPE = ' + '{:<8s}'.format(typ) +
+                        ' /FILMEM = ' + '{:<8s}'.format(filmem) + '/TYPE = ' + '{:<8s}'.format(typ) +
                         ' /INDM =' + '{:>2s}'.format(indm) + '/ISEL =' + '{:5d}'.format(isel) + '\n')
 
                 #write the density grid to the file 'num' entries per line
