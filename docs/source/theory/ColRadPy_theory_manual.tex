@@ -143,7 +143,7 @@ checks does not validate every atomic dataset or extrapolation regime.
  side/.style={draw=warnframe,rounded corners=2pt,fill=warnbg,align=center,font=\small,minimum height=12mm,text width=48mm},
  arr/.style={-{Stealth[length=2mm]},thick}]
 \node[box] (data) at (0,0) {ADF04 atomic data; levels, parents, $A$, $\Upsilon$, $S$, $R$};
-\node[box] (rates) at (0,-1.45) {Interpolate coefficients; detailed balance and optional ECIP};
+\node[box] (rates) at (0,-1.45) {Interpolate coefficients; detailed balance, optional ECIP and projection of the high $n$-shells};
 \node[box] (matrix) at (0,-2.9) {Assemble the density-weighted rate matrix $C$};
 \node[box] (qs) at (-3.9,-4.6) {Quasistatic elimination of excited levels\\ $N_e=-C_{ee}^{-1}C_{er}N_r$};
 \node[side] (td) at (3.9,-4.6) {Full time evolution\\ $N(t)=\exp(Ct)N(0)$};
@@ -473,6 +473,139 @@ The off-diagonal sign, column sums, and inverse-channel density powers are
 useful checks before any matrix is solved. A linear algebra routine can solve
 a matrix with negative or incorrectly scaled atomic rates without identifying
 the underlying physical error.
+
+\section{Projection of the high \texorpdfstring{$n$}{n}-shells}\label{sec:projection}
+
+The levels of an ADF04 file usually cover the lowest principal shells,
+$n\le n_1$. The levels of higher shells, up to the series limits of the
+parents, are missing from the matrix of Section~\ref{sec:matrix}, yet most
+recombination passes through them: radiative capture into high $n$,
+dielectronic capture into Rydberg states, and the cascades that follow. At
+high density they also open stepwise ionization. For neon, the effective
+recombination into Ne$^{3+}$, Ne$^{4+}$ and Ne$^{5+}$ from the ADAS
+\code{cop98#10} ADF04 files alone is 0.17--0.69 of the ADAS coefficients made
+from the same files with the high shells included (5--100\,eV), and the SCD of
+Ne$^{2+}$ at 1\,eV and $10^{14}$\,cm$^{-3}$ is 0.007 of the ADAS one.
+
+\subsection{Condensed bundle-\texorpdfstring{$nS$}{nS} couplings}
+
+A bundle-$nS$ calculation (ADAS204) groups the levels built on a parent
+$\rho$ of the next ion with spin system $S$ into $n$-shell populations
+$x_n$, from the lowest shell to the series limit, and eliminates all but its
+lowest shells. The condensed couplings are given for each parent and spin
+system on a temperature--density grid (ADF17 files), in the convention of
+losses positive:
+\begin{equation}\label{eq:bundle}
+ \sum_m P_{nm}\,x_m=\nelec N_\rho\, r_n ,
+\end{equation}
+where $P_{nm}$ (s$^{-1}$) is the coupling from shell $m$ to shell $n$
+($P_{nn}$ the total loss of shell $n$), $r_n$ (cm$^3$\,s$^{-1}$) the
+recombination into shell $n$ by all routes, $I_{n\rho'}$ (s$^{-1}$) the
+ionization of shell $n$ to parent $\rho'$, and $Q_{\rho'}$
+(cm$^3$\,s$^{-1}$) the recombination from $\rho$ that ionizes to another
+parent $\rho'$ without reaching the lowest shells. The same files give the
+direct parts: the shell couplings $D_{nm}$, direct ionization $D^{\rm I}_{n\rho'}$
+and direct radiative, dielectronic, three-body and charge-exchange
+recombination $d_n$.
+
+Shells $u$ above the highest shell of the ADF04 levels are eliminated from
+Eq.~\eqref{eq:bundle} onto the kept shells $l$ (a Schur complement):
+\begin{align}
+ P'&=P_{ll}-P_{lu}P_{uu}^{-1}P_{ul}, &
+ r'&=r_l-P_{lu}P_{uu}^{-1}r_u,\\
+ I'&=I_l-\bigl(P_{uu}^{-1}P_{ul}\bigr)^{\mathsf T} I_u, &
+ Q'&=Q+I_u^{\mathsf T}P_{uu}^{-1}r_u ,
+\end{align}
+and the direct transfers from kept to eliminated shells become indirect. The
+ADF04 file already has the direct couplings between its levels, so they are
+subtracted. The indirect couplings through the high shells are then
+\begin{equation}
+ K=P'-D'-\mathrm{diag}\Bigl(\sum_{\rho'}D^{\rm I}\Bigr),\quad
+ I^{\rm ind}=I'-D^{\rm I},\quad
+ r^{\rm ind}=r'-d,\quad Q^{\rm ind}=Q'.
+\end{equation}
+Negative values, round-off of differences between nearly equal projected
+and direct values, are set to zero.
+
+\subsection{Expansion over the levels}
+
+An ADF18 expansion file (\code{a17_p208} kind) assigns each ADF04 level $i$
+to a parent, spin system and shell $n(i)$, with a weight $w_i$ normalised
+over the levels of that shell (statistical weights). Level populations add
+up to shell populations, so a rate per unit shell population applies to each
+of its levels, while a flow into a shell is shared by its levels with their
+weights:
+\begin{align}
+ R^{\rm ind}_{i\rho}&=w_i\,r^{\rm ind}_{n(i)}, &
+ S^{\rm ind}_{i\rho}&=I^{\rm ind}_{n(i)\rho}/\nelec,\\
+ G_{ij}&=-w_i\,K_{n(i)n(j)}\quad(n(i)\ne n(j)), &
+ X^{\rm ind}_{\rho'\rho}&=\sum_S Q^{\rm ind}_{\rho'} .
+\end{align}
+Transfers within a shell are not described by shell populations and are
+omitted. These terms are added to the matrix of Section~\ref{sec:matrix}:
+$G_{ij}$ to $C_{ij}$, $\nelec S^{\rm ind}_{i\rho}$ to $C_{\rho i}$ and
+$\nelec R^{\rm ind}_{i\rho}$ to $C_{i\rho}$, each with its loss on the
+diagonal of the source, so Eq.~\eqref{eq:conservation} still holds. The
+indirect parent coupling $X^{\rm ind}$ is added to XCD
+(Section~\ref{sec:xcd}). Populations, PECs, SCD, ACD, QCD and XCD then
+include the high shells.
+
+\begin{implnote}[Choices of the implementation]
+Ionization through the shells of one parent to another parent is the
+autoionization of core-excited Rydberg states, part of
+excitation-autoionization, which the ionization rates of the ADF04 files
+(ADF07 data) already include. It is left out. ADAS208 also credits only the
+group's own parent but keeps that loss on the diagonal; ColRadPy omits both,
+so the matrix conserves particles. The diagonal follows from the expanded
+gains and ionization rather than from $K_{nn}$; the two agree when the
+condensed data conserve particles. The condensed data are interpolated
+linearly in $\ln\Te$, $\ln\nelec$ and the logarithm of each coupling, and
+held at the edge of the ADF17 grid outside it. The fractional-parentage
+corrections of the lowest shell (switches \code{IEFPRE}, \code{IEFPRS}, set
+only by the superseded \code{cbnm93} files) are not implemented, and
+indirect charge-exchange recombination is not represented.
+\end{implnote}
+
+\begin{implnote}[Routines and data]
+\routine{read_adf17} reads the condensed matrices and \routine{read_adf18}
+the expansion files; \routine{projection.project} forms and expands the
+indirect couplings. \code{colradpy(..., projection=(adf17, adf18))} stores
+them in \code{rates['projection']} (\routine{make_projection}) and
+\routine{populate_cr_matrix} adds them to the generator. In an ionization
+balance, \code{projection} takes one pair, or \code{None}, per ADF04 file.
+The ADF18 file names the ADF04 and ADF17 files it maps; its level numbers
+follow the order of the ADF04 file, before any sorting by energy.
+\end{implnote}
+
+\subsection{Comparison with ADAS for neon}
+
+With the ADF04 files, condensed matrices (\code{cbnm96}) and expansion files
+(\code{exp96}) from which ADAS made its neon ADF11 coefficients, the
+metastable-resolved SCD and ACD from the ground metastable agree with
+\code{scd96r} and \code{acd96r} to within a few per cent for most stages
+where they are abundant. For example, the ACD into Ne$^{3+}$, Ne$^{4+}$ and
+Ne$^{5+}$, from the ADF04 files of these ions, is 0.97--1.02 of ADAS from 5
+to 100\,eV, and their SCD 0.88--1.02 from 10\,eV, where without the
+projection that ACD was 0.17--0.69 of ADAS. The steady fractional abundances
+then agree with the balance of the ADAS coefficients to within 0.06 at
+$10^{12}$\,cm$^{-3}$, 0.07 at $10^{13}$\,cm$^{-3}$ and 0.16 at
+$10^{14}$\,cm$^{-3}$, against 0.34--0.83 without the projection. The ACD into
+Ne$^{+}$ remains 1.2--1.4 times that of ADAS, and that into Ne$^{0}$ at
+$10^{14}$\,cm$^{-3}$ 0.65--0.97 of it. ADAS notes that these two stages were
+recalculated with a corrected expansion file, which may differ from the one
+used here.
+
+The ADF17 grids are in reduced temperature, so their first temperature rises
+with the charge: 0.04\,eV for Ne$^{0}$, 1.1\,eV for Ne$^{4+}$ and 4.3\,eV for
+Ne$^{9+}$. Below it the projection holds the edge values, with a warning, and
+the coefficients of the highly charged ions there are not meaningful. Near
+the edge the condensed data may also be unreliable: \code{cbnm96#h_ne9ls}
+gives recombination of $+1.1\times10^{9}$ and $-1.1\times10^{9}$\,cm$^3$\,s$^{-1}$
+into $n=1$ and $n=2$ at 4.3\,eV, and with the negative value set to zero the
+ACD into Ne$^{9+}$ is 12 times that of ADAS at 10\,eV and far larger at 5\,eV.
+These ions are absent at such temperatures, so the balance is not affected.
+The comparison is not part of the test suite: the ADAS files are not
+distributed with ColRadPy.
 
 \section{Quasistatic elimination of excited levels}\label{sec:quasistatic}
 
@@ -1353,7 +1486,7 @@ from implementation defects.
 \endfirsthead
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
-Input edges & Metastable-resolved ADF11 files are not covered by the tests. & Sections~\ref{sec:inputroutes}, \ref{sec:interfaces}\\
+Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented; the ACD into Ne$^{+}$ differs from ADAS by 20--40\,\%; artifacts in the condensed data near the lowest ADF17 temperatures are not detected. & Section~\ref{sec:projection}\\
 Coupling assumptions & Intercombination and $|\Delta L|>1$ lines are kept unsplit rather than split with a coupling model. & Section~\ref{sec:spectra}\\
 \bottomrule
 \end{longtable}

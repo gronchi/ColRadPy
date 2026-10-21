@@ -33,6 +33,7 @@ Readers and writers of ADAS and NIST data.
    read_adf11
    read_adf13
    read_adf17
+   read_adf18
    write_adf15
    nist_read_txt
    nist_read
@@ -42,13 +43,14 @@ Readers and writers of ADAS and NIST data.
 Rate coefficients
 -----------------
 
-Extrapolation of excitation rates and ECIP ionization rates.
+Extrapolation of excitation rates, ECIP ionization rates and the projection of the high n-shells.
 
 .. toctree::
    :maxdepth: 1
 
    burgess_tully_rates
    ecip_rates
+   projection
    r8necip
    r8yip
 

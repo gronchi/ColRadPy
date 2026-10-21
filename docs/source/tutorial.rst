@@ -972,6 +972,44 @@ In the future this will be done automatically using the NIST database.
 
 
 
+Projection of the high n-shells
+===============================
+The levels of an ADF04 file usually cover the lowest n-shells of the ion. Recombination into
+the higher n-shells, and the cascades and ionization through them, are then missing from the
+collisional-radiative model, and they are a large part of the recombination: for neon, the
+effective recombination (ACD) into Ne3+ to Ne5+ from the ADAS ``cop98#10`` ADF04 files alone is
+0.17 to 0.69 of the ADAS coefficients, which ADAS made from the same files with the high n-shells
+included. ADAS
+condenses the high n-shells with a bundle-nS calculation onto its lowest n-shells for each
+parent and spin system (ADF17 files, e.g. ``cbnm96#f_ne1ls.dat``), and an ADF18 expansion file of
+the ``a17_p208`` kind (e.g. ``exp96#f_ne1ls.dat``) maps those n-shells onto the levels of a given
+ADF04 file. With both files, ColRadPy adds the indirect couplings through the high n-shells to
+the CR matrix (the projection, described in the theory manual), so the populations, PECs and
+GCR coefficients include them:
+
+.. code-block:: python
+
+   ne1 = colradpy('cop98#10_ls#ne1.dat', np.array([0, 2]), temperature_arr, density_arr,
+                  projection=('cbnm96#f_ne1ls.dat', 'exp96#f_ne1ls.dat'))
+   ne1.solve_cr()
+
+The ADF18 file names the ADF04 file it maps (``DSNREF``) and its ADF17 file (``DSNCPM``); use those
+files together (for H-like neon ADAS maps the n-resolved ``cop98#10_n#ne9.dat``). The indirect
+couplings are in ``ne1.data['rates']['projection']``. The ADF17 temperatures are scaled with the
+charge, and below the first one the projection keeps the values at that edge and gives a warning.
+In an ionization balance, ``projection`` takes
+one ``(adf17, adf18)`` pair, or ``None``, for each ADF04 file:
+
+.. code-block:: python
+
+   ion = ionization_balance(fils, np.array([0, 1]), temperature_arr, density_arr,
+                            projection=[(adf17_files[i], adf18_files[i]) for i in range(len(fils))])
+
+For neon the fractional abundances then agree with those of the ADAS ADF11 coefficients to
+within 0.06 at 1e12 cm-3, 0.07 at 1e13 cm-3 and 0.16 at 1e14 cm-3, where without the projection
+they differ by up to 0.83.
+
+
 Ionization Balance
 ====================
 An ionization balance can be used to get the relative abundances of charge states in a given species.
@@ -991,11 +1029,15 @@ it solves the balance equations with the normalization directly.
 
 
 For ADF04 input, ``metas`` accepts either one array of level indices for the
-first charge state or a list with one array per ADF04 file. With one array,
-later stages select levels ``0`` through ``N-1``, where ``N`` is the number
-of parent states in the preceding stage's SCD coefficients. A per-stage list
-may contain arrays of different lengths. The selections actually used are
-stored as a list in ``ion.data['user']['metas']``.
+first charge state or a list with one array per ADF04 file, which can be
+followed by one for the final stage. With one array, the metastables of each
+later stage are the levels that are the parents on the first line of the
+preceding stage's ADF04 file, found by their terms and energies, because
+ionization to parent ``p`` populates metastable ``p`` of the next stage. A
+per-stage list may contain arrays of different lengths, but each must have one
+level for each parent of the preceding stage; levels that differ from the
+inferred parents give a warning. The selections actually used are stored as a
+list in ``ion.data['user']['metas']``.
 
 If ``init_abund`` is omitted, the first state starts with population one and
 all other states start at zero. The array length is determined after the GCR
