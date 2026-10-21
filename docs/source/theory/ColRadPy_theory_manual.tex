@@ -1065,12 +1065,16 @@ narrow-line profile but should not be assumed identical to an exact
 Jacobian-transformed wide profile. Grid width and resolution control omitted
 wings and numerical normalization.
 
-\begin{caveat}[Profile grid resolution]
-Natural broadening now imports the required constants, passes half the
-physical FWHM to the Lorentzian, and uses the current trapezoidal API.
-Very narrow profiles can still collapse on a float64 wavelength grid in nm;
-a frequency-offset grid is needed for those cases.
-\end{caveat}
+\begin{implnote}[Profile grid resolution]
+Natural profiles are evaluated on offsets $\Delta\lambda$ from the line
+centre, stored in \code{dwave_arr}, with the frequency offsets
+$\Delta\nu=-c\,\Delta\lambda/[\lambda_0(\lambda_0+\Delta\lambda)]$. A natural
+width can be far below the float64 resolution of the wavelength itself
+($5\times10^{-15}$\,nm for the Be\,I line at 454.8\,nm, where float64 resolves
+$6\times10^{-14}$\,nm), and frequencies near $10^{15}$\,Hz are resolved only to
+0.1\,Hz, so neither absolute grid can carry such profiles. The absolute
+wavelengths \code{wave_arr} of these lines coincide.
+\end{implnote}
 
 \section{Relation to the published ColRadPy study}\label{sec:paper}
 
@@ -1291,7 +1295,6 @@ from implementation defects.
 \endfirsthead
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
-Narrow profiles & A float64 wavelength grid can collapse for very small natural widths. & Section~\ref{sec:spectra}\\
 Input edges & Metastable-resolved ADF11 files are not covered by the tests. & Sections~\ref{sec:inputroutes}, \ref{sec:interfaces}\\
 Coupling assumptions & Intercombination and $|\Delta L|>1$ lines are kept unsplit rather than split with a coupling model. & Section~\ref{sec:spectra}\\
 \bottomrule
