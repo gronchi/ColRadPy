@@ -143,5 +143,88 @@ class Adf11BalanceTests(unittest.TestCase):
         self.assertEqual(result.data["processed"]["pops_td_source"].shape, (3, 2, 2, 2))
 
 
+#metastable resolved files (ADAS writes F10.5 without the leading zero, e.g. -.69877) for nuclear
+#charge 2 with 2, 2 and 1 metastables in the stages
+METAS = (2, 2, 1)
+LOG_TEMP_R = np.array([-0.69877, 0.00020, 0.5, 1.30103])
+
+
+def fortran(v):
+    text = f"{v:.5f}"
+    if text.startswith("-0."):
+        text = "-" + text[2:]
+    elif text.startswith("0."):
+        text = text[1:]
+    return text.rjust(10)
+
+
+def resolved_value(cls, z1, i, j, t, d):
+    """A distinct log10 coefficient for every block, temperature and density."""
+    return -10. - z1 - 0.1 * i - 0.01 * j + 0.3 * LOG_TEMP_R[t] - 0.02 * LOG_DENS[d] - 0.5 * ("sqax".index(cls[0]))
+
+
+def write_resolved(directory, cls):
+    def rows(values):
+        return ["".join(fortran(v) for v in values[k:k + 8]) for k in range(0, len(values), 8)]
+    lines = [f"{2:5d}{len(LOG_DENS):5d}{len(LOG_TEMP_R):5d}{1:5d}{2:5d}     /TEST              /GCR PROJECT",
+             "-" * 80, "".join(f"{m:5d}" for m in METAS), "-" * 80] + rows(LOG_DENS) + rows(LOG_TEMP_R)
+    for z1 in (1, 2):
+        if cls in ("scd", "acd"):
+            pairs = [(("IPRT", p), ("IGRD", g)) for g in range(1, METAS[z1 - 1] + 1) for p in range(1, METAS[z1] + 1)]
+        elif cls == "qcd":
+            pairs = [(("IGRD", i), ("JGRD", j)) for i in range(1, METAS[z1 - 1] + 1) for j in range(1, METAS[z1 - 1] + 1) if i != j]
+        else:
+            pairs = [(("IPRT", i), ("JPRT", j)) for i in range(1, METAS[z1] + 1) for j in range(1, METAS[z1] + 1) if i != j]
+        for (a, i), (b, j) in pairs:
+            lines.append("-" * 21 + f"/ {a}= {i:<3d}/ {b}= {j:<3d}/--------/ Z1= {z1:<3d}/ DATE= 04/11/99")
+            for t in range(len(LOG_TEMP_R)):
+                lines += rows([resolved_value(cls, z1, i, j, t, d) for d in range(len(LOG_DENS))])
+    lines += ["C" + "-" * 79, "C  written for the ColRadPy tests", "C" + "-" * 79]
+    path = os.path.join(directory, f"{cls}96r_te.dat")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+class ResolvedAdf11Tests(unittest.TestCase):
+    """The resolved files of OpenADAS (e.g. scd96r_c.dat) write numbers below one without the
+    leading zero, which the reader skipped, so it read the first block as grid values and failed."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.paths = {cls: write_resolved(tmp.name, cls) for cls in ("scd", "acd", "qcd", "xcd")}
+
+    def test_values(self):
+        for cls, path in self.paths.items():
+            with self.subTest(cls=cls):
+                data = read_adf11(path)["input_file"]
+                self.assertTrue(data["resolved"])
+                np.testing.assert_array_equal(data["metas"], METAS)
+                np.testing.assert_allclose(data["temp_grid"], LOG_TEMP_R, atol=1e-12)
+                for z1 in (1, 2):
+                    block = data[str(z1 - 1)]
+                    for idx in np.ndindex(block.shape[:2]):
+                        i, j = idx[0] + 1, idx[1] + 1
+                        if cls in ("scd", "acd"):  # [ground metastable, parent]
+                            expected = [[resolved_value(cls, z1, j, i, t, d) for d in range(len(LOG_DENS))]
+                                        for t in range(len(LOG_TEMP_R))]
+                        elif i == j:
+                            continue
+                        else:  # [from, to]
+                            expected = [[resolved_value(cls, z1, i, j, t, d) for d in range(len(LOG_DENS))]
+                                        for t in range(len(LOG_TEMP_R))]
+                        np.testing.assert_allclose(block[idx], expected, atol=1e-12)
+
+    def test_balance(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = ionization_balance(list(self.paths.values()), [], 10**LOG_TEMP_R[1:3], 10**LOG_DENS[:2],
+                                        adf11_files=True)
+            result.populate_ion_matrix()
+            result.solve_time_independent()
+        self.assertEqual(result.data["ion_matrix"].shape[0], sum(METAS))
+        np.testing.assert_allclose(result.data["processed"]["pops_ss"].sum(axis=0), 1, rtol=1e-12)
+
+
 if __name__ == "__main__":
     unittest.main()

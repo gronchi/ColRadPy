@@ -5,8 +5,9 @@ import re
 
 #ADF11 data classes, file names start with them (e.g. scd96_c.dat, acd96r_c.dat)
 ADF11_CLASSES = ('acd', 'scd', 'ccd', 'prb', 'prc', 'qcd', 'xcd', 'plt', 'pls', 'met')
-#a fixed point number such as -12.34567, numbers can follow each other without spaces
-NUMBER = r'[-+]?\d+\.\d+(?:[eE][-+]?\d+)?'
+#a fixed point number such as -12.34567 or, without the leading zero, -.69877 (ADAS resolved
+#files); numbers can follow each other without spaces
+NUMBER = r'[-+]?(?:\d+\.\d*|\.\d+)(?:[eE][-+]?\d+)?'
 
 
 def adf11_class(fil):
