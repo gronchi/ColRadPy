@@ -28,24 +28,25 @@ be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombinatio
               use_recombination_three_body = True,use_ionization=True,suppliment_with_ecip=True)
 be.solve_cr()
 
+#pop_lvl[i,j,m] is the part of the population of excited level i that the metastable m
+#populates through level j; i and j index the excited (non-metastable) levels, whose level
+#numbers are in excited_levels
+excited_levels = be.data['processed']['excited_levels']
+level = 1 #the level whose populating mechanisms are plotted, 2s2p 3P
+i = np.where(excited_levels == level)[0][0]
+
 #plotting the populating levels
 fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
 fig.subplots_adjust(bottom=0.15,top=0.93,left=0.125,right=0.965)
 
-ax1.plot(be.data['processed']['pop_lvl'][8,:,0,0,0]/\
-                      np.sum(be.data['processed']['pop_lvl'][0,:,0,0,0]),
-                      label='Te= '+str(be.data['user']['temp_grid'][0])+ ' eV')
-
-ax1.plot(be.data['processed']['pop_lvl'][0,:,0,10,0]/\
-                      np.sum(be.data['processed']['pop_lvl'][0,:,0,10,0]),
-                      label='Te= '+str(be.data['user']['temp_grid'][10])+ ' eV')
-
-ax1.plot(be.data['processed']['pop_lvl'][0,:,0,-1,0]/\
-                      np.sum(be.data['processed']['pop_lvl'][0,:,0,-1,0]),
-                      label='Te= '+str(be.data['user']['temp_grid'][-1]) + ' eV')
+for t in (0, 10, -1):
+    ax1.plot(excited_levels,
+             be.data['processed']['pop_lvl'][i,:,0,t,0]/\
+             np.sum(be.data['processed']['pop_lvl'][i,:,0,t,0]),
+             label='Te= '+str(be.data['user']['temp_grid'][t])+ ' eV')
 
 
-ax1.set_title('Populating mechansims to level 1')
+ax1.set_title('Populating mechanisms of level ' + str(level))
 ax1.legend(fontsize='x-small',loc='best')
 ax1.set_xlabel('Level number (#)')
 ax1.set_ylabel('Populating fraction (-)')
@@ -56,9 +57,9 @@ fig.savefig(OUTPUT_PATH / "populating_levels.pdf", format='pdf')
 fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
 fig.subplots_adjust(bottom=0.15,top=0.93,left=0.125,right=0.965)
 ax1.plot(be.data['user']['temp_grid'],
-          be.data['processed']['pop_lvl'][10,10,0,:,0]/\
-          np.sum(be.data['processed']['pop_lvl'][10,:,0,:,0],axis=0))
-ax1.set_title('Populating fraction from ground to level 1')
+          be.data['processed']['pop_lvl'][i,i,0,:,0]/\
+          np.sum(be.data['processed']['pop_lvl'][i,:,0,:,0],axis=0))
+ax1.set_title('Populating fraction from ground to level ' + str(level))
 ax1.set_xlabel('Temperature (eV)')
 ax1.set_ylabel('Populating fraction from ground (-)')
 
