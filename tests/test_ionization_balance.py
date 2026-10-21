@@ -207,7 +207,7 @@ class ParentLevelTests(unittest.TestCase):
         with self.assertWarnsRegex(UserWarning, r"metastables \[0 1\] of stage 2 are not the parents \[0 2\]"):
             self.balance([np.array([0]), np.array([0]), np.array([0, 1])])
         with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
+            warnings.filterwarnings("error", "the metastables", UserWarning)
             self.balance([np.array([0]), np.array([0]), np.array([0, 2])])
 
 

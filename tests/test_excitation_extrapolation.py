@@ -133,18 +133,22 @@ class IonizationExtrapolationTests(unittest.TestCase):
     def test_power_law_below_calculated_temperatures(self):
         calculated = file_temperatures("cpb03_ls#be0.dat")
         low = np.array([1e-3, 1e-2, 0.05])
-        model = solve("cpb03_ls#be0.dat", np.concatenate([low, calculated]), rates_only=True)
+        # level 2 has a placeholder of 5.3e-6 cm3/s at the lowest file temperature
+        with self.assertWarnsRegex(UserWarning, "level 2 to parent 1 at 0.0862 eV"):
+            model = solve("cpb03_ls#be0.dat", np.concatenate([low, calculated]), rates_only=True)
         ioniz = model.data["rates"]["ioniz"]
         reduced = ioniz["ion_excit"]
         levels, parents = (ioniz["ion_transitions"] - 1).T
         grid = ioniz["ionization_reduced"][levels, parents]
-        np.testing.assert_allclose(grid[:, 3:], reduced, rtol=1e-12)
-        power = np.log(reduced[:, 1] / reduced[:, 0]) / np.log(calculated[1] / calculated[0])
-        # The ground state rises with temperature; level 2 falls and is held constant.
-        self.assertGreater(power[0], 0)
-        self.assertLess(power[1], 0)
-        np.testing.assert_allclose(grid[0, :3], reduced[0, 0] * (low / calculated[0])**power[0])
-        np.testing.assert_allclose(grid[1, :3], reduced[1, 0])
+        np.testing.assert_allclose(grid[0, 3:], reduced[0], rtol=1e-12)
+        np.testing.assert_allclose(grid[1, 4:], reduced[1, 1:], rtol=1e-12)
+        # The ground state rises with temperature; level 2 falls from its lowest kept point
+        # and is held constant below it.
+        power = np.log(reduced[0, 1] / reduced[0, 0]) / np.log(calculated[1] / calculated[0])
+        self.assertGreater(power, 0)
+        self.assertLess(reduced[1, 2], reduced[1, 1])
+        np.testing.assert_allclose(grid[0, :3], reduced[0, 0] * (low / calculated[0])**power)
+        np.testing.assert_allclose(grid[1, :4], reduced[1, 1])
 
     def test_low_temperature_solution(self):
         model = solve("cpb03_ls#be0.dat", [0.01, 0.03, 0.1])
