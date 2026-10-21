@@ -1,3 +1,20 @@
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "colradpy"
+version = "1.1"
+description = "python collisional radiative solver"
+authors = [
+    { name = "Curt Johnson", email = "caj0026@auburn.edu" },
+]
+dependencies = ["numpy<2.5", "scipy", "matplotlib"]
+
+[project.urls]
+Homepage = "https://github.com/johnson-c/ColRadPy"
+
+[tool.setuptools]
+packages = ["colradpy", "colradpy.atomic"]
+package-dir = { "colradpy.atomic" = "atomic" }
+package-data = { "colradpy.atomic" = ["elements.txt", "nist_energies/*"] }
