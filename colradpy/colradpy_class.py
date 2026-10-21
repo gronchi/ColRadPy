@@ -53,6 +53,9 @@ from colradpy.nist_read_txt import *
 from colradpy.solve_matrix_exponential import *
 from colradpy.colradpy_utility import *
 from colradpy.write_adf15 import *
+from colradpy.read_adf17 import read_adf17
+from colradpy.read_adf18 import read_adf18
+from colradpy.projection import project
 if( (sys.version_info[0] ==3) & (sys.version_info[1] >=10)):
     from collections.abc import Mapping
 else:
@@ -449,6 +452,13 @@ class colradpy():
       :param ne_tau: n_e*tau values for time dependent calc to be evaluated at can not be defined at the same time as td_t (cm-3 s)
       :type ne_tau: float array
 
+      :param projection: the adf17 file of condensed bundle-nS matrices and the adf18 a17_p208 file
+                         that maps it onto the levels of the adf04 file, (adf17, adf18) or
+                         {'adf17': ..., 'adf18': ...}, to include the recombination, ionization
+                         and redistribution through the n-shells above those of the adf04 file
+                         (see make_projection); None for the levels of the adf04 file only
+      :type projection: tuple of str
+
     """
     
     def __init__(self,fil,metas=np.array([]),temp_grid=np.array([]),electron_den=np.array([]),
@@ -458,7 +468,7 @@ class colradpy():
                   default_pop_norm=True,temp_dens_pair=False,rate_interp_ion = 'loglog_slinear',
                  rate_interp_recomb='loglog_slinear',rate_interp_col='log_slinear',
                  rate_interp_cx='log_quadratic',use_cx=False,scale_file_ioniz=False,
-                 ne_tau = -1):
+                 ne_tau = -1, projection=None):
         
         """The initializing method. Sets up the nested list for data storage and starts to populate with user data
            as well as reading in the adf04 file
@@ -484,6 +494,14 @@ class colradpy():
         self.data['user']['use_recombination'] = use_recombination
         self.data['user']['use_cx'] = use_cx
         self.data['user']['scale_file_ioniz'] = scale_file_ioniz
+        if(projection is not None):
+            if(isinstance(projection, dict)):
+                projection = (projection['adf17'], projection['adf18'])
+            if(len(projection) != 2):
+                raise ValueError('projection takes the adf17 file of condensed matrices and the adf18 '
+                                 'a17_p208 file that maps it onto the levels of the adf04 file')
+            projection = tuple(str(f) for f in projection)
+        self.data['user']['projection'] = projection
         self.data['user']['metas'] = 'look at [atomic][metas] for values'
         self.data['user']['td_t'] = np.asarray(td_t)# seconds
         self.data['user']['td_n0'] = np.asarray(td_n0)
@@ -1183,6 +1201,72 @@ class colradpy():
             '''
 
 
+    def make_projection(self):
+        """Indirect couplings through the n-shells above those of the adf04 file, from the condensed
+           bundle-nS matrices of an adf17 file mapped onto the adf04 levels by an adf18 a17_p208
+           file (colradpy.projection), on the user temperatures and densities. populate_cr_matrix
+           adds them to the CR matrix, so the populations, PECs and GCR coefficients include the
+           recombination into the high n-shells and the cascades and ionization through them.
+
+           Creates ['rates']['projection'] with 'couplings' (level, level) [to, from] in s-1,
+           'ionization' and 'recombination' (level, parent) in cm3 s-1 and 'parent_coupling'
+           (parent, parent) [to, from] in cm3 s-1, the temperature and density axes last.
+        """
+        adf17_file, adf18_file = self.data['user']['projection']
+        adf17 = read_adf17(adf17_file)['input_file']
+        adf18 = read_adf18(adf18_file)
+        num_levels = len(self.data['atomic']['energy'])
+        reference = re.split(r'[\\/]', adf18['adf04_file'])[-1]
+        file_name = os.path.basename(str(self.data['user'].get('file_loc', '')))
+        if(reference and file_name and reference != file_name):
+            warnings.warn('the adf18 file ' + str(adf18_file) + ' maps the levels of ' + reference +
+                          ', not of ' + file_name)
+        #the adf18 records number the levels as the adf04 file does, before any sorting by energy
+        file_order = np.asarray(self.data['atomic'].get('file_order', np.arange(num_levels)))
+        sorted_index = np.empty(num_levels, dtype=int)
+        sorted_index[file_order] = np.arange(num_levels)
+        records = [dict(r, level=int(sorted_index[r['level'] - 1]) + 1) if 1 <= r['level'] <= num_levels else r
+                   for r in adf18['records']]
+        self.data['rates']['projection'] = project(adf17, dict(adf18, records=records), num_levels,
+                                                   len(self.data['atomic']['ion_pot']),
+                                                   self.data['user']['temp_grid'], self.data['user']['dens_grid'],
+                                                   pairs=self.data['user']['temp_dens_pair'])
+
+    def _add_projection_to_cr_matrix(self):
+        """Adds the indirect couplings through the high n-shells (make_projection) to the CR matrix:
+           transfers between levels, ionization of the levels to the parents and recombination of the
+           parents into the levels, with the losses that balance them on the diagonal.
+        """
+        projection = self.data['rates']['projection']
+        cr = self.data['cr_matrix']['cr']
+        num_levels = len(self.data['atomic']['energy'])
+        num_parents = len(self.data['atomic']['ion_pot'])
+        levels = np.arange(num_levels)
+        parents = num_levels + np.arange(num_parents)
+        dens = self.data['user']['dens_grid']
+        couplings = projection['couplings']
+        cr[:num_levels, :num_levels] += couplings
+        cr[levels, levels] -= couplings.sum(axis=0)
+        if(self.data['user']['use_ionization']):
+            ionization = projection['ionization']*dens             #s-1, (level, parent, ...)
+            cr[num_levels:num_levels + num_parents, :num_levels] += np.swapaxes(ionization, 0, 1)
+            cr[levels, levels] -= ionization.sum(axis=1)
+        if(self.data['user']['use_recombination']):
+            recombination = projection['recombination']*dens       #s-1, (level, parent, ...)
+            cr[:num_levels, num_levels:num_levels + num_parents] += recombination
+            cr[parents, parents] -= recombination.sum(axis=0)
+
+    def _ionization_coefficients(self):
+        """Ionization rate coefficients of the levels to the parents in cm3 s-1, (level, parent,
+           temperature, density) or (level, parent, pair) with temp_dens_pair, with the ionization
+           through the high n-shells when the projection is used (make_projection)."""
+        ionization = self.data['rates']['ioniz']['ionization']
+        if(not self.data['user']['temp_dens_pair']):
+            ionization = np.repeat(ionization[..., None], len(self.data['user']['dens_grid']), axis=-1)
+        if(self.data['user'].get('projection')):
+            ionization = ionization + self.data['rates']['projection']['ionization']
+        return ionization
+
     def populate_cr_matrix(self):
         """This function will populate the collision radiative matrix with all the rates that
            user asks to be included into the calculation.
@@ -1219,11 +1303,14 @@ class colradpy():
         if(self.data['user']['use_recombination'] and \
            (np.size(self.data['rates']['recomb']['recomb_excit'] > 0)) and \
                        'recomb_excit_interp_grid' not in self.data['rates']['recomb']):
-            print('Recombination from file was not previously calculated. Doing that now')            
+            print('Recombination from file was not previously calculated. Doing that now')
             self.make_recombination_rates_from_file()
+        #the indirect couplings through the high n-shells, from the condensed bundle-nS matrices
+        if(self.data['user'].get('projection') and 'projection' not in self.data['rates']):
+            self.make_projection()
 
-        
-            
+
+
         self.data['cr_matrix'] = {}
         self.data['cr_matrix']['q_ji'] = np.zeros((len(self.data['atomic']['energy']),
                                                    len(self.data['atomic']['energy']),
@@ -1479,6 +1566,9 @@ class colradpy():
                                    np.einsum('ij,k->ijk',self.data['rates']['ioniz']['ionization'][:,p,:],
                                                        self.data['user']['dens_grid'])
 
+        if(self.data['user'].get('projection')):
+            self._add_projection_to_cr_matrix()
+
         #the loss terms of the levels (radiative, collisional and ionization), which are the
         #diagonal of the CR matrix for the levels
         levels = np.arange(len(self.data['atomic']['energy']))
@@ -1693,19 +1783,20 @@ class colradpy():
                                                  [:,:,0:len(self.data['atomic']['metas']),:],axis=1)
             #effective ionization rate
             if(self.data['user']['use_ionization']):
+                ionization = self._ionization_coefficients()
                 self.data['processed']['scd'] = np.einsum('ipk,imk->mpk',
-                                                          self.data['rates']['ioniz']['ionization'][levels_to_keep,:],
+                                                          ionization[levels_to_keep,:],
                                                           self.data['processed']['F'])
 
                 if(self.data['processed']['driving_populations_norm']):
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
                                                   np.einsum('ipk,ik->ipk',
-                                                  self.data['rates']['ioniz']['ionization'][self.data['atomic']['metas'],:],
+                                                  ionization[self.data['atomic']['metas'],:],
                               1/(1+np.sum(self.data['processed']['pops_no_norm'][:,0:nmeta,:],axis=0)))
 
                 else:
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
-                                             self.data['rates']['ioniz']['ionization'][self.data['atomic']['metas'],:,:]
+                                             ionization[self.data['atomic']['metas'],:,:]
 
 
             if(self.data['user']['use_recombination'] and self.data['user']['use_recombination_three_body']):
@@ -1716,10 +1807,13 @@ class colradpy():
                                          self.data['rates']['recomb']['recombination'][:,:,:]
             elif(self.data['user']['use_recombination']):
                 recomb_coeff = self.data['rates']['recomb']['recombination'][:,:,:]
-            elif(self.data['user']['use_recombination_three_body']):            
+            elif(self.data['user']['use_recombination_three_body']):
                 recomb_coeff = np.einsum('ijk,k->ijk',
                                          self.data['rates']['recomb']['recomb_three_body'],
                                          self.data['user']['dens_grid'])
+            if(self.data['user']['use_recombination'] and self.data['user'].get('projection')):
+                #recombination into the high n-shells that reaches the levels
+                recomb_coeff = recomb_coeff + self.data['rates']['projection']['recombination']
             if(self.data['user']['use_recombination'] or self.data['user']['use_recombination_three_body']):
                 #effective recombination rate
                 self.data['processed']['acd'] = -np.einsum('njk,jmk->nmk',
@@ -1782,6 +1876,10 @@ class colradpy():
                                 self.data['cr_matrix']['cr_red_inv'][0:len(self.data['atomic']['energy']),
                                                                      0:len(self.data['atomic']['energy']),:],
                                 recomb_coeff[levels_to_keep][:,metasplus_to_keep,:]))
+                if(self.data['user']['use_recombination'] and self.data['user'].get('projection')):
+                    #recombination into the high n-shells that ionizes to another parent
+                    self.data['processed']['xcd'] = self.data['processed']['xcd'] + \
+                                                    self.data['rates']['projection']['parent_coupling']
 
         else:
         
@@ -1825,19 +1923,20 @@ class colradpy():
                                                  [:,:,0:len(self.data['atomic']['metas']),:,:],axis=1)
             #effective ionization rate
             if(self.data['user']['use_ionization']):
-                self.data['processed']['scd'] = np.einsum('ipk,imkl->mpkl',
-                                                          self.data['rates']['ioniz']['ionization'][levels_to_keep,:,:],
+                ionization = self._ionization_coefficients()
+                self.data['processed']['scd'] = np.einsum('ipkl,imkl->mpkl',
+                                                          ionization[levels_to_keep,:,:],
                                                           self.data['processed']['F'])
 
                 if(self.data['processed']['driving_populations_norm']):
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
-                                                  np.einsum('ipk,ikl->ipkl',
-                                                  self.data['rates']['ioniz']['ionization'][self.data['atomic']['metas'],:,:],
+                                                  np.einsum('ipkl,ikl->ipkl',
+                                                  ionization[self.data['atomic']['metas'],:,:],
                               1/(1+np.sum(self.data['processed']['pops_no_norm'][:,0:nmeta,:,:],axis=0)))
 
                 else:
                     self.data['processed']['scd'] = self.data['processed']['scd'] + \
-                                             self.data['rates']['ioniz']['ionization'][self.data['atomic']['metas'],:,:,None]
+                                             ionization[self.data['atomic']['metas'],:,:,:]
 
             if(self.data['user']['use_recombination'] and self.data['user']['use_recombination_three_body']):
                 #this is the total recombination with three body and the rates that in included in the adf04 file
@@ -1847,10 +1946,13 @@ class colradpy():
                                          self.data['rates']['recomb']['recombination'][:,:,:,None]
             elif(self.data['user']['use_recombination']):
                 recomb_coeff = self.data['rates']['recomb']['recombination'][:,:,:,None]
-            elif(self.data['user']['use_recombination_three_body']):            
+            elif(self.data['user']['use_recombination_three_body']):
                 recomb_coeff = np.einsum('ijk,l->ijkl',
                                          self.data['rates']['recomb']['recomb_three_body'],
                                          self.data['user']['dens_grid'])
+            if(self.data['user']['use_recombination'] and self.data['user'].get('projection')):
+                #recombination into the high n-shells that reaches the levels
+                recomb_coeff = recomb_coeff + self.data['rates']['projection']['recombination']
             if(self.data['user']['use_recombination'] or self.data['user']['use_recombination_three_body']):
                 #effective recombination rate
                 self.data['processed']['acd'] = -np.einsum('njkl,jmkl->nmkl',
@@ -1912,6 +2014,10 @@ class colradpy():
                             self.data['cr_matrix']['cr_red_inv'][0:len(self.data['atomic']['energy']),
                                                                  0:len(self.data['atomic']['energy']),:,:],
                             recomb_coeff[levels_to_keep][:,metasplus_to_keep,:,:]))
+                if(self.data['user']['use_recombination'] and self.data['user'].get('projection')):
+                    #recombination into the high n-shells that ionizes to another parent
+                    self.data['processed']['xcd'] = self.data['processed']['xcd'] + \
+                                                    self.data['rates']['projection']['parent_coupling']
 
                     
     def solve_time_dependent(self):

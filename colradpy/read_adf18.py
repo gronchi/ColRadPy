@@ -12,10 +12,12 @@ def _fields(line):
     return [field.strip() for field in line.split(':')[1:]]
 
 
-def read_adf18_a17_p208(fil):
+def read_adf18(fil):
     """Reads an adf18 expansion file of the a17_p208 kind (ADAS appxa-18), which maps the n-shells of
     the bundle-nS condensed matrices of an adf17 file onto the levels of an adf04 file, for the
-    projection of the high n-shells (see colradpy.projection).
+    projection of the high n-shells (see colradpy.projection). adf18 files of other kinds (a04_a04,
+    a09_a04, a09_p204, p310_a17, p311_a17) have other layouts and raise ValueError; the a17_p208
+    kind is recognised by the adf04 (DSNREF) and adf17 (DSNCPM) files of its &SEQINF namelist.
 
     :param fil: path of the adf18 file
     :type fil: str
@@ -37,9 +39,12 @@ def read_adf18_a17_p208(fil):
     #the namelist &SEQINF ... &END
     start = next((k for k, line in enumerate(lines) if '&SEQINF' in line.upper()), None)
     end = next((k for k, line in enumerate(lines) if '&END' in line.upper()), None)
-    if(start is None or end is None):
-        raise ValueError(str(fil) + ' is not an adf18 a17_p208 file: it has no &SEQINF ... &END namelist')
-    items = {key.upper(): value.strip("'") for key, value in NAMELIST_ITEM.findall(' '.join(lines[start:end + 1]))}
+    items = {} if start is None or end is None else \
+            {key.upper(): value.strip("'") for key, value in NAMELIST_ITEM.findall(' '.join(lines[start:end + 1]))}
+    if('DSNCPM' not in items):
+        raise ValueError(str(fil) + ' is not an adf18 file of the a17_p208 kind, whose &SEQINF namelist gives the '
+                         'adf04 (DSNREF) and adf17 (DSNCPM) files; the other kinds (a04_a04, a09_a04, a09_p204, '
+                         'p310_a17, p311_a17) are not read')
     adf18 = {'sequence': items.get('SEQ', '').strip(), 'adf04_file': items.get('DSNREF', ''),
              'adf17_file': items.get('DSNCPM', ''), 'num_parents': int(items.get('NPARNT', 0)),
              'num_shells': int(items.get('NSHEL', 0)), 'num_levels': int(items.get('NLEV', 0))}

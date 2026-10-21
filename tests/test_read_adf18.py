@@ -9,7 +9,7 @@ import os
 import tempfile
 import unittest
 
-from colradpy.read_adf18 import read_adf18_a17_p208
+from colradpy.read_adf18 import read_adf18
 
 
 EXP = """ &SEQINF SEQ='F',
@@ -62,7 +62,7 @@ class ReadAdf18Tests(unittest.TestCase):
             path = os.path.join(tmp, "exp96#f_ne1ls.dat")
             with open(path, "w") as f:
                 f.write(EXP.replace("{key}", f"{key:<7s}"))
-            return read_adf18_a17_p208(path)
+            return read_adf18(path)
 
     def test_namelist_and_parents(self):
         data = self.read()
@@ -94,12 +94,16 @@ class ReadAdf18Tests(unittest.TestCase):
             path = os.path.join(tmp, "x.dat")
             with open(path, "w") as f:
                 f.write("not an expansion file\n")
-            with self.assertRaisesRegex(ValueError, "SEQINF"):
-                read_adf18_a17_p208(path)
+            with self.assertRaisesRegex(ValueError, "not an adf18 file of the a17_p208 kind"):
+                read_adf18(path)
+            with open(path, "w") as f:   #p310_a17 and p311_a17 files have a namelist without DSNCPM
+                f.write(" &SEQINF SEQ='H',REFMEM=' ',NPARNT=1,NSHEL=4,NLEV=4,&END\n")
+            with self.assertRaisesRegex(ValueError, "other kinds .* are not read"):
+                read_adf18(path)
             with open(path, "w") as f:
                 f.write(EXP.replace("{key}", "FRPARNT").split(" RESOLVED")[0])
             with self.assertRaisesRegex(ValueError, "no level records"):
-                read_adf18_a17_p208(path)
+                read_adf18(path)
 
 
 if __name__ == "__main__":

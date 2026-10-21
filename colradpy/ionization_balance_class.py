@@ -125,6 +125,10 @@ class ionization_balance():
         ('log_quadratic') for recombination, excitation and charge exchange
     :type rate_interp_ion: str or list of str
 
+    :param projection: projection of the high n-shells, one (adf17, adf18) pair or None for each
+        adf04 file, see colradpy (None: no projection)
+    :type projection: list
+
     :param ne_tau: n_e*tau values for time dependent calc to be evaluated at can not be defined at the same time as td_t (cm-3 s)
     :type ne_tau: float array
 
@@ -140,7 +144,7 @@ class ionization_balance():
                  keep_charge_state_data=False,init_abund = np.array([]), source= np.array([]),
                  temp_dens_pair=False,scale_file_ioniz=False, ne_tau=np.array([-1]),adf11_files=False,
                  hdf5_files=False, rate_interp_ion='loglog_slinear', rate_interp_recomb='loglog_slinear',
-                 rate_interp_col='log_slinear', rate_interp_cx='log_quadratic'):
+                 rate_interp_col='log_slinear', rate_interp_cx='log_quadratic', projection=None):
 
 
         #this is basic input data that is the same whether adf04 or adf11 inputs are used
@@ -309,6 +313,11 @@ class ionization_balance():
                 if(len(values) != len(fils)):
                     raise ValueError(name + ' must be one string or one for each adf04 file')
                 self.data['user'][name] = values
+            #projection of the high n-shells: an (adf17, adf18) pair, or None, for each adf04 file
+            projections = [None]*len(fils) if projection is None else list(projection)
+            if(len(projections) != len(fils)):
+                raise ValueError('projection must have one (adf17, adf18) pair, or None, for each adf04 file')
+            self.data['user']['projection'] = projections
 
             self.data['user']['keep_charge_state_data'] = keep_charge_state_data
 
@@ -367,7 +376,8 @@ class ionization_balance():
                                rate_interp_ion = self.data['user']['rate_interp_ion'][i],
                                rate_interp_recomb = self.data['user']['rate_interp_recomb'][i],
                                rate_interp_col = self.data['user']['rate_interp_col'][i],
-                               rate_interp_cx = self.data['user']['rate_interp_cx'][i])
+                               rate_interp_cx = self.data['user']['rate_interp_cx'][i],
+                               projection = self.data['user']['projection'][i])
 
                 tmp.solve_cr() #Solving the CR set of equations
                 #keep all the CR data if requested

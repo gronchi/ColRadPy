@@ -311,6 +311,9 @@ def read_adf04(fil):
     #check if energies indexes wrong
     #Can these atomic physics people ever get a file format correct.........
     sort_energy = np.argsort(adf04['atomic']['energy'])#the correct sorted indexes
+    #index in the file (from 0) of each level after sorting, for data that refer to the
+    #file's level numbers (e.g. the adf18 files of the projection)
+    adf04['atomic']['file_order'] = np.arange(len(adf04['atomic']['energy']))
     #indexes that need to swapped around
     indd = np.where( np.linspace(0,len(adf04['atomic']['energy'])-1,len(adf04['atomic']['energy']),dtype=int) -\
                        sort_energy !=0)[0]
@@ -369,6 +372,7 @@ def read_adf04(fil):
         adf04['atomic']['energy'] =       adf04['atomic']['energy'][sort_energy]
         adf04['atomic']['zpla'] =         adf04['atomic']['zpla'][sort_energy]
         adf04['atomic']['zpla1'] =        adf04['atomic']['zpla1'][sort_energy]
+        adf04['atomic']['file_order'] =   sort_energy
 
     #there are some instances where the level transistions are backwards (lower level first),
     #the upper level is always written first here
