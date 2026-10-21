@@ -17,7 +17,7 @@ import numpy as np
 
 from colradpy import colradpy, ionization_balance
 from colradpy.colradpy_class import EV_PER_WAVENUMBER
-from colradpy.projection import _indirect, indirect_couplings
+from colradpy.projection import _indirect, indirect_couplings, project
 from colradpy.read_adf17 import read_adf17
 from colradpy.read_adf18 import read_adf18
 
@@ -361,6 +361,24 @@ class ColradpyProjectionTests(unittest.TestCase):
         reference = solve(projection, temps=temps[::-1].copy())
         for key in ("scd", "acd", "xcd"):
             np.testing.assert_allclose(model.data["processed"][key], reference.data["processed"][key], rtol=1e-12)
+
+    def test_levels_without_spin_system(self):
+        # Levels mapped to a spin system that the adf17 file does not have (exp96#c_si8ls names
+        # the adf17 file of another ion) got no projection without a warning; levels of no shell
+        # (the 2p2 levels) are left out of the projection on purpose.
+        adf17 = read_adf17(self.files(bundle(26, indirect_recomb=1.), bundle(27))[0])["input_file"]
+        adf18 = read_adf18(self.adf18)
+        adf18["records"] = [dict(r, spin=5) if r["level"] in (1, 3) else r for r in adf18["records"]]
+        with contextlib.redirect_stdout(io.StringIO()):
+            atomic = colradpy(BE0, np.array([0]), np.array([10.]), np.array([1e10])).data["atomic"]
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            rates = project(adf17, adf18, atomic["energy"], atomic["ion_pot"], TEMPS_K / 11604.5, DENS)
+        messages = [str(w.message) for w in caught if "get no projection" in str(w.message)]
+        self.assertEqual(len(messages), 1)
+        self.assertIn("maps 2 levels (indices 0, 2)", messages[0])
+        self.assertEqual(np.abs(rates["recombination"][[0, 2]]).max(), 0.)
+        self.assertGreater(rates["recombination"][4].min(), 0.)              #2s3s 1S
 
     def test_errors(self):
         flagged = write_adf17(os.path.join(self.dir, "c93.dat"), {1: bundle(14), 3: bundle(15)},

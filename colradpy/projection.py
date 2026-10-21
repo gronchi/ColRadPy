@@ -358,6 +358,7 @@ def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=
     recombination = np.zeros(grid + (num_levels, num_parents))
     parent_coupling = np.zeros(grid + (num_parents, num_parents))
     groups = indirect_couplings(adf17, adf18)
+    expanded = set()
     for group in groups:
         p = group['parent']
         on_grid, below, left_out = {}, {}, {}
@@ -385,6 +386,7 @@ def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=
         records = [r for r in adf18['records'] if r['parent'] == p + 1 and r['spin'] == group['spin'] and
                    r['shell'] in shell_index and 1 <= r['level'] <= num_levels]
         ionization_energy, excitation_energy = _thresholds(records, group['shells'], ion_pot[p], level_energies)
+        expanded.update((r['level'], r['parent'], r['spin']) for r in records)
         for record in records:
             i, a = record['level'] - 1, shell_index[record['shell']]
             recombination[..., i, p] += record['weight']*on_grid['recombination'][..., a]* \
@@ -405,6 +407,16 @@ def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=
                           np.maximum(ion_pot - ion_pot[p], 0.)*EV_PER_WAVENUMBER)
         coupling[..., p] = 0.
         parent_coupling[..., :, p] += coupling
+    #levels mapped to a parent and n-shell whose spin system or n-shell the adf17 file does not have
+    #(a level can have records for several parents; levels of no parent or shell, such as doubly
+    #excited ones, are left out of the projection on purpose)
+    missing = sorted({r['level'] - 1 for r in adf18['records'] if r['parent'] >= 1 and r['shell'] >= 1 and
+                      1 <= r['level'] <= num_levels and (r['level'], r['parent'], r['spin']) not in expanded})
+    if(missing):
+        warnings.warn('the adf18 file maps ' + str(len(missing)) + ' levels (indices ' +
+                      ', '.join(str(i) for i in missing[:10]) + (', ...' if len(missing) > 10 else '') + ') to '
+                      'spin systems or n-shells that the adf17 file does not have, so they get no projection; '
+                      'the adf18 file may name another adf17 file')
     levels = np.arange(num_levels)
     couplings[..., levels, levels] = 0.
     last = lambda a: np.moveaxis(a, tuple(range(len(grid))), tuple(range(-len(grid), 0)))
