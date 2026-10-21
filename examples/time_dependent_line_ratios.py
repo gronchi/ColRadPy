@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.integrate import trapezoid
 from os.path import exists
 from os import mkdir
 from pathlib import Path
@@ -64,8 +65,8 @@ qs_ratio_pop = be.data['processed']['pops'][0,:,0,0]/be.data['processed']['pops'
 
 #must integrate over the total time eplased here just do it for a long time so it will be
 # the same as equilbrium. If non-steady state choose some smaller time
-td_ratio_pop = np.trapz(be.data['processed']['td']['td_pop'][1,:,0,0],be.data['user']['td_t'])/\
-         np.trapz(be.data['processed']['td']['td_pop'][2,:,0,0],be.data['user']['td_t'])
+td_ratio_pop = trapezoid(be.data['processed']['td']['td_pop'][1,:,0,0],be.data['user']['td_t'])/\
+         trapezoid(be.data['processed']['td']['td_pop'][2,:,0,0],be.data['user']['td_t'])
 
 print('Quasistatic population level_1/level_2:  ',qs_ratio_pop )
 print('Time dependent population integration over time level_1/level_2:  ',td_ratio_pop)
@@ -82,8 +83,8 @@ qs_ratio_pecs = be.data['processed']['pecs'][1,:,0,0]/be.data['processed']['pecs
 
 #Must integrate over the total time eplased here just do it for a long time so it will be
 #the same as equilbrium. If non-steady state choose some smaller time
-td_ratio_pecs = np.trapz(be.data['processed']['td']['pecs'][1,:,0,0],be.data['user']['td_t'])/\
-                np.trapz(be.data['processed']['td']['pecs'][33,:,0,0],be.data['user']['td_t'])  
+td_ratio_pecs = trapezoid(be.data['processed']['td']['pecs'][1,:,0,0],be.data['user']['td_t'])/\
+                trapezoid(be.data['processed']['td']['pecs'][33,:,0,0],be.data['user']['td_t'])
 
 
 print('Quasistatic PEC ratio PEC_1/PEC_33:  ',qs_ratio_pecs )
