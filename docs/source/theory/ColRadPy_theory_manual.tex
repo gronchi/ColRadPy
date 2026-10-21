@@ -307,7 +307,9 @@ term enters with two factors of electron density. Zero or missing file data
 must be distinguished from a reliable physical assertion that a process is absent.
 
 ECIP is an optional approximate completion of missing ionization channels.
-\routine{ecip_rates} prepares the allowed parent channels and passes Kelvin
+\routine{ecip_rates} prepares the allowed parent channels, the levels marked
+$\{p\}$ in the level list that lie below the ionization potential of parent $p$
+(also above the first ionization potential), and passes Kelvin
 temperatures to \routine{r8ecip}. \routine{suppliment_with_ecip} chooses
 channels using parent annotations and zero entries in the assembled
 ionization array. This is an approximation to missing atomic data, not a
