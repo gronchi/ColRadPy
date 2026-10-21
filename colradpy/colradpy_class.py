@@ -2376,26 +2376,29 @@ class colradpy():
 
     def make_nat_broad(self,calc_lorentz = True, dw=0,n=50,gs=5,split_wave=np.array([])):
         """ Calculates the width of natural broadening from the addition of the upper and lower spontaneous emission.
-            Also creates wavelength and spectral intensity arrays for each spectral line.
-            The default grid shape is (#PECs,1000). Uses equation 1.27 from Stuart Loch's thesis
-        Args:
-          :param dw: +- from the central wavelength
-          :type dw: float
+            Also creates wavelength and spectral intensity arrays for each spectral line, of shape
+            (#PECs, n). Uses equation 1.27 from Stuart Loch's thesis.
 
-          :param n: number of points in the wavelength array
-          :type n: int
+            The profiles are made on offsets from the line centre, ['dwave_arr'] in nm: natural
+            widths can be far below the float64 resolution of the wavelength (5e-15 nm for the Be I
+            intercombination line at 454.8 nm, where float64 resolves 6e-14 nm), so the wavelengths
+            ['wave_arr'] = centre + offset of such lines are all equal. Lines without a finite
+            wavelength or width have zero profiles.
 
-          :param calc_lorentz: calculated a number of Lorentzians=['processed']['pecs'] or len(split_wave)
-          :type calc_lorentz: bool
+        :param calc_lorentz: calculate a Lorentzian for every line of ['processed']['pecs'] or of split_wave
+        :type calc_lorentz: bool
 
-          :param dw:  wavelength grid spacing if default not chosen
-          :type dw:  float
+        :param dw: half range of the wavelength grids (nm), gs natural widths by default
+        :type dw: float
 
-          :param n:  length of wavelength grids
-          :type n:  int
+        :param n: number of points in the wavelength grids
+        :type n: int
 
-          :param split_wave:  PEC/wavelength array to be broadened
-          :type split_wave:  int
+        :param gs: half range of the default wavelength grids in natural widths (FWHM)
+        :type gs: float
+
+        :param split_wave: wavelengths of the split PECs to be broadened
+        :type split_wave: float array
 
         """
         
@@ -2420,24 +2423,32 @@ class colradpy():
                                   self.data['cr_matrix']['A_ji_loss'][self.data['processed']['pec_levels'][:,1]]/2/np.pi
 
         if(calc_lorentz):
+            nat = self.data['processed']['broadening']['nat']
+            wave = np.asarray(wave, dtype=float)
             if(dw==0):
                 #set the grid to allow for varrying natural line widths
-                dww = (wave*1.e-9)**2/constants.c*self.data['processed']['broadening']['nat']['dnu_l']*1.e9*gs
+                with np.errstate(invalid='ignore', over='ignore'):
+                    dww = (wave*1.e-9)**2/constants.c*nat['dnu_l']*1.e9*gs
             else:
-                dww = dw
+                dww = np.full(len(wave), float(dw))
+            #lines with a finite wavelength and width; the others have zero profiles
+            ok = np.isfinite(wave) & np.isfinite(dww) & (dww > 0) & (nat['dnu_l'] > 0)
 
-            self.data['processed']['broadening']['nat']['wave_arr'] =np.linspace(wave-dww,
-                                                                      wave + dww,n,axis=1)#create 2d wave array
+            #offsets from the line centre (nm), which keep their precision for any width
+            nat['dwave_arr'] = np.linspace(-np.where(ok, dww, 0.), np.where(ok, dww, 0.), n, axis=1)
+            nat['wave_arr'] = wave[:,None] + nat['dwave_arr']#create 2d wave array
+
+            #frequency offsets from the centre, c/(w + dw) - c/w, without the cancellation
+            #of two frequencies near 1e15 Hz
+            centre = np.where(ok, wave, 1.)[:,None]
+            dnu = -constants.c*nat['dwave_arr']/(centre*(centre + nat['dwave_arr']))*1.e9
 
             #dnu_l is the full width at half maximum, lorentz takes the half width
-            lor_tmp = self.lorentz(self.data['processed']['broadening']['nat']['dnu_l']/2,
-                                          constants.c/((self.data['processed']['broadening']['nat']['wave_arr']/1.e9)),
-                                                                 constants.c/(wave/1.e9))
-            
+            lor_tmp = self.lorentz(np.where(ok, nat['dnu_l'], 1.)/2, dnu, np.zeros(len(wave)))
+
             #normalize so area under the curve is 1
-            self.data['processed']['broadening']['nat']['theta'] =np.einsum('ij,i->ij',
-                                                                            lor_tmp,
-                            1/_trapezoid(lor_tmp,x=self.data['processed']['broadening']['nat']['wave_arr'],axis=1))
+            nat['theta'] = np.zeros_like(lor_tmp)
+            nat['theta'][ok] = lor_tmp[ok]/_trapezoid(lor_tmp[ok], x=nat['dwave_arr'][ok], axis=1)[:,None]
 
 
             
