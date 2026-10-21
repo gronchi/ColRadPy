@@ -19,6 +19,10 @@ MAX_EXPM_CHECK_TIMES = 32
 #eigen solution failed and it is recomputed with expm.
 IMAG_TOL = 1.e-8
 
+#A rate matrix whose columns sum to zero within this fraction of their largest rate conserves
+#particles, and its steady state is found by GTH elimination.
+CONSERVATION_TOL = 1.e-10
+
 
 def _inverse_and_condition(eigenvectors):
     """Inverts the eigenvector matrices and estimates their condition numbers.
@@ -102,6 +106,54 @@ def _expm_populations(matrix, td_n0, source, times):
         augmented[:size, size] = source
     start = np.append(td_n0, 1.)
     return np.stack([np.matmul(expm(augmented*t), start) for t in times], axis=1)[:size]
+
+
+def _gth_stationary(rates):
+    """Steady state of a rate matrix that conserves particles (rates[i, j] >= 0 for i != j is
+       the rate from state j to state i, and each column sums to zero) by Grassmann-Taksar-Heyman
+       elimination. It uses only the off-diagonal rates and has no subtractions, so every
+       population, however small, keeps the relative accuracy of the rates; solutions through
+       the eigenvectors or a linear solve keep only that of the largest populations.
+
+       W. K. Grassmann, M. I. Taksar and D. P. Heyman, Regenerative analysis and steady state
+       distributions for Markov chains, Operations Research 33, 1107 (1985).
+
+    :param rates: the rate matrix
+    :type rates: 2d float array
+
+    :returns: float array or None --the populations, summing to one, or None if the matrix
+              does not conserve particles, has a negative rate, has a state without a rate to
+              the states before it (which the elimination needs) or overflows
+    """
+    rates = np.asarray(rates)
+    if(np.iscomplexobj(rates)):
+        if(np.any(rates.imag != 0)):
+            return None
+        rates = rates.real
+    off = np.array(rates, dtype=float)
+    np.fill_diagonal(off, 0.)
+    if(np.any(off < 0) or not np.isfinite(rates).all()):
+        return None
+    column_max = np.max(np.abs(rates), axis=0)
+    if(np.any(np.abs(rates.sum(axis=0)) > CONSERVATION_TOL*column_max)):
+        return None
+    q = off.T.copy() #q[i, j]: rate from state i to state j
+    n = len(q)
+    with np.errstate(over='ignore', invalid='ignore'):
+        for k in range(n - 1, 0, -1):
+            total = q[k, :k].sum()
+            if(not total > 0):
+                return None
+            q[:k, k] /= total
+            q[:k, :k] += np.outer(q[:k, k], q[k, :k])
+        pops = np.zeros(n)
+        pops[0] = 1.
+        for j in range(1, n):
+            pops[j] = pops[:j] @ q[:j, j]
+        pops = pops/pops.sum()
+    if(not np.isfinite(pops).all()):
+        return None
+    return pops
 
 
 def _stationary_population(matrix):
@@ -304,12 +356,15 @@ def solve_matrix_exponential_steady_state(matrix):
        Mathemat), Society for Industrial and Applied Mathematics,
        Philadelphia, PA, USA, 2007.
 
-    In steady state only the smallest eigenval survives
-    so find the smallest eigenval and the corresponding eigenvector 
+    A rate matrix that conserves particles gets its steady state by GTH elimination
+    (_gth_stationary), which keeps the relative accuracy of every population.
+    Otherwise only the smallest eigenval survives in steady state,
+    so find the smallest eigenval and the corresponding eigenvector
     then solve for the populations with just that eigen value.
     An unreliable eigen projection is replaced by a normalized stationary
     balance solve. If that system is singular, ValueError is raised rather
     than returning an unnormalized or arbitrary population vector.
+    The eigenvalues and eigenvectors are returned in every case.
 
 
 
@@ -358,6 +413,11 @@ def solve_matrix_exponential_steady_state(matrix):
     for point in np.ndindex(matrix.shape[2:]):
         index = (slice(None),) + point
         rates = matrix[(slice(None), slice(None)) + point]
+        #populations far below the largest are accurate only from the GTH elimination
+        gth = _gth_stationary(rates)
+        if(gth is not None):
+            ss_pop[index] = gth
+            continue
         pops = ss_pop[index]
         scale = np.max(np.abs(pops))
         row_scale = np.max(np.abs(rates), axis=1)

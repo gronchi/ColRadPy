@@ -15,6 +15,8 @@ from scipy.linalg import expm
 from colradpy.energy_balance import energy_balance
 from colradpy.solve_matrix_exponential import (
     _expm_populations,
+    _gth_stationary,
+    _stationary_population,
     eval_matrix_exponential_solution,
     solve_matrix_exponential,
     solve_matrix_exponential_source,
@@ -317,6 +319,45 @@ class SolverTests(unittest.TestCase):
         derivative = state._evolve_energy(0.5, np.array([0.75, 0.45, 0.3]), populations)
         self.assertEqual(derivative.shape, (3,))
         self.assertTrue(np.isfinite(derivative).all())
+
+
+class SteadyStateTests(unittest.TestCase):
+    def chain(self, up, down):
+        """Birth-death chain: up[k] from state k to k + 1, down[k] from k + 1 to k."""
+        n = len(up) + 1
+        rates = np.zeros((n, n))
+        for k, (u, d) in enumerate(zip(up, down)):
+            rates[k + 1, k] += u
+            rates[k, k] -= u
+            rates[k, k + 1] += d
+            rates[k + 1, k + 1] -= d
+        exact = np.cumprod(np.r_[1., np.asarray(up) / np.asarray(down)])
+        return rates, exact / exact.sum()
+
+    def test_small_populations_keep_their_relative_accuracy(self):
+        # The steady state came from the eigenvector of the zero eigenvalue (or a linear
+        # solve), accurate only relative to the largest population: for a resolved carbon
+        # balance at 10 eV it gave C5+ 2e-5 instead of 3e-16. Populations spanning 300
+        # orders of magnitude now keep the relative accuracy of the rates.
+        up = np.array([1e-40, 3e-35, 2e-50, 1e-30, 5e-45, 1e-20, 7e-60])
+        down = np.array([1., 2., 0.5, 3., 1.5, 0.2, 4.])
+        rates, exact = self.chain(up, down)
+        self.assertLess(exact.min(), 1e-300 * 1e50)
+        pops, _, _ = solve_matrix_exponential_steady_state(rates[:, :, None, None])
+        np.testing.assert_allclose(pops[:, 0, 0], exact, rtol=1e-13, atol=0)
+        # the same with the largest population in the middle of the chain
+        rates, exact = self.chain(down[::-1] * 1e-3, up[::-1] * 1e40)
+        pops, _, _ = solve_matrix_exponential_steady_state(rates[:, :, None])
+        np.testing.assert_allclose(pops[:, 0], exact, rtol=1e-13, atol=0)
+
+    def test_matrix_that_does_not_conserve(self):
+        # A matrix with a loss is solved as before: its eigen projection is not normalized, so
+        # the normalized stationary solve is used.
+        rates, _ = self.chain(np.array([1., 2.]), np.array([3., 1.]))
+        rates[2, 2] -= 1e-3
+        self.assertIsNone(_gth_stationary(rates))
+        pops, _, _ = solve_matrix_exponential_steady_state(rates[:, :, None, None])
+        np.testing.assert_allclose(pops[:, 0, 0], _stationary_population(rates), rtol=1e-12)
 
 
 if __name__ == "__main__":
