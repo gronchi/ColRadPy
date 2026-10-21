@@ -874,10 +874,17 @@ weak-rate constraints. If multiple disconnected closed classes exist, their
 relative weights depend on the initial condition; normalization alone does
 not determine a unique distribution.
 
-The stationary solver first tries the smallest-magnitude eigenmode and checks
-its residual, normalization and conditioning. An unreliable projection is
-replaced by a normalized stationary solve. The ionization-balance wrapper
-calls this routine directly.
+A rate matrix that conserves particles (non-negative off-diagonal rates and
+columns that sum to zero) is solved by Grassmann--Taksar--Heyman elimination,
+which uses only the off-diagonal rates and has no subtractions, so every
+population keeps the relative accuracy of the rates however small it is.
+Solutions through the eigenvectors or a linear solve are accurate only relative
+to the largest population: for a resolved carbon balance at 10\,eV they gave
+C$^{5+}$ $2\times10^{-5}$ where the exact value is $3\times10^{-16}$. For other
+matrices the stationary solver tries the smallest-magnitude eigenmode and
+checks its residual and normalization; an unreliable projection is replaced by
+a normalized stationary solve. The ionization-balance wrapper calls this
+routine directly.
 
 \section{Ionization balance across charge stages}\label{sec:ionbalance}
 
