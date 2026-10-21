@@ -283,6 +283,35 @@ class ColradpyProjectionTests(unittest.TestCase):
         self.assertAlmostEqual(recombination[sorted_level] / triplet["indirect"]["recombination"][1, 0, 0], weight, places=4)
         self.assertEqual(model.data["atomic"]["S"][sorted_level], 3)
 
+    def test_unreliable_condensed_data(self):
+        # Recombination of +x and -x into two shells at the lowest temperature, as cbnm96 files have
+        # there: that temperature is left out of the recombination only, with a warning when the
+        # user temperatures need it.
+        singlet = bundle(20, indirect_recomb=1., indirect_ion=1.)
+        singlet["rhs"][0, 0, :] += 1e-6                              #n=2 at 1e4 K
+        singlet["rhs"][1, 0, :] -= 1e-6                              #n=3
+        projection = self.files(singlet, bundle(21))
+
+        def project(temps):
+            with warnings.catch_warnings(record=True) as caught, contextlib.redirect_stdout(io.StringIO()):
+                warnings.simplefilter("always")
+                model = colradpy(BE0, np.array([0]), temps, DENS, projection=projection)
+                model.make_projection()
+            return model.data["rates"]["projection"], [str(w.message) for w in caught if "round-off" in str(w.message)]
+
+        rates, messages = project(TEMPS_K / 11604.5)
+        self.assertEqual(len(messages), 1)
+        for text in ("parent 1 (2S) and spin system 1", "negative indirect recombination", "at 0.862 eV"):
+            self.assertIn(text, messages[0])
+        #the indirect recombination is the same at every temperature, so the value of the next one
+        #is the value without the artifact
+        np.testing.assert_allclose(rates["recombination"][0, 0, 0, :],
+                                   0.25 * singlet["indirect"]["recombination"][0, 0, :], rtol=1e-6)
+        np.testing.assert_allclose(rates["ionization"][0, 0, 0, :],
+                                   singlet["indirect"]["ionization"][0, 0, :] / DENS, rtol=1e-6)
+        _, messages = project(TEMPS_K[1:] / 11604.5)
+        self.assertEqual(messages, [])
+
     def test_errors(self):
         flagged = write_adf17(os.path.join(self.dir, "c93.dat"), {1: bundle(14), 3: bundle(15)},
                               switches="IEDMAT = 0   IECION = 0   IETREC = 0   IEDREC = 0   IERREC = 0   IEXREC = 0   "
