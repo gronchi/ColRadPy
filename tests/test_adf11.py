@@ -236,5 +236,108 @@ class ResolvedAdf11Tests(unittest.TestCase):
         np.testing.assert_allclose(matrix.sum(axis=0), 0, atol=1e-14 * np.abs(matrix).max())
 
 
+def write_blocks(directory, name, blocks, metas=METAS, number=fortran):
+    """An adf11 file for nuclear charge 2 with the blocks (header, values (temperature, density))."""
+    def rows(values):
+        return ["".join(number(v) for v in values[k:k + 8]) for k in range(0, len(values), 8)]
+    lines = [f"{2:5d}{len(LOG_DENS):5d}{len(LOG_TEMP_R):5d}{1:5d}{2:5d}     /TEST              /GCR PROJECT",
+             "-" * 80]
+    if metas:
+        lines += ["".join(f"{m:5d}" for m in metas), "-" * 80]
+    lines += rows(LOG_DENS) + rows(LOG_TEMP_R)
+    for header, values in blocks:
+        lines.append(header)
+        for row in values:
+            lines += rows(row)
+    lines += ["C" + "-" * 79, "C  written for the ColRadPy tests", "C" + "-" * 79]
+    path = os.path.join(directory, name)
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+class Adf11BlockLabelTests(unittest.TestCase):
+    """Blocks are placed by their labels. The reader took the first two numbers of a block line as
+    IPRT and IGRD, but the radiated power files of ADAS give IGRD= g / IPRT= 0 (plt96r) or
+    IPRT= p / IGRD= 0 (prb96r, prc96r): resolved plt blocks went to the column -1 (the last), and
+    resolved prb and prc files failed with IndexError where a stage has more parents than
+    metastables."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = tmp.name
+        self.count = 0
+
+    def block(self, labels, z1):
+        """A block line and distinct values, as written."""
+        self.count += 1
+        header = "-" * 21 + "".join(f"/ {k}= {v:<3d}" for k, v in labels) + f"/--------/ Z1= {z1:<3d}/ DATE= 04/11/99"
+        values = np.array([[float(fortran(-26. - 0.25 * self.count + 0.3 * t - 0.02 * d)) for d in LOG_DENS]
+                           for t in LOG_TEMP_R])
+        return header, values
+
+    def test_line_power_of_each_metastable(self):
+        blocks = {(z1, g): self.block((("IGRD", g), ("IPRT", 0)), z1) for z1 in (1, 2) for g in range(1, METAS[z1 - 1] + 1)}
+        data = read_adf11(write_blocks(self.dir, "plt96r_te.dat", blocks.values()))["input_file"]
+        for (z1, g), (header, values) in blocks.items():
+            self.assertEqual(data[str(z1 - 1)].shape[:2], (METAS[z1 - 1], 1))
+            np.testing.assert_array_equal(data[str(z1 - 1)][g - 1, 0], values)
+
+    def test_recombination_power_of_each_parent(self):
+        metas = (1, 2, 1)   # a stage with more parents than metastables
+        blocks = {(z1, p): self.block((("IPRT", p), ("IGRD", 0)), z1) for z1 in (1, 2) for p in range(1, metas[z1] + 1)}
+        data = read_adf11(write_blocks(self.dir, "prb96r_te.dat", blocks.values(), metas=metas))["input_file"]
+        for (z1, p), (header, values) in blocks.items():
+            self.assertEqual(data[str(z1 - 1)].shape[:2], (metas[z1], 1))
+            np.testing.assert_array_equal(data[str(z1 - 1)][p - 1, 0], values)
+
+    def test_recombination_power_of_each_pair(self):
+        # prb93r gives IPRT= p / IGRD= g, like acd
+        blocks = {(z1, g, p): self.block((("IPRT", p), ("IGRD", g)), z1) for z1 in (1, 2)
+                  for g in range(1, METAS[z1 - 1] + 1) for p in range(1, METAS[z1] + 1)}
+        data = read_adf11(write_blocks(self.dir, "prb93r_te.dat", blocks.values()))["input_file"]
+        for (z1, g, p), (header, values) in blocks.items():
+            np.testing.assert_array_equal(data[str(z1 - 1)][g - 1, p - 1], values)
+
+    def test_specific_line_power(self):
+        # pls blocks give the wavelength of the line, '/ IGRD= 1  / IPRT= 0  / 1638.59/'; they
+        # were stored as keys of a dict instead of an array
+        blocks = []
+        for z1, wave in ((1, 1638.59), (2, 303.78)):
+            header, values = self.block((), z1)
+            blocks.append((header.replace("/--------/", f"/ IGRD= 1  / IPRT= 0  / {wave:7.2f}/"), values))
+        data = read_adf11(write_blocks(self.dir, "pls96_te.dat", blocks, metas=None))["input_file"]
+        for z1, (header, values) in enumerate(blocks, 1):
+            np.testing.assert_array_equal(data[str(z1 - 1)][0, 0], values)
+        self.assertEqual([b["wavelength"] for b in data["blocks"]], [1638.59, 303.78])
+
+    def test_classes_given_as_blocks(self):
+        # ecd files (effective ionisation potentials in eV, not log10) have a block for each
+        # charge from Z1 = 0 and failed with KeyError, as did ycd and zcd
+        blocks = [self.block((("IGRD", 1), ("IPRT", 1)), z1) for z1 in (0, 1, 2)]
+        path = write_blocks(self.dir, "ecd96_te.dat", blocks, metas=None, number=lambda v: f"{-v:10.3E}")
+        data = read_adf11(path)["input_file"]
+        self.assertEqual(data["class"], "ecd")
+        self.assertEqual([b["z1"] for b in data["blocks"]], [0, 1, 2])
+        for block, (header, values) in zip(data["blocks"], blocks):
+            np.testing.assert_allclose(block["data"], -values, rtol=1e-3)
+
+    def test_unresolved_labels(self):
+        # Files without metastables have one block for each stage, whatever their labels:
+        # plt12_h gives IPRT= 1 / IGRD= 0
+        blocks = [self.block((("IPRT", 1), ("IGRD", 0)), 1)]
+        data = read_adf11(write_blocks(self.dir, "plt12_te.dat", blocks, metas=None))["input_file"]
+        np.testing.assert_array_equal(data["0"][0, 0], blocks[0][1])
+
+    def test_errors(self):
+        blocks = [self.block((("IGRD", 3), ("IPRT", 0)), 1)]   # stage 0 has 2 metastables
+        with self.assertRaisesRegex(ValueError, "outside the metastables"):
+            read_adf11(write_blocks(self.dir, "plt96r_te.dat", blocks))
+        header, values = self.block((("IGRD", 1), ("IPRT", 0)), 1)
+        with self.assertRaisesRegex(ValueError, "values, not"):
+            read_adf11(write_blocks(self.dir, "plt96r_te.dat", [(header, values[:-1])]))
+
+
 if __name__ == "__main__":
     unittest.main()
