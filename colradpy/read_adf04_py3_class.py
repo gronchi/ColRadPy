@@ -16,10 +16,26 @@ import numpy as np
 import re
 import sys
 import copy
+import warnings
 
 
-def first_substring(strings, substring):
-    return next(i for i, string in enumerate(strings) if substring in string[0])
+#a number: 1.23+08, -1.23-04 (adf04 values omit the e), 1.23E+08, 1.23D+08, 1.000 or .0
+NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eEdD]?[-+]\d+)?'
+#ionisation potential and parent term of the first line: 196622.4(1S); a missing or blank term is 1S
+IONIZATION_POTENTIAL = re.compile(r'(' + NUMBER + r')\s*(?:\(([^)]*)\)?)?')
+#(IS)IL(XJ) of a level line: (2)1( 2.5), ( 2)1(  1.5), (3)10(10.0)
+LEVEL_QUANTUM_NUMBERS = re.compile(r'\(\s*(\d+)\s*\)\s*(\d+)\s*\(\s*(\d*\.?\d*)\s*\)')
+#{parent}fractional parentage, or {X} when ionisation from the level is excluded
+PARENTAGE = re.compile(r'\{\s*(\d+|X)\s*[})]\s*(' + NUMBER + r')?')
+#the level indices after the code of a transition line: '  2   1' (excitation), '  1  +1' (R, S, H);
+#some R lines leave out the parent
+TRANSITION_INDICES = re.compile(r'\s*(\d+)(?:\s*([-+]?)\s*(\d+)(?![\d.]))?')
+#values of the transition lines are fields of 8 characters (16e8.2)
+FIELD = 8
+FIELD_VALUE = re.compile(r'[-+]?(?:\d+\.\d*|\.\d+)(?:[eEdD]?[-+]\d+)?')
+#codes of the transition lines that ColRadPy does not use
+UNUSED_CODES = {'P': 'positive ion impact excitation', 'I': 'ionisation from the stage below',
+                'L': 'unresolved dielectronic satellite lines'}
 
 def adf04_float(text):
     """Number written in the adf04 form 1.23+08 or 1.23-08 (exponent without E), or a plain
@@ -30,11 +46,33 @@ def adf04_float(text):
     return float(text.replace('D', 'E').replace('d', 'e'))
 
 def config_format(config_arr):
-    conf = config_arr[0]
-    if(len(config_arr)>1):
-        for i in range(1,len(config_arr)):
-            conf = conf+'.' + config_arr[i]
-    return conf
+    return '.'.join(config_arr)
+
+def value_fields(line, start, num_temp):
+    """The values of a transition line after its indices, which end at the column start: the
+    AVAL/AAUG/EBEAM/WVLN slot, a value for each temperature and possibly the Bethe limit, None
+    when blank. They are fields of 8 characters (16e8.2), which can hold negative numbers without a
+    space between them; the specification puts the first at column 9, older files shift them, so
+    they are placed by the end of the first number, which ends its field. Values that are not in
+    such fields are read as numbers separated by spaces, with a blank slot when there is one value
+    for each temperature."""
+    first = FIELD_VALUE.search(line, start)
+    if(first is None):
+        return []
+    begin = first.end() - FIELD
+    while(begin - FIELD >= start):
+        begin -= FIELD
+    if(begin >= start):
+        try:
+            fields = []
+            for i in range(begin, len(line), FIELD):
+                text = line[i:i+FIELD].strip()
+                fields.append(adf04_float(text) if text else None)
+            return fields
+        except ValueError:
+            pass
+    fields = [adf04_float(text) for text in line[start:].split()]
+    return [None] + fields if len(fields) == num_temp else fields
 
 def read_adf04(fil):
     file_path = fil
@@ -58,15 +96,17 @@ def read_adf04(fil):
         adf04['atomic']['charge_state'] = int(first_linep[first_linep_inds[0]])
         adf04['atomic']['iz0'] = int(first_linep[first_linep_inds[1]])
         adf04['atomic']['iz1'] = int(first_linep[first_linep_inds[2]])
-        adf04['atomic']['ion_pot'] = np.zeros(len(first_linep_inds)-3)
-
+        #the ionisation potentials (cm-1) with the parent terms, written with or without spaces
+        potentials = ' '.join(first_linep[first_linep_inds[3]:])
+        ion_pot = []
         ion_term = []
-        for i in range(0,len(adf04['atomic']['ion_pot'])):
-            ion_pot_term = re.split('[()]',first_linep[first_linep_inds[i+3]])
-            adf04['atomic']['ion_pot'][i] =float(ion_pot_term[0])
-            #a parent without a term is 1S (ADF04 specification)
-            ion_term.append(ion_pot_term[1] if len(ion_pot_term) > 1 else '1S')
-
+        for match in IONIZATION_POTENTIAL.finditer(potentials):
+            ion_pot.append(float(match.group(1)))
+            #a parent without a term, or with a blank one, is 1S (ADF04 specification)
+            ion_term.append((match.group(2) or '').strip() or '1S')
+        if(not ion_pot or IONIZATION_POTENTIAL.sub('', potentials).strip()):
+            raise ValueError('expected ionisation potentials with their parent terms, found ' + repr(potentials))
+        adf04['atomic']['ion_pot'] = np.asarray(ion_pot)
         adf04['atomic']['ion_term'] = np.asarray(ion_term)
 
     except Exception as err:
@@ -91,67 +131,52 @@ def read_adf04(fil):
         zpla = []
         zpla1 = []
         num_parents = len(adf04['atomic']['ion_pot'])
-        while('-1' not in tmp_line or '-1\n' not in tmp_line):
+        while True:
             level_num = level_num + 1
-            tmp_line = f.readline().rstrip()#remove trailing
-            #remove the white space that occurs when L=10 in the adf04 file
-            tmp_line =     tmp_line[0:tmp_line.rfind('(')-3] + \
-               tmp_line[tmp_line.rfind('(')-3:tmp_line.rfind('(')].replace(' ','')+\
-               tmp_line[tmp_line.rfind('('):]
-
-            tmp = np.asarray(re.split('[  ]',tmp_line))
-
-            if('-1' in tmp or '-1\n' in tmp):
+            tmp_line = f.readline()
+            if(not tmp_line):
+                raise ValueError('the file ends before the line -1 that closes the levels')
+            tmp_line = tmp_line.rstrip()
+            if(re.match(r'\s*-1(\s|$)', tmp_line)):
                 break
-            else:
-                tmp_inds = np.where(tmp !='')[0]
-                #finding end of config
-                config_stop = first_substring(tmp[tmp_inds],'(')
+            #index, configuration (free text that can hold * or a term in parentheses), (IS)IL(XJ),
+            #energy (cm-1) and the {parent}fractional parentage of each parent
+            index = re.match(r'\s*\d+', tmp_line)
+            quantum_numbers = list(LEVEL_QUANTUM_NUMBERS.finditer(tmp_line))
+            if(index is None or not quantum_numbers):
+                raise ValueError('expected the level index, configuration and (IS)IL(XJ) in ' + repr(tmp_line))
+            quantum_numbers = quantum_numbers[-1]
+            level_energy = re.compile(r'\s*(' + NUMBER + ')').match(tmp_line, quantum_numbers.end())
+            if(level_energy is None):
+                raise ValueError('expected the energy after (IS)IL(XJ) in ' + repr(tmp_line))
+            config.append(config_format(tmp_line[index.end():quantum_numbers.start()].split()))
+            S.append(int(quantum_numbers.group(1)))
+            L.append(int(quantum_numbers.group(2)))
+            w.append(float(quantum_numbers.group(3)))
+            energy.append(adf04_float(level_energy.group(1)))
+            zz = np.ones(len(adf04['atomic']['ion_pot']))*-1
+            zz1 = np.ones(len(adf04['atomic']['ion_pot']))*-1
 
-                config.append(config_format(tmp[tmp_inds[1:config_stop]]))
+            #{parent}fractional parentage: the column of a parent is its index - 1
+            rest = tmp_line[level_energy.end():]
+            if(PARENTAGE.sub('', rest).strip()):
+                raise ValueError('expected {parent}fractional parentage or {X} after the energy in ' + repr(tmp_line))
+            for parentage in PARENTAGE.finditer(rest):
+                if(parentage.group(1) == 'X'):
+                    continue
+                if(parentage.group(2) is None):
+                    raise ValueError('parent ' + parentage.group(1) + ' has no fractional parentage in ' + repr(tmp_line))
+                zpla1_line = int(parentage.group(1))
+                zpla_line = adf04_float(parentage.group(2))
+                if(not 1 <= zpla1_line <= num_parents):
+                    raise ValueError('level ' + str(level_num) + ' ionizes to parent ' + str(zpla1_line) +
+                                     ' but the first line gives ' + str(num_parents) +
+                                     ' ionization potentials')
+                zz[zpla1_line-1] = zpla1_line
+                zz1[zpla1_line-1] = zpla_line
 
-                #there is offset that can occur due to L >=10
-                if(len(tmp[tmp_inds[config_stop]])==3):
-                    offset_l = 1
-                    offset_w = 2
-                else:
-                    offset_l = 0
-                    offset_w = 0
-
-                S.append(int(re.split('[)]',re.split('[(]',tmp[tmp_inds[config_stop]])[1])[0]))
-
-                L.append(int(re.split('[)]',re.split('[(]',tmp[tmp_inds[config_stop+offset_l]])[1-offset_l])[1-offset_l]))
-
-
-
-                
-
-                if( tmp[tmp_inds[config_stop]].count(')') > 1):
-                    w.append(float(re.split('[()]',tmp[tmp_inds[config_stop]])[3]))
-                    offset = -1
-                else:
-                    w.append(float(re.split('[)]',re.split('[(]',tmp[tmp_inds[config_stop+1]])[0])[0]))
-                    offset=0
-                    
-                energy.append(float(tmp[tmp_inds[config_stop+2+offset]]))
-                zz = np.ones(len(adf04['atomic']['ion_pot']))*-1
-                zz1 = np.ones(len(adf04['atomic']['ion_pot']))*-1
-                
-
-                #{parent}fractional parentage: the column of a parent is its index - 1
-                for i in range(config_stop+3+offset,len(tmp_inds)):
-                    if ('X' not in tmp[tmp_inds[i]]):
-                        zpla1_line = int(re.split('[}]',tmp[tmp_inds[i]])[0][1])
-                        zpla_line = float(re.split('[}]',tmp[tmp_inds[i]])[1])
-                        if(not 1 <= zpla1_line <= num_parents):
-                            raise ValueError('level ' + str(level_num) + ' ionizes to parent ' + str(zpla1_line) +
-                                             ' but the first line gives ' + str(num_parents) +
-                                             ' ionization potentials')
-                        zz[zpla1_line-1] = zpla1_line
-                        zz1[zpla1_line-1] = zpla_line
-
-                zpla.append(zz1)
-                zpla1.append(zz)
+            zpla.append(zz1)
+            zpla1.append(zz)
 
         adf04['atomic']['config'] = np.asarray(config)
         adf04['atomic']['L'] = np.asarray(L)
@@ -209,81 +234,67 @@ def read_adf04(fil):
     a_val = []
     inf_engy= []
     has_inf_engy = False
-    while('-1' not in tmp or '-1\n' not in tmp):
-        level_num = level_num + 1
-        tmp_line = f.readline().rstrip()#remove trailing whitespace from some adf04 files :'(
-        tmp = np.asarray(re.split('[  ]',tmp_line))
-        if('-1' in tmp or '-1\n' in tmp):
+    num_temp = len(adf04['input_file']['temp_grid'])
+    unused = {}
+    #transition lines (ADAS appxa-04): the code in column 1 (' ', '1', '2' or '3' excitation, 'R'
+    #recombination, 'S' ionisation, 'H' charge exchange), the level indices in columns 2-4 and 5-8
+    #('+' and the parent for R, S and H lines), then fields of 8 characters (16e8.2) with the A-value
+    #(the AAUG/EBEAM slot, or blank, for R, S and H lines), a value for each temperature and the
+    #Bethe limit of an excitation
+    for tmp_line in f:
+        tmp_line = tmp_line.rstrip()
+        if(re.match(r'\s*-1(\s|$)', tmp_line)):
             break
-        if(tmp[0] ==''):
-            tmp_inds = np.where(tmp!='')[0]
-            # Transition numbers
-            col_transitions.append(np.array([int(tmp[tmp_inds[0]]),int(tmp[tmp_inds[1]])]))
-            # A-values
-            a_val.append(adf04_float(tmp[tmp_inds[2]]))
-            #collisional values, and the infinite energy point that may follow them, which can
-            #be joined to the last value when it is negative (1.23-03-4.56+01)
-            num_temp = len(adf04['input_file']['temp_grid'])
-            col_excit_row = np.zeros(num_temp)
-            inf_engy_line = 0.
-            for i in range(0,len(tmp_inds) - 3):
-                token = tmp[tmp_inds[i+3]]
-                if(len(token) < 9):
-                    if(i>num_temp-1):
-                        inf_engy_line = adf04_float(token)
-                        has_inf_engy = True
-                    else:
-                        col_excit_row[i] = adf04_float(token)
+        if(not tmp_line.strip()):
+            continue
+        code = tmp_line[0].upper()
+        if(code not in ' 123RSH'):
+            unused[code] = unused.get(code, 0) + 1
+            continue
+        try:
+            indices = TRANSITION_INDICES.match(tmp_line, 1)
+            if(indices is None):
+                raise ValueError('expected the level indices after the code')
+            fields = value_fields(tmp_line, indices.end(), num_temp)
+            values = np.array([v if v is not None else 0. for v in fields[1:1+num_temp]] +
+                              [0.]*max(0, num_temp - len(fields[1:1+num_temp])))
+            if(code in ' 123'):
+                if(indices.group(3) is None or indices.group(2)):
+                    raise ValueError('expected the upper and lower level of the excitation')
+                col_transitions.append(np.array([int(indices.group(1)), int(indices.group(3))]))
+                a_val.append(fields[0] if fields and fields[0] is not None else 0.)
+                col_excit.append(values)
+                #the Bethe limit (infinite energy point), 0 when it is not given
+                bethe = fields[1+num_temp] if len(fields) > 1+num_temp else None
+                has_inf_engy = has_inf_engy or bethe is not None
+                inf_engy.append(bethe if bethe is not None else 0.)
+            else:
+                #the parent follows a '+'; R lines of some files leave it out when there is one parent
+                if(indices.group(3) is None and num_parents == 1):
+                    parent = 1
+                elif(indices.group(3) is None or indices.group(2) == '-'):
+                    raise ValueError('expected + and the parent after the level')
                 else:
-                    col_excit_row[i] = adf04_float(token[0:7])
-                    inf_engy_line = adf04_float(token[7:])
-                    has_inf_engy = True
-            #one infinite energy point for every transition, 0 when it is not given
-            inf_engy.append(inf_engy_line)
-            col_excit.append(col_excit_row)
-            #infinite energy
-
-    ######################################################################
-    #
-    # end excitation and a values from the adf04, start looking for recomb
-    #
-    ######################################################################
-        elif(tmp[0] == 'R' or tmp[0] == 'r'):
-            tmp_inds = np.where(tmp!='')[0]
-            recomb_transitions.append(np.array([int(tmp[tmp_inds[2]]),int(tmp[tmp_inds[1]])]))
-
-            recomb_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
-            for i in range(0,len(adf04['input_file']['temp_grid'])):
-                recomb_excit_row[i] = adf04_float(tmp[tmp_inds[i+3]])
-            recomb_excit.append(recomb_excit_row)
-
-    ######################################################################
-    #
-    # end recombination and values from the adf04, start looking for ionization
-    #
-    ######################################################################
-        elif(tmp[0] == 'S' or tmp[0] =='s'):
-            tmp_inds = np.where(tmp!='')[0]
-            ion_transitions.append(np.array([int(tmp[tmp_inds[1]]),int(tmp[tmp_inds[2]])]))
-            ion_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
-            for i in range(0,len(adf04['input_file']['temp_grid'])):
-                ion_excit_row[i] = adf04_float(tmp[tmp_inds[i+3]])
-            ion_excit.append(ion_excit_row)
-
-    ######################################################################
-    #
-    # end ionization and values from the adf04, start looking for cx
-    #
-    ######################################################################
-
-        elif(tmp[0] == 'H' or tmp[0] =='h'):
-            tmp_inds = np.where(tmp!='')[0]
-            cx_transitions.append(np.array([int(tmp[tmp_inds[1]]),int(tmp[tmp_inds[2]])]))
-            cx_excit_row = np.zeros(len(adf04['input_file']['temp_grid']))
-            for i in range(0,len(adf04['input_file']['temp_grid'])):
-                cx_excit_row[i] = adf04_float(tmp[tmp_inds[i+3]])
-            cx_excit.append(cx_excit_row)
-
+                    parent = int(indices.group(3))
+                level = int(indices.group(1))
+                if(code == 'R'):
+                    recomb_transitions.append(np.array([parent, level]))
+                    recomb_excit.append(values)
+                elif(code == 'S'):
+                    ion_transitions.append(np.array([level, parent]))
+                    ion_excit.append(values)
+                else:
+                    cx_transitions.append(np.array([level, parent]))
+                    cx_excit.append(values)
+        except ValueError as err:
+            f.close()
+            raise ValueError('adf04 transition line formatted incorrectly: ' + repr(tmp_line) + '\n' + str(err) +
+                             '\nIt should be formatted as below (C+3 example)\n'
+                             '   2   1 1.04+08 1.03+00 1.03+00 1.03+00 1.04+00 1.05+00 1.08+00 1.18+00') from err
+    if(unused):
+        warnings.warn('ColRadPy does not use the adf04 lines ' +
+                      ', '.join(str(n) + ' with code ' + c + ' (' + UNUSED_CODES.get(c, 'unknown code') + ')'
+                                for c, n in sorted(unused.items())))
 
     f.close()
     if(not has_inf_engy):

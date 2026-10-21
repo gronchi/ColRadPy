@@ -112,6 +112,91 @@ class Adf04Tests(unittest.TestCase):
         self.assertEqual(model.data["processed"]["xcd"].shape[:2], (2, 2))
         self.assertTrue(np.isfinite(model.data["processed"]["pecs"]).all())
 
+    LINE = "   2   1 4.60-02 1.40+00 2.14+00 3.13+00 3.56+00 3.56+00 2.88+00 2.13+00 1.44+00 7.14-01 3.86-01 2.01-01"
+    UPSILONS = [1.40, 2.14, 3.13, 3.56, 3.56, 2.88, 2.13, 1.44, 0.714, 0.386, 0.201]
+
+    def test_values_without_spaces(self):
+        # Values are fields of 8 characters, so a negative one follows the previous value without
+        # a space, as in clike_bmf#o2 and slike_al97#fe10 of ADAS. The reader split lines on
+        # spaces and read 1.44+00-7.14-01 as an upsilon and the Bethe limit.
+        line = self.LINE.replace(" 7.14-01", "-7.14-01").replace(" 2.01-01", "-2.01-01")
+        rates = read(self.edited("cpb03_ls#be0.dat", (self.LINE, line)))["rates"]
+        upsilons = self.UPSILONS[:8] + [-0.714, 0.386, -0.201]
+        np.testing.assert_array_equal(rates["excit"]["col_excit"][0], upsilons)
+        self.assertEqual(len(rates["inf_engy"]), 0)
+
+    def test_text_after_the_last_value(self):
+        # copss#b_ss#o3l of ADAS writes a 6 just after the last upsilon of every line: 2.01-016
+        # was read as one upsilon, 2.01e-16. The field after the last temperature is the Bethe limit.
+        rates = read(self.edited("cpb03_ls#be0.dat", (self.LINE, self.LINE + "6")))["rates"]
+        np.testing.assert_array_equal(rates["excit"]["col_excit"][0], self.UPSILONS)
+        self.assertEqual(rates["inf_engy"][0], 6.)
+
+    def test_shifted_fields(self):
+        # Older files shift the fields (copssh#18 of ADAS writes the indices as 2i6)
+        original = read(INPUT / "cpb03_ls#be0.dat")["rates"]
+        rates = read(self.edited("cpb03_ls#be0.dat", (self.LINE, "  " + self.LINE.replace("   1 ", "     1 "))))["rates"]
+        np.testing.assert_array_equal(rates["excit"]["col_excit"], original["excit"]["col_excit"])
+        np.testing.assert_array_equal(rates["a_val"], original["a_val"])
+
+    def test_configuration_with_term_or_star(self):
+        # The configuration is free text before (IS)IL(XJ). ADAS files write terms and * in it
+        # (helike_adw01#ar16: '1s2      (1S) (1)0( 0.0)', belike_dhb94#o: '2S2P(3P0)        *(3)1( 4.0)'),
+        # which the reader failed on.
+        original = read(INPUT / "cpb03_ls#be0.dat")["atomic"]
+        atomic = read(self.edited("cpb03_ls#be0.dat",
+                                  ("    1 2S2               (1)0( 0.0)", "    1 2S2      (1S)     (1)0( 0.0)"),
+                                  ("    2 2S1 2P1           (3)1( 4.0)", "    2 2S1 2P1 (3P)     *(3)1( 4.0)")))["atomic"]
+        self.assertEqual(list(atomic["config"][:3]), ["2S2.(1S)", "2S1.2P1.(3P).*", "2S1.2P1"])
+        for key in ("S", "L", "w", "energy", "zpla", "zpla1"):
+            np.testing.assert_array_equal(atomic[key], original[key], key)
+
+    def test_blank_parent_term(self):
+        # olike_lgy11#s8 of ADAS writes 3138303.(  ). A missing term is 1S (appxa-04); the
+        # reader failed.
+        atomic = read(self.edited("cpb03_ls#be0.dat", ("75190.0(2S)", "75190.0(  )")))["atomic"]
+        self.assertEqual(list(atomic["ion_term"]), ["1S"])
+        np.testing.assert_array_equal(atomic["ion_pot"], [75190.])
+
+    def test_recombination_slot_and_parent(self):
+        # The AAUG field before the recombination coefficients was read as the first coefficient,
+        # and R lines without the parent (helike_fpk94#al of ADAS: 'R  2     0.00-00 4.96-13')
+        # failed.
+        original = read(INPUT / "cpb03_ls#be0.dat")["rates"]["recomb"]
+        rates = read(self.edited("cpb03_ls#be0.dat", ("R  1  +1         1.29-14", "R  1  +1 2.00+10 1.29-14"),
+                                 ("R  2  +1         7.54-13", "R  2     0.00-00 7.54-13")))["rates"]["recomb"]
+        np.testing.assert_array_equal(rates["recomb_excit"], original["recomb_excit"])
+        np.testing.assert_array_equal(rates["recomb_transitions"], original["recomb_transitions"])
+
+    def test_transition_codes(self):
+        # Codes 1, 2 and 3 mark dipole, non-dipole and spin change excitations (appxa-04), which
+        # were skipped like the lines ColRadPy does not use, such as positive ion impact excitation
+        # (P), which were skipped without a warning.
+        original = read(INPUT / "cpb03_ls#be0.dat")["rates"]
+        path = self.edited("cpb03_ls#be0.dat", ("   3   1 5.51+08", "1  3   1 5.51+08"),
+                           (self.LINE, self.LINE + "\nP  2   1         1.00-01 2.00-01"))
+        with self.assertWarnsRegex(UserWarning, "1 with code P"):
+            rates = read(path)
+        for key in ("a_val", "inf_engy"):
+            np.testing.assert_array_equal(rates["rates"][key], original[key])
+        np.testing.assert_array_equal(rates["rates"]["excit"]["col_excit"], original["excit"]["col_excit"])
+
+    def test_bare_nucleus(self):
+        # ADAS gives files of one level without a configuration for bare nuclei (copmm#6/ls#c6),
+        # which the reader failed on.
+        path = os.path.join(self.tmp.name, "bare.dat")
+        with open(path, "w") as f:
+            f.write("Be+ 4         4         5            0.0\n"
+                    "    1                   (1)0( 0.0)              0.0\n"
+                    "   -1\n"
+                    "  5.0    3       1.00+04 1.00+05\n"
+                    "  -1\n"
+                    "  -1  -1\n")
+        adf04 = read(path)
+        self.assertEqual(list(adf04["atomic"]["config"]), [""])
+        np.testing.assert_array_equal(adf04["atomic"]["energy"], [0.])
+        self.assertEqual(len(adf04["rates"]["excit"]["col_transitions"]), 0)
+
     def test_errors(self):
         with self.assertRaisesRegex(ValueError, "parent 2"):
             read(self.edited("cpb03_ls#be0.dat", ("(1)4( 4.0)    71874.2 {1}1.000", "(1)4( 4.0)    71874.2 {2}1.000")))
