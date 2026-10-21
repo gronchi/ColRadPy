@@ -634,23 +634,12 @@ class ionization_balance():
     def solve_time_independent(self):
         """Solves the ionization balance matrix for the steady-state (time-independent) solution.
 
-           This is going to use the time dependent method just solving at 8 e-folding times
-           for the second to smallest eigen value. Note that there are faster methods to do this
-           but its more work to code it up and the time-dependent part is already done.
-           This function is mostly a niceity for the casual user.
-           The smallest eigenvalue corresponds to the
-           steady state so we want to wait until the second to last componet completely dies off.
-           This is done for the smallest over the given temperature and density parameter space
-           this has been tested for 17 orders of magnitude and I haven't run into overflow problems.
+           The steady state is the eigenvector of the ionization balance matrix whose eigenvalue
+           is zero. solve_matrix_exponential_steady_state takes the eigenvector of the eigenvalue
+           closest to zero and checks that it is finite, non-negative, normalized and balanced;
+           otherwise it solves the balance equations with the normalization directly.
 
-
-        :param n0: The initial populations of levels at t=0
-        :type n0: float array
-
-        :param td_t: Solution times
-        :type td_t: float array
-
-        populates the pops, eigen_val and eigen_vec
+           Populates ['processed']['pops_ss'], ['eigen_val'] and ['eigen_vec'].
         """
         if('processed' not in self.data.keys()):
             self.data['processed'] = {}

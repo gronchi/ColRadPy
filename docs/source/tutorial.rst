@@ -983,8 +983,10 @@ ACD is the recombination from one charge stage to the previous stage and the XCD
 states through the next charge state.
 
 ColRadPy is capable of preforming time dependent as well as time independent ionization balance calculations.
-The values for time independent ionization balance are solved by looking at the sencond longested lived eigenvalue of the system.
-The equations are then solved at eight times this value ensure that equilbrium of the system has been reached.
+The time independent (steady-state) abundances are the eigenvector of the ionization balance matrix whose
+eigenvalue is zero: the populations that no longer change. ColRadPy takes the eigenvector of the eigenvalue
+closest to zero and checks that it is a normalized, non-negative solution of the balance equations; otherwise
+it solves the balance equations with the normalization directly.
 
 
 
