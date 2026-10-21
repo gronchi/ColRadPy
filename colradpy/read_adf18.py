@@ -29,7 +29,7 @@ def read_adf18(fil):
               'parentage' (FRPARNT, or PRTWHT in older files, the fractional parentage of the lowest
               level for ionisation; 1 when not given);
               'records', a list of the level records with 'level' (index in the adf04 file, from
-              1), 'metastable' (marked with *), 'code', 'szd', 'spin', 'shell' (active n-shell),
+              1), 'metastable' (marked with ``*``), 'code', 'szd', 'spin', 'shell' (active n-shell),
               'parent' (index from 1, 0 for none) and 'weight' (the normalised weight of the level
               in its n-shell).
     """

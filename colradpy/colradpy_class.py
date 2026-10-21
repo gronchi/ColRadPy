@@ -424,8 +424,8 @@ class colradpy():
 
       :param rate_interp_ion: Interpolation of the reduced ionization rates of the adf04 file over
                               temperature: a SciPy kind ('slinear', 'quadratic', 'cubic', ...) of
-                              the rates on a linear temperature axis, 'log_' and a kind on a log
-                              temperature axis, or 'loglog_' and a kind for the log of the rates on
+                              the rates on a linear temperature axis, ``log_`` and a kind on a log
+                              temperature axis, or ``loglog_`` and a kind for the log of the rates on
                               a log temperature axis, between the positive values of each
                               transition and as a power law outside them (default
                               'loglog_slinear'). Rates of the other options are extrapolated
@@ -437,10 +437,10 @@ class colradpy():
                                  linearly on both sides, without negative values
       :type rate_interp_recomb: string
 
-      :param rate_interp_col: Interpolation type for excitation, a kind or 'log_' and a kind
+      :param rate_interp_col: Interpolation type for excitation, a kind or ``log_`` and a kind
       :type rate_interp_col: string
 
-      :param rate_interp_cx: Interpolation type for charge exchange, a kind or 'log_' and a kind
+      :param rate_interp_cx: Interpolation type for charge exchange, a kind or ``log_`` and a kind
       :type rate_interp_cx: string
 
       :param use_cx: Use charge exchange in the calculation
