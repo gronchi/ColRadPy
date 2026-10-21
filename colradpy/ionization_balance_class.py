@@ -116,6 +116,11 @@ class ionization_balance():
     :param scale_file_ioniz: Scale ionization in the file
     :type scale_file_ioniz: bool
 
+    :param rate_interp_ion: Interpolation of the adf04 ionization rates, see colradpy; one string
+        for every stage or one for each adf04 file. Also rate_interp_recomb, rate_interp_col and
+        rate_interp_cx for recombination, excitation and charge exchange
+    :type rate_interp_ion: str or list of str
+
     :param ne_tau: n_e*tau values for time dependent calc to be evaluated at can not be defined at the same time as td_t (cm-3 s)
     :type ne_tau: float array
 
@@ -130,7 +135,8 @@ class ionization_balance():
                  use_cx=False,
                  keep_charge_state_data=False,init_abund = np.array([]), source= np.array([]),
                  temp_dens_pair=False,scale_file_ioniz=False, ne_tau=np.array([-1]),adf11_files=False,
-                 hdf5_files=False):
+                 hdf5_files=False, rate_interp_ion='slinear', rate_interp_recomb='log_slinear',
+                 rate_interp_col='log_slinear', rate_interp_cx='log_quadratic'):
 
 
         #this is basic input data that is the same whether adf04 or adf11 inputs are used
@@ -292,6 +298,13 @@ class ionization_balance():
                 self.data['user']['scale_file_ioniz'][:] = scale_file_ioniz
             else:
                 self.data['user']['scale_file_ioniz'] = scale_file_ioniz
+            #interpolations of the file rates, one for every stage or one for each adf04 file
+            for name, value in (('rate_interp_ion', rate_interp_ion), ('rate_interp_recomb', rate_interp_recomb),
+                                ('rate_interp_col', rate_interp_col), ('rate_interp_cx', rate_interp_cx)):
+                values = [value]*len(fils) if isinstance(value, str) else list(value)
+                if(len(values) != len(fils)):
+                    raise ValueError(name + ' must be one string or one for each adf04 file')
+                self.data['user'][name] = values
 
             self.data['user']['keep_charge_state_data'] = keep_charge_state_data
 
@@ -346,7 +359,11 @@ class ionization_balance():
                                use_recombination = self.data['user']['use_recombination'][i],
                                use_cx = self.data['user']['use_cx'][i],
                                temp_dens_pair = self.data['user']['temp_dens_pair'],
-                               scale_file_ioniz = self.data['user']['scale_file_ioniz'][i])
+                               scale_file_ioniz = self.data['user']['scale_file_ioniz'][i],
+                               rate_interp_ion = self.data['user']['rate_interp_ion'][i],
+                               rate_interp_recomb = self.data['user']['rate_interp_recomb'][i],
+                               rate_interp_col = self.data['user']['rate_interp_col'][i],
+                               rate_interp_cx = self.data['user']['rate_interp_cx'][i])
 
                 tmp.solve_cr() #Solving the CR set of equations
                 #keep all the CR data if requested

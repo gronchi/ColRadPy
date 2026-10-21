@@ -223,5 +223,36 @@ class PackageNameTests(unittest.TestCase):
         self.assertIs(package.ionization_balance, ionization_balance_class.ionization_balance)
 
 
+class InterpolationOptionTests(unittest.TestCase):
+    def test_rate_interpolations_reach_the_stages(self):
+        # The ionization balance had no rate_interp_* options, so its stages always used the
+        # default interpolations of colradpy.
+        files = [str(INPUT / "cpb03_ls#be0.dat"), str(INPUT / "cpb03_ls#be1.dat")]
+        temps, dens = np.array([3., 7., 30.]), np.array([1e13])
+        options = dict(rate_interp_ion="log_slinear", rate_interp_recomb="slinear",
+                       rate_interp_col="slinear")
+
+        def balance(**kwargs):
+            with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return ionization_balance(files, [np.array([0]), np.array([0])], temps, dens, **kwargs)
+
+        chosen, default = balance(**options), balance()
+        direct = colradpy(files[0], metas=np.array([0]), temp_grid=temps, electron_den=dens, **options)
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            direct.solve_cr()
+        for c in ("scd", "acd", "qcd"):
+            np.testing.assert_array_equal(chosen.data["cr_data"]["gcrs"]["0"][c], direct.data["processed"][c])
+        self.assertFalse(np.allclose(chosen.data["cr_data"]["gcrs"]["0"]["scd"],
+                                     default.data["cr_data"]["gcrs"]["0"]["scd"], rtol=1e-3, atol=0))
+        # one interpolation for each file
+        per_file = balance(rate_interp_col=["slinear", "log_slinear"])
+        np.testing.assert_array_equal(per_file.data["cr_data"]["gcrs"]["1"]["scd"],
+                                      default.data["cr_data"]["gcrs"]["1"]["scd"])
+        with self.assertRaisesRegex(ValueError, "rate_interp_col must be one string or one for each"):
+            balance(rate_interp_col=["slinear"])
+
+
 if __name__ == "__main__":
     unittest.main()
