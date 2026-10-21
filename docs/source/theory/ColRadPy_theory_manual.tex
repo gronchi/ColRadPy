@@ -293,7 +293,16 @@ ionization rates above $10^{-6}$\,cm$^3$\,s$^{-1}$ and recombination rates above
 $10^{-7}$\,cm$^3$\,s$^{-1}$, far above physical values, are left out with a
 warning, and those temperatures take the rates from the other points of the
 transition. Used literally, they reach three-body recombination through
-detailed balance.
+detailed balance. Smaller artifacts stay below these bounds: values at the
+lowest temperatures that fall towards the next ones faster than any rate of the
+kind, such as a recombination coefficient of $2.6\times10^{-8}$ followed by
+$10^{-30}$\,cm$^3$\,s$^{-1}$ in OpenADAS \texttt{cop98\#10\_ls\#ne1}. Recombination
+falls at most as $T^{-3/2}$ (radiative recombination into levels bound by less
+than $kT$, dielectronic recombination above its resonances), and reduced
+ionization rises as $T^{1/2}$ near threshold and falls as about $T^{-1/2}$ far
+above it. Points at the lowest temperatures that fall faster than $T^{-2}$
+(recombination) or $T^{-1}$ (reduced ionization) towards a later point are
+left out with a warning, from the lowest up to the first that does not.
 
 Radiative and dielectronic recombination supplied by a file are collected in
 $\alpha_{ip}^{\rm RR+DR}$. The effective recombination coefficient used at a
@@ -362,15 +371,37 @@ grid or paired layout.
 
 \section{Interpolation and asymptotic continuation}\label{sec:interpolation}
 
-The interpolation option parser separates a leading \code{log} flag from
-the SciPy interpolation kind. In these routines, the flag selects
-\emph{logarithmic temperature coordinates}; it does not generally take
-the logarithm of the rate coefficient. For example,
+The interpolation option parser separates a leading \code{log} or
+\code{loglog} flag from the SciPy interpolation kind. The \code{log} flag
+selects \emph{logarithmic temperature coordinates}; it does not take the
+logarithm of the rate coefficient. For example,
 \begin{equation}
  \widehat r(\Te)=\mathcal I\!\left[\ln T_k,r_k\right](\ln\Te)
 \end{equation}
 still interpolates the ordinates $r_k$ directly. Log-temperature
-interpolation alone therefore does not guarantee positive extrapolated rates.
+interpolation alone therefore does not guarantee positive extrapolated rates:
+the extrapolation is clipped at zero, which the Be\,I recombination and
+ionization coefficients reached a few times above the file temperatures.
+
+By default (\code{loglog_slinear}), recombination and reduced ionization
+coefficients are interpolated as
+\begin{equation}
+ \widehat r(\Te)=\exp\mathcal I\!\left[\ln T_k,\ln r_k\right](\ln\Te),
+\end{equation}
+over the positive values of each transition. Between two temperatures this
+gives the geometric mean of their values where linear interpolation of $r_k$
+gives the arithmetic mean, which is never smaller and overestimates
+coefficients that change by orders of magnitude between neighbouring
+temperatures (by up to 45 times for OpenADAS Ne$^{7+}$ and 236 times for Be\,I
+recombination). Outside the file temperatures the coefficients follow a power
+law through the two nearest values, $\widehat r\propto T^{\,s}$, with the
+exponent limited to physical values: $-3/2\le s\le0$ for recombination, so it
+neither grows nor falls faster than radiative and dielectronic recombination;
+for reduced ionization $-1\le s\le1/2$ above the file temperatures and
+$s\ge0$ below them, where a falling coefficient is held constant. The options
+without \code{loglog} keep the interpolation of the coefficients themselves;
+excitation and charge exchange use them, and excitation is continued outside the
+file temperatures as described below.
 
 The Burgess--Tully helpers compress an unbounded temperature coordinate into
 $0\le x<1$. With $\theta=k_BT/\Delta E$ and a positive scaling parameter
