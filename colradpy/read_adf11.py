@@ -75,7 +75,8 @@ def read_adf11(fil):
             adf11['input_file']['temp_grid'] = np.append(adf11['input_file']['temp_grid'],
                                                          np.array(list(map(float,re.findall(NUMBER,f.readline())))))
 
-        #setting up the GCR stages
+        #setting up the GCR stages; blocks that the file does not give (e.g. the diagonal of QCD
+        #and XCD) are zero coefficients, log10 = -inf
         if(adf11['input_file']['nuc_charge'] == len(adf11['input_file']['metas'])-1):
             num_stages = adf11['input_file']['nuc_charge']
         else:
@@ -83,25 +84,25 @@ def read_adf11(fil):
         for i in range(0,num_stages):
             adf11['input_file'][str(i)] = {}
             if(cls in ('scd', 'acd', 'ccd')):
-                adf11['input_file'][str(i)] = np.zeros((adf11['input_file']['metas'][i],
+                adf11['input_file'][str(i)] = np.full((adf11['input_file']['metas'][i],
                                                          adf11['input_file']['metas'][i+1],
                                                  len(adf11['input_file']['temp_grid']),
-                                                 len(adf11['input_file']['dens_grid'])))
+                                                 len(adf11['input_file']['dens_grid'])), -np.inf)
             if(cls == 'qcd'):
-                adf11['input_file'][str(i)] = np.zeros((adf11['input_file']['metas'][i],
+                adf11['input_file'][str(i)] = np.full((adf11['input_file']['metas'][i],
                                                          adf11['input_file']['metas'][i],
                                                  len(adf11['input_file']['temp_grid']),
-                                                 len(adf11['input_file']['dens_grid'])))
+                                                 len(adf11['input_file']['dens_grid'])), -np.inf)
             if(cls == 'xcd'):
-                adf11['input_file'][str(i)] = np.zeros((adf11['input_file']['metas'][i+1],
+                adf11['input_file'][str(i)] = np.full((adf11['input_file']['metas'][i+1],
                                                          adf11['input_file']['metas'][i+1],
                                                  len(adf11['input_file']['temp_grid']),
-                                                 len(adf11['input_file']['dens_grid'])))
+                                                 len(adf11['input_file']['dens_grid'])), -np.inf)
             if(cls in ('plt', 'prb', 'prc')):
-                adf11['input_file'][str(i)] = np.zeros((adf11['input_file']['metas'][i],
+                adf11['input_file'][str(i)] = np.full((adf11['input_file']['metas'][i],
                                                          adf11['input_file']['metas'][i],
                                                  len(adf11['input_file']['temp_grid']),
-                                                 len(adf11['input_file']['dens_grid'])))
+                                                 len(adf11['input_file']['dens_grid'])), -np.inf)
 
         #Reading the GCR value portion, which ends at the comments (C-----, or a line of
         #dashes only in some files)

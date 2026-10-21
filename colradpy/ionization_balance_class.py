@@ -28,6 +28,9 @@ def interp_rates_adf11(logged_temp,logged_dens,temp,dens,logged_gcr): # y are lo
     
     for i in range(0,np.shape(logged_gcr)[0]):
         for j in range(0,np.shape(logged_gcr)[1]):
+            if(np.all(np.isneginf(logged_gcr[i,j]))):
+                gcr_arr[i,j] = -np.inf #a block that the file does not give: zero coefficients
+                continue
             interp_gcr = RectBivariateSpline(source_logged_temp,
                 source_logged_dens,
                 logged_gcr[i,j,:,:],

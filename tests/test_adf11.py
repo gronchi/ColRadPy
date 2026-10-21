@@ -209,7 +209,8 @@ class ResolvedAdf11Tests(unittest.TestCase):
                         if cls in ("scd", "acd"):  # [ground metastable, parent]
                             expected = [[resolved_value(cls, z1, j, i, t, d) for d in range(len(LOG_DENS))]
                                         for t in range(len(LOG_TEMP_R))]
-                        elif i == j:
+                        elif i == j:  # not in the file: a zero coefficient
+                            self.assertTrue(np.isneginf(block[idx]).all())
                             continue
                         else:  # [from, to]
                             expected = [[resolved_value(cls, z1, i, j, t, d) for d in range(len(LOG_DENS))]
@@ -224,6 +225,15 @@ class ResolvedAdf11Tests(unittest.TestCase):
             result.solve_time_independent()
         self.assertEqual(result.data["ion_matrix"].shape[0], sum(METAS))
         np.testing.assert_allclose(result.data["processed"]["pops_ss"].sum(axis=0), 1, rtol=1e-12)
+        # The QCD and XCD diagonals, which the files do not give, were read as log10 = 0, a rate
+        # of 1 cm3/s that only cancelled to rounding in the matrix, so its columns did not
+        # conserve particles (3.8e-4 for the OpenADAS carbon files).
+        gcrs = result.data["cr_data"]["gcrs"]
+        for stage in gcrs.values():
+            for c in ("qcd", "xcd"):
+                np.testing.assert_array_equal(np.einsum("ii...->i...", stage[c]), 0)
+        matrix = result.data["ion_matrix"]
+        np.testing.assert_allclose(matrix.sum(axis=0), 0, atol=1e-14 * np.abs(matrix).max())
 
 
 if __name__ == "__main__":
