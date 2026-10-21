@@ -571,15 +571,9 @@ class colradpy():
         self.data['rates']['ioniz']['ecip'] = np.zeros((len(self.data['atomic']['energy']),
                                                         len(self.data['atomic']['ion_pot']),
                                                         len(self.data['user']['temp_grid'])))
-        #there was a stupid problem beacuse {X} only designates ecip not other ionization
-        
-        #2/28/18 In solving this problem I introduced another problem. The code was using the {X}
-        #for levels that are also over the ionizaton potential. and then there wasn't a check
-        #so ECIP was made for levels above ionization potential which it should be.
-
-
-        inds_below = np.where( self.data['atomic']['energy'] < self.data['atomic']['ion_pot'][0])
-
+        #ECIP is made for the levels marked {p} in the level list that are below the ionization
+        #potential of parent p (ecip_rates), so a level above the first ionization potential
+        #still ionizes to a higher parent it is marked for
 
         if(np.where( self.data['atomic']['zpla'][:,0]>-1)[0].size == 0):
             print("adf04 file specifies no ionization rates but you requested ECIP, the adf04 file creator"+ \
@@ -592,10 +586,9 @@ class colradpy():
         
         #reduced rates exp(dE/kT)*S, which do not underflow at low temperature and are kept for
         #three body recombination
-        self.data['rates']['ioniz']['ecip_reduced'] = np.zeros_like(self.data['rates']['ioniz']['ecip'])
-        self.data['rates']['ioniz']['ecip_reduced'][inds_below] = ecip_rates(self.data['atomic']['energy'][inds_below],
-                                                  self.data['atomic']['ion_pot'],self.data['atomic']['zpla'][inds_below],
-                                                  self.data['atomic']['zpla1'][inds_below],self.data['atomic']['charge_state'],
+        self.data['rates']['ioniz']['ecip_reduced'] = ecip_rates(self.data['atomic']['energy'],
+                                                  self.data['atomic']['ion_pot'],self.data['atomic']['zpla'],
+                                                  self.data['atomic']['zpla1'],self.data['atomic']['charge_state'],
                                                   self.data['user']['temp_grid'], reduced=True)
         #the rates, zero for exponents above 180 as in r8ecip
         exponent = self.ecip_exponent()

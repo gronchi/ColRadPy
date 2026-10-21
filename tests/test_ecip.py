@@ -4,14 +4,21 @@ Checks the ECIP ionization rate coefficients of r8ecip against the same
 integrand summed with the 5-point Gauss-Laguerre rule of numpy.
 """
 
+import contextlib
+import io
+from pathlib import Path
 import unittest
 
 import numpy as np
 from numpy.polynomial.laguerre import laggauss
 
 import colradpy
+from colradpy.ecip_rates import ecip_rates
 from colradpy.r8necip import r8necip
 from colradpy.r8yip import R8YIP, r8ecip
+
+
+INPUT = Path(__file__).resolve().parents[1] / "examples" / "input"
 
 
 def reference_reduced(charge, ion_pot, energy, zeta, temperature):
@@ -65,6 +72,42 @@ class EcipTests(unittest.TestCase):
         # The package still provides the ECIP functions through it.
         self.assertIs(colradpy.r8ecip, r8ecip)
         self.assertIs(colradpy.r8necip, r8necip)
+
+
+class EcipLevelSelectionTests(unittest.TestCase):
+    """A level is ionized by ECIP to each parent it is marked {p} for in the level list and lies
+    below, also when it is above the first ionization potential (OpenADAS mom97_ls#c0 levels
+    56-60 are between the C+ 2P and 4P limits and are marked {2})."""
+
+    def test_ecip_rates_select_levels_below_each_parent(self):
+        energy = np.array([0., 100000., 150000.])
+        ion_pot = np.array([120000., 300000.])
+        zpla = np.array([[1., -1.], [1., 1.], [1., 1.]])
+        zpla1 = np.array([[1., -1.], [1., 2.], [1., 2.]])
+        rates = ecip_rates(energy, ion_pot, zpla, zpla1, 1, np.array([5., 20.]), reduced=True)
+        self.assertTrue((rates[:2, 0] > 0).all())
+        self.assertTrue((rates[1:, 1] > 0).all())
+        np.testing.assert_array_equal(rates[2, 0], 0)  # above the first ionization potential
+        np.testing.assert_array_equal(rates[0, 1], 0)  # not marked for the second parent
+        np.testing.assert_allclose(rates[2, 1], r8ecip(1, 300000., energy[2:], np.array([1.]),
+                                                       np.array([5., 20.]) * 11604.5, True)[0], rtol=1e-12)
+
+    def test_levels_above_the_first_ionization_potential(self):
+        # Be II levels above 90000 cm-1 are put above a lowered first ionization potential and
+        # marked for the second parent; they had no ECIP rates.
+        model = colradpy.colradpy(str(INPUT / "cpb03_ls#be1.dat"), metas=np.array([0]),
+                                  temp_grid=np.array([5., 20.]), electron_den=np.array([1e13]))
+        atomic = model.data["atomic"]
+        atomic["ion_pot"] = np.array([90000., atomic["ion_pot"][1]])
+        above = atomic["energy"] > 90000.
+        atomic["zpla"][above, 1] = 1.
+        atomic["zpla1"][above, 1] = 2.
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+            model.make_ecip()
+        ecip = model.data["rates"]["ioniz"]["ecip"]
+        self.assertGreater(above.sum(), 3)
+        self.assertTrue((ecip[above, 1] > 0).all())
+        np.testing.assert_array_equal(ecip[above, 0], 0)
 
 
 if __name__ == "__main__":
