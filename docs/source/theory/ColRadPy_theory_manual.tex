@@ -263,8 +263,11 @@ collisions dominate and no other mechanism fixes the ratio.
 \begin{implnote}
 \routine{make_electron_excitation_rates} interpolates $\Upsilon$ onto the
 user grid. \routine{populate_cr_matrix} constructs the upward and downward
-rates and multiplies them by electron density. The source uses
-$8065$ rather than $8065.54$ in one excitation Boltzmann factor.
+rates and multiplies them by electron density. The excitation, ionization and
+three-body Boltzmann factors convert cm$^{-1}$ to eV with $hc/e$
+(1/8065.544), so excitation alone drives the populations to the Boltzmann
+distribution at high density; the ECIP exponent keeps the constants of
+\routine{r8ecip}.
 \end{implnote}
 
 \subsection{Spontaneous decay, ionization and recombination}

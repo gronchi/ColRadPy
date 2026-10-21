@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "8b2e1238629b27ed07f1faa4e5cf1ecf60c8b886",
+  "git_head": "8f85bcf19559b72b5d862ae7e3fa9df4c889ed0a",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -11,7 +11,7 @@
     "colradpy\\__init__.py": "5ed21e52614b13bc602d6a1340096708a1e6d14152b61e30141399038a6a4201",
     "colradpy\\adf04_file_paths.py": "cc39afbfae72821e177fefb4e95ade83a3ef458a425f039ce8d254459742d630",
     "colradpy\\burgess_tully_rates.py": "3c7a65f9e36cc6e1864ff1587d081d94e372d7a376e8800fde41b8b1b5b4c4b8",
-    "colradpy\\colradpy_class.py": "d938733865e91a874038e5ec3f5701d3c6cb8af9a3e9f9e4139032919be26a1f",
+    "colradpy\\colradpy_class.py": "31dea6c53d525ec5b80df8fb767056e2d50091ce0e8015e881b98a8b9f94144e",
     "colradpy\\colradpy_utility.py": "8fb0fefde8031a1a0026fed96155cb203d83d809799d81f6d54f94ff23a51062",
     "colradpy\\convert_eissner.py": "514325a62db0e13e533492bbc02cb6a4ca807ae2810cd2c9bc02bb6f2aa1b503",
     "colradpy\\ecip_rates.py": "5d5bfa431252e62bac700ca18887472710c921f8f758d3c92175e0f4b73f98de",
