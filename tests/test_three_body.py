@@ -15,7 +15,7 @@ import numpy as np
 from scipy import constants
 
 from colradpy import colradpy
-from colradpy.colradpy_class import L_LETTERS, parent_statistical_weight
+from colradpy.colradpy_class import EV_PER_WAVENUMBER, L_LETTERS, parent_statistical_weight
 from colradpy.read_adf04_py3_class import read_adf04
 from colradpy.r8yip import r8ecip
 
@@ -87,7 +87,7 @@ class ThreeBodyTests(unittest.TestCase):
             # The reduced rate is exp(dE/kT) S, with the exponent of the file
             # reduced rates or, for the other levels, of r8ecip.
             ev_per_wavenumber = np.full(len(atomic["energy"]), 9.11269E-06 * 157890.0 / 11604.5)
-            ev_per_wavenumber[transitions[transitions[:, 1] == p + 1, 0] - 1] = 0.00012398774011749576
+            ev_per_wavenumber[transitions[transitions[:, 1] == p + 1, 0] - 1] = EV_PER_WAVENUMBER
             x = ((atomic["ion_pot"][p] - atomic["energy"]) * ev_per_wavenumber)[:, None] / temps
             ionization = rates["ioniz"]["ionization"][:, p]
             usable = (ionization > 0) & (x < 700)

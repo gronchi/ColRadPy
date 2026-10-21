@@ -104,8 +104,9 @@ def get_git_hash(base_path=None):
 #Letters of the total orbital angular momentum L = 0, 1, 2, ... (J is skipped)
 L_LETTERS = 'SPDFGHIKLMNOQRTUV'
 
-#eV per cm-1, converts level energies and ionization potentials for the reduced rates
-EV_PER_WAVENUMBER = 0.00012398774011749576
+#eV per cm-1 (h c / e, 1/8065.544), converts level energies and ionization potentials in the
+#Boltzmann factors of excitation, ionization and three-body recombination
+EV_PER_WAVENUMBER = constants.h*constants.c*100/constants.e
 
 #Photon energy in J of a transition of 1 cm-1 (h c)
 J_PER_WAVENUMBER = constants.h*constants.c*100
@@ -1118,8 +1119,8 @@ class colradpy():
                     (2*self.data['atomic']['w'][self.data['rates']['excit']['col_transitions'][i,0]-1]+1)/  \
                     (2*self.data['atomic']['w'][self.data['rates']['excit']['col_transitions'][i,1]-1]+1) * \
                     np.exp(-np.abs(self.data['atomic']['energy'][self.data['rates']['excit']['col_transitions'][i,0]-1] - \
-                    self.data['atomic']['energy'][self.data['rates']['excit']['col_transitions'][i,1]-1])/  \
-                    8.065E3/self.data['user']['temp_grid'][j]) * \
+                    self.data['atomic']['energy'][self.data['rates']['excit']['col_transitions'][i,1]-1])*  \
+                    EV_PER_WAVENUMBER/self.data['user']['temp_grid'][j]) * \
                     self.data['cr_matrix']['q_ji'][self.data['rates']['excit']['col_transitions'][i,0]-1,
                                                    self.data['rates']['excit']['col_transitions'][i,1]-1,j]
 

@@ -1,11 +1,19 @@
-"""Analytic checks for Boltzmann populations and Saha stage balance."""
+"""Analytic checks for Boltzmann populations and Saha stage balance, and the LTE limit of the
+CR model at high density."""
 
+import contextlib
+import io
+from pathlib import Path
 import unittest
 
 import numpy as np
 from scipy import constants
 
+from colradpy import colradpy
 from colradpy.saha_boltzmann_lte_pops import boltzmann_population, saha_population
+
+
+INPUT = Path(__file__).resolve().parents[1] / "examples" / "input"
 
 
 EV_PER_CM = constants.h * constants.c * 100 / constants.e
@@ -56,6 +64,34 @@ class LTEPopulationTests(unittest.TestCase):
             saha_population(1, [0], [0], [0], [0], [1], 0)
         with self.assertRaises(ValueError):
             saha_population(1, [0], [0], [0], [0], [1, 2], [1, 2, 3])
+
+
+class CollisionalLimitTests(unittest.TestCase):
+    def test_excitation_reaches_boltzmann_at_high_density(self):
+        # Upward rates come from downward ones by detailed balance. Their Boltzmann factor divided
+        # the energy in cm-1 by 8065 and EV_PER_WAVENUMBER was 1/8065.31, not h c / e = 1/8065.544,
+        # so populations missed LTE by up to 1.4% (Be3+ levels at 163 eV and 1 eV).
+        temperatures = np.array([1., 5., 20.])
+        for name in ("cpb03_ls#be0.dat", "cpb03_ls#be1.dat", "be2_adf04", "be3_adf04"):
+            with self.subTest(file=name):
+                model = colradpy(str(INPUT / name), metas=np.array([0]), temp_grid=temperatures,
+                                 electron_den=np.array([1e30]), use_ionization=False,
+                                 suppliment_with_ecip=False, use_recombination=False,
+                                 use_recombination_three_body=False)
+                with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+                    model.solve_cr()
+                atomic = model.data["atomic"]
+                populations = model.data["processed"]["pops_no_norm"][:, 0, :, 0]
+                lte = boltzmann_population(atomic["w"], atomic["energy"], temperatures)[1:]
+                # levels with collision data (Be II level 13 has only a 1e-30 placeholder, so
+                # radiative decay keeps it far below LTE)
+                excit = model.data["rates"]["excit"]
+                strength = np.zeros(len(atomic["energy"]))
+                np.maximum.at(strength, excit["col_transitions"].ravel() - 1,
+                              np.repeat(excit["col_excit"].max(axis=1), 2))
+                collisional = (strength > 1e-20)[1:]
+                self.assertGreater(collisional.sum(), 10)
+                np.testing.assert_allclose(populations[collisional], lte[collisional], rtol=1e-8)
 
 
 if __name__ == "__main__":
