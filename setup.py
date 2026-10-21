@@ -6,7 +6,11 @@ setup(
     author='Curt Johnson',
     author_email='caj0026@auburn.edu',
     # Needed to actually package something
-    packages=['colradpy',],
+    packages=['colradpy', 'colradpy.atomic'],
+    # the NIST level energies of the top-level atomic folder are installed in colradpy/atomic,
+    # where get_nist_levels_txt finds them (nist_energies_dir)
+    package_dir={'colradpy.atomic': 'atomic'},
+    package_data={'colradpy.atomic': ['elements.txt', 'nist_energies/*']},
     # Needed for dependencies
     install_requires=['numpy<2.5','scipy','matplotlib'],
     # *strongly* suggested for sharing

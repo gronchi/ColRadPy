@@ -46,8 +46,9 @@ cd ColRadPy
 pip install -e .
 ```
 
-Install from the clone rather than copying the package elsewhere: the NIST level
-energies (`atomic/nist_energies`) are read from the repository.
+An editable install follows changes to the clone; `pip install .` makes a regular
+install. Both include the NIST level energies of `atomic/nist_energies`, which the
+NIST energy shifts and line splitting use.
 
 Optional packages:
 

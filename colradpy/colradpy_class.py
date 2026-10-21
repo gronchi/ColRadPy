@@ -143,6 +143,21 @@ def parent_statistical_weight(term):
     return weight
 
 
+def nist_energies_dir():
+    """Directory of the NIST level energy files, with a trailing separator: atomic/nist_energies
+       inside the installed package, or at the top of a source checkout (and an editable install).
+
+    :returns: str --the directory
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    for base in (here, os.path.dirname(here)):
+        directory = os.path.join(base, 'atomic', 'nist_energies')
+        if(os.path.isdir(directory)):
+            return directory + os.sep
+    raise FileNotFoundError('the NIST level energies (atomic/nist_energies) are neither in the colradpy '
+                            'package nor next to it in ' + os.path.dirname(here))
+
+
 def parent_levels(ion_pot, ion_term, energy, S, L, w):
     """Levels of the next ion that are the parents on the first line of an adf04 file. Each
        parent is the level with its term (2S+1, L and, for IC terms, J) whose energy is
@@ -2422,12 +2437,9 @@ class colradpy():
         """
         
         self.data['nist'] = {}
-        import inspect
-        tmp = inspect.getfile(colradpy)#becuase this will be installed in diff locations we need to find where it is
-        tmp = tmp[0:len(tmp)-27] #we know the structure inside of the package though
-        tmp = tmp + '/atomic/nist_energies/'
-        self.data['nist']['levels'] = get_nist_txt(tmp ,self.data['atomic']['element'].replace(' ', ''),
-                                                     self.data['atomic']['charge_state'] + 1)
+        self.data['nist']['levels'] = get_nist_txt(nist_energies_dir(),
+                                                   self.data['atomic']['element'].replace(' ', ''),
+                                                   self.data['atomic']['charge_state'] + 1)
 
     def solve_cr(self):
         """Solve_cr automates the calls to various function to make the data for

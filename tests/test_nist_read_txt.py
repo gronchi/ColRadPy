@@ -7,11 +7,14 @@ including lines with commas inside the configuration or the J column.
 from pathlib import Path
 import os
 import re
+import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
 from colradpy import colradpy
+from colradpy import colradpy_class
 from colradpy.nist_read_txt import _split_level, get_nist_txt
 
 
@@ -78,6 +81,31 @@ class NistReadTxtTests(unittest.TestCase):
                                  temp_grid=np.array([10.]), electron_den=np.array([1e13]))
                 model.get_nist_levels_txt()
                 self.assertEqual(model.data["nist"]["levels"][0]["conf"], conf)
+
+
+class NistLocationTests(unittest.TestCase):
+    """get_nist_levels_txt took the files from the folder above the package, which only exists
+    in a source checkout: with a regular install it raised FileNotFoundError."""
+
+    def locate(self, layout):
+        with tempfile.TemporaryDirectory() as tmp:
+            package = os.path.join(tmp, "colradpy")
+            os.makedirs(package)
+            if layout is not None:
+                os.makedirs(os.path.join(package if layout == "installed" else tmp, "atomic", "nist_energies"))
+            with mock.patch.object(colradpy_class, "__file__", os.path.join(package, "colradpy_class.py")):
+                return colradpy_class.nist_energies_dir(), tmp
+
+    def test_installed_and_source_layouts(self):
+        found, tmp = self.locate("installed")  # setup.py installs atomic in the package
+        self.assertEqual(found, os.path.join(tmp, "colradpy", "atomic", "nist_energies") + os.sep)
+        found, tmp = self.locate("source")  # a source checkout or an editable install
+        self.assertEqual(found, os.path.join(tmp, "atomic", "nist_energies") + os.sep)
+        with self.assertRaisesRegex(FileNotFoundError, "atomic/nist_energies"):
+            self.locate(None)
+
+    def test_this_checkout(self):
+        self.assertEqual(os.path.normcase(colradpy_class.nist_energies_dir()), os.path.normcase(NIST.replace("/", os.sep)))
 
 
 if __name__ == "__main__":
