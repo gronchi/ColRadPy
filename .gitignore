@@ -3,6 +3,10 @@
 examples/output
 examples/input/Open-ADAS
 
+# Folders whose name starts with a dot (local work, editor settings), except the GitHub workflows
+.*/
+!.github/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
