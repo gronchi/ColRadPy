@@ -1212,9 +1212,15 @@ class colradpy():
            'ionization' and 'recombination' (level, parent) in cm3 s-1 and 'parent_coupling'
            (parent, parent) [to, from] in cm3 s-1, the temperature and density axes last.
         """
-        adf17_file, adf18_file = self.data['user']['projection']
-        adf17 = read_adf17(adf17_file)['input_file']
-        adf18 = read_adf18(adf18_file)
+        files = tuple(self.data['user']['projection'])
+        adf17_file, adf18_file = files
+        #the files are read once (outside self.data, which is saved to HDF5); the couplings are made
+        #again for each solve, on the user temperatures and densities of that solve
+        cached = getattr(self, '_projection_input', None)
+        if(cached is None or cached[0] != files):
+            cached = (files, read_adf17(adf17_file)['input_file'], read_adf18(adf18_file))
+            self._projection_input = cached
+        adf17, adf18 = cached[1], cached[2]
         num_levels = len(self.data['atomic']['energy'])
         reference = re.split(r'[\\/]', adf18['adf04_file'])[-1]
         file_name = os.path.basename(str(self.data['user'].get('file_loc', '')))
@@ -2704,6 +2710,8 @@ class colradpy():
         else:
             self.data['user']['use_cx'] = False
         self.make_electron_excitation_rates()
+        if(self.data['user'].get('projection')):
+            self.make_projection()
         self.populate_cr_matrix()
         self.solve_quasi_static()
 

@@ -345,6 +345,23 @@ class ColradpyProjectionTests(unittest.TestCase):
         np.testing.assert_allclose(rates["recombination"][0, 0, 0], rates["recombination"][0, 0, 1] *
                                    (t / first)**slope, rtol=1e-6)
 
+    def test_new_temperatures(self):
+        # The projection was made once, so solving again on other temperatures used the couplings
+        # of the first ones. The files are read once.
+        projection = self.files(bundle(24, indirect_recomb=1., indirect_ion=1.), bundle(25, indirect_recomb=1.))
+        temps = TEMPS_K / 11604.5
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = colradpy(BE0, np.array([0]), temps, DENS, projection=projection)
+            model.solve_cr()
+            files = model._projection_input
+            model.data["user"]["temp_grid"] = temps[::-1].copy()
+            model.solve_cr()
+        self.assertIs(model._projection_input, files)
+        reference = solve(projection, temps=temps[::-1].copy())
+        for key in ("scd", "acd", "xcd"):
+            np.testing.assert_allclose(model.data["processed"][key], reference.data["processed"][key], rtol=1e-12)
+
     def test_errors(self):
         flagged = write_adf17(os.path.join(self.dir, "c93.dat"), {1: bundle(14), 3: bundle(15)},
                               switches="IEDMAT = 0   IECION = 0   IETREC = 0   IEDREC = 0   IERREC = 0   IEXREC = 0   "
