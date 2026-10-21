@@ -238,6 +238,59 @@ def _factor_below(user_temps, first, second, slope, energy, limits):
     return np.where(t < first, factor, 1.)
 
 
+#the couplings of a parent and spin system (indirect_couplings), with their names in the warnings
+COUPLINGS = {'gains': 'transfers', 'ionization': 'ionization', 'recombination': 'recombination',
+             'parent_coupling': 'parent coupling'}
+
+
+def _on_user_grid(values, unreliable, temps, dens, user_temps, user_dens, pairs):
+    """A coupling given on the adf17 grid (temperatures temps in K, densities dens in cm-3),
+    interpolated on the user temperatures (eV) and densities without the temperatures where it is
+    not reliable (unreliable, temperature x density), and held at the first temperature kept below
+    it.
+
+    :returns: the values on the user grid; (first, second, slope) for _factor_below, the two lowest
+              temperatures kept (eV) and the slope of the log of the coupling between them on the
+              user grid, or None when no user temperature is below the first; and the temperatures
+              left out (eV) that the user temperatures need, those between their neighbours.
+    """
+    user_t = np.asarray(user_temps, dtype=float)
+    t_eV = np.asarray(temps)/KELVIN_PER_EV
+    kept = ~unreliable.any(axis=1)
+    neighbours = np.concatenate([[-np.inf], t_eV, [np.inf]])
+    needed = [t_eV[k] for k in np.where(~kept)[0] if np.any((user_t > neighbours[k]) & (user_t < neighbours[k + 2]))]
+    if(kept.sum() < 2):
+        grid = (len(user_t),) if pairs else (len(user_t), len(user_dens))
+        return np.zeros(grid + values.shape[2:]), None, needed
+    values, kept_temps = values[kept], np.asarray(temps)[kept]
+    on_grid = interpolate(values, kept_temps, dens, user_t, user_dens, pairs)
+    first, second = kept_temps[:2]/KELVIN_PER_EV
+    if(not np.any(user_t < first)):
+        return on_grid, None, needed
+    #the values at the second temperature for each density (or pair), against those held at the first
+    at_second = interpolate(values, kept_temps, dens, np.full(len(user_t) if pairs else 1, second), user_dens, pairs)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        slope = np.log(at_second/on_grid)/np.log(second/first)
+    return on_grid, (first, second, slope), needed
+
+
+def _thresholds(records, shells, parent_energy, level_energies):
+    """Thresholds (eV) of the paths through the high n-shells out of the levels of a parent and spin
+    system (their adf18 records, its kept n-shells): their ionization energies to the parent, of
+    energy parent_energy (cm-1), and the energies to excite them to the shell above those kept,
+    whose binding energy is that of the highest kept shell scaled as 1/n^2.
+
+    :returns: dicts {level index: ionization energy} and {level index: excitation energy}
+    """
+    ionization = {r['level'] - 1: max(parent_energy - level_energies[r['level'] - 1], 0.)*EV_PER_WAVENUMBER
+                  for r in records}
+    top = [r for r in records if r['shell'] == max(shells)]
+    weights = sum(r['weight'] for r in top)
+    upper = sum(r['weight']*ionization[r['level'] - 1] for r in top)/weights if weights > 0 else 0.
+    upper *= (max(shells)/(max(shells) + 1.))**2
+    return ionization, {i: max(energy - upper, 0.) for i, energy in ionization.items()}
+
+
 def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=False):
     """The indirect couplings through the high n-shells spread over the levels of an adf04 file, on
     the user temperatures (eV) and densities (cm-3). The temperatures where the condensed data of a
@@ -307,41 +360,22 @@ def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=
     groups = indirect_couplings(adf17, adf18)
     for group in groups:
         p = group['parent']
-        on_grid, left_out, below = {}, [], {}
-        for key in ('gains', 'ionization', 'recombination', 'parent_coupling'):
-            #the temperatures where the condensed data of a coupling are not reliable are left out of it
-            kept = ~group['unreliable'][key].any(axis=1)
-            if(kept.sum() >= 2):
-                kept_temps = np.asarray(temps)[kept]
-                on_grid[key] = interpolate(group[key][kept], kept_temps, dens, user_temps, user_dens, pairs)
-                #below the first temperature kept, where on_grid holds its values: the slope of the log of
-                #the coupling between the two lowest temperatures, from which _factor_below extrapolates it
-                first, second = kept_temps[:2]/KELVIN_PER_EV
-                if(np.any(user_t < first)):
-                    at_second = interpolate(group[key][kept], kept_temps, dens, np.full(len(user_t), second),
-                                            user_dens, pairs)
-                    with np.errstate(divide='ignore', invalid='ignore'):
-                        below[key] = (first, second, np.log(at_second/on_grid[key])/np.log(second/first))
-            else:
-                on_grid[key] = np.zeros(grid + group[key].shape[2:])
-            #user temperatures between the neighbours of a temperature left out would have used it
-            for k in np.where(~kept)[0]:
-                low = t_eV[k - 1] if k > 0 else -np.inf
-                high = t_eV[k + 1] if k + 1 < len(t_eV) else np.inf
-                if(np.any((np.asarray(user_temps) > low) & (np.asarray(user_temps) < high))):
-                    left_out.append((key, t_eV[k]))
+        on_grid, below, left_out = {}, {}, {}
+        for key in COUPLINGS:
+            on_grid[key], below[key], needed = _on_user_grid(group[key], group['unreliable'][key], temps, dens,
+                                                             user_t, user_dens, pairs)
+            if(needed):
+                left_out[key] = needed
         if(left_out):
-            names = {'gains': 'transfers', 'ionization': 'ionization', 'recombination': 'recombination',
-                     'parent_coupling': 'parent coupling'}
             warnings.warn('the condensed data of parent ' + str(p + 1) + ' (' + adf17['parents'][p]['term'] +
                           ') and spin system ' + str(group['spin']) + ' of the adf17 file give negative indirect ' +
-                          ', '.join(dict.fromkeys(names[key] for key, _ in left_out)) + ' beyond round-off at ' +
-                          ', '.join(format(t, '.3g') for t in sorted(set(t for _, t in left_out))) + ' eV; the '
+                          ', '.join(COUPLINGS[key] for key in left_out) + ' beyond round-off at ' +
+                          ', '.join(format(t, '.3g') for t in sorted(set(sum(left_out.values(), [])))) + ' eV; the '
                           'projection leaves those temperatures out and uses the neighbouring ones')
 
         def factor(key, index, energy):
             """Factor of on_grid[key][index] below its first temperature (1 if no user temperature is)."""
-            if(key not in below):
+            if(below[key] is None):
                 return 1.
             first, second, slope = below[key]
             limits = RECOMBINATION_EXPONENTS if key in ('recombination', 'parent_coupling') else REDUCED_EXPONENTS
@@ -350,14 +384,7 @@ def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=
         shell_index = {n: k for k, n in enumerate(group['shells'])}
         records = [r for r in adf18['records'] if r['parent'] == p + 1 and r['spin'] == group['spin'] and
                    r['shell'] in shell_index and 1 <= r['level'] <= num_levels]
-        #thresholds (eV): the ionization energies of the levels to the parent of the group, and the
-        #binding energy of the shell above those kept, from that of the highest kept shell as 1/n^2
-        binding = {r['level'] - 1: max(ion_pot[p] - level_energies[r['level'] - 1], 0.)*EV_PER_WAVENUMBER
-                   for r in records}
-        top = [r for r in records if r['shell'] == max(group['shells'])]
-        weights = sum(r['weight'] for r in top)
-        upper_binding = (sum(r['weight']*binding[r['level'] - 1] for r in top)/weights if weights > 0 else 0.)* \
-                        (max(group['shells'])/(max(group['shells']) + 1.))**2
+        ionization_energy, excitation_energy = _thresholds(records, group['shells'], ion_pot[p], level_energies)
         for record in records:
             i, a = record['level'] - 1, shell_index[record['shell']]
             recombination[..., i, p] += record['weight']*on_grid['recombination'][..., a]* \
@@ -365,13 +392,14 @@ def project(adf17, adf18, level_energies, ion_pot, user_temps, user_dens, pairs=
             #ionization to the parent of the group only: through the n-shells of one parent to
             #another (autoionization of core-excited Rydberg states) is excitation-autoionization,
             #which the ionization rates of adf04 files (adf07) already have
-            ionization[..., i, p] += on_grid['ionization'][..., a, p]/density*factor('ionization', (..., a, p), binding[i])
+            ionization[..., i, p] += on_grid['ionization'][..., a, p]/density* \
+                                     factor('ionization', (..., a, p), ionization_energy[i])
             for other in records:
                 b, j = shell_index[other['shell']], other['level'] - 1
                 if(b != a):
                     #every path out of level j through the high n-shells starts with its excitation to them
                     couplings[..., i, j] += record['weight']*on_grid['gains'][..., a, b]* \
-                                            factor('gains', (..., a, b), max(binding[j] - upper_binding, 0.))
+                                            factor('gains', (..., a, b), excitation_energy[j])
         coupling = on_grid['parent_coupling'][..., :num_parents]* \
                    factor('parent_coupling', (..., slice(0, num_parents)),
                           np.maximum(ion_pot - ion_pot[p], 0.)*EV_PER_WAVENUMBER)
