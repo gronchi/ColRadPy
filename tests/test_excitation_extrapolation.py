@@ -130,6 +130,19 @@ class ExcitationExtrapolationTests(unittest.TestCase):
 
 
 class IonizationExtrapolationTests(unittest.TestCase):
+    def test_rates_without_overflow_warnings(self):
+        # The rate is the reduced rate divided by exp(dE/kT), which overflowed with a warning
+        # at large dE/kT (Be3+ at 0.2 eV: dE/kT = 1090); the rate is 0 there.
+        model = colradpy(str(INPUT / "be3_adf04"), metas=np.array([0]), temp_grid=np.array([0.2, 50.]),
+                         electron_den=np.array([1e13]))
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.filterwarnings("error", "overflow", RuntimeWarning)
+            model.make_ioniz_from_reduced_ionizrates()
+        ioniz = model.data["rates"]["ioniz"]
+        np.testing.assert_array_equal(ioniz["ionization"][0, 0, 0], 0)
+        self.assertGreater(ioniz["ionization"][0, 0, 1], 0)
+        self.assertGreater(ioniz["ionization_reduced"][0, 0, 0], 0)
+
     def test_power_law_below_calculated_temperatures(self):
         calculated = file_temperatures("cpb03_ls#be0.dat")
         low = np.array([1e-3, 1e-2, 0.05])

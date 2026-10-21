@@ -735,19 +735,21 @@ class colradpy():
             scale = self.data['atomic']['zpla'][ion_transitions[:,0]-1, ion_transitions[:,1]-1]
             ion_excit_interp_grid = ion_excit_interp_grid*np.where(scale > -1, scale, 1.)[:,None]
 
-        for i in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):
-            self.data['rates']['ioniz']['ionization_reduced'][self.data['rates']['ioniz']\
-                    ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\
-                    ['ion_transitions'][i,1] -1, :] = ion_excit_interp_grid[i]
-            for j in range(0,len(self.data['user']['temp_grid'])):
+        #at large dE/kT the exponential overflows and the rate is 0, as it should be
+        with np.errstate(over='ignore'):
+            for i in range(0,len(self.data['rates']['ioniz']['ion_transitions'])):
+                self.data['rates']['ioniz']['ionization_reduced'][self.data['rates']['ioniz']\
+                        ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\
+                        ['ion_transitions'][i,1] -1, :] = ion_excit_interp_grid[i]
+                for j in range(0,len(self.data['user']['temp_grid'])):
 
-                self.data['rates']['ioniz']['ionization'][self.data['rates']['ioniz']\
-                    ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\
-                    ['ion_transitions'][i,1] -1, j] = ion_excit_interp_grid[i,j]/\
-                    np.exp((self.data['atomic']['ion_pot'][self.data['rates']['ioniz']\
-                    ['ion_transitions'][i,1]-1] - self.data['atomic']['energy']\
-                    [self.data['rates']['ioniz']['ion_transitions'][i,0] -1 ])\
-                    *EV_PER_WAVENUMBER/self.data['user']['temp_grid'][j])
+                    self.data['rates']['ioniz']['ionization'][self.data['rates']['ioniz']\
+                        ['ion_transitions'][i,0] -1,self.data['rates']['ioniz']\
+                        ['ion_transitions'][i,1] -1, j] = ion_excit_interp_grid[i,j]/\
+                        np.exp((self.data['atomic']['ion_pot'][self.data['rates']['ioniz']\
+                        ['ion_transitions'][i,1]-1] - self.data['atomic']['energy']\
+                        [self.data['rates']['ioniz']['ion_transitions'][i,0] -1 ])\
+                        *EV_PER_WAVENUMBER/self.data['user']['temp_grid'][j])
                 
                 
     def suppliment_with_ecip(self):
