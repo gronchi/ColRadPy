@@ -1,3 +1,4 @@
+import os
 import urllib.request
 import numpy as np
 
@@ -36,13 +37,13 @@ if __name__ == '__main__':
 
 
 def fix_whitespace(fname):
-    """ Fix whitespace in a file """
+    """ Fix whitespace in a file: remove the trailing whitespace of its lines and convert its line
+    endings to Unix (LF). The file is handled as bytes, whatever its encoding. """
     with open(fname, "rb") as fo:
         original_contents = fo.read()
-    # "rU" Universal line endings to Unix
-    with open(fname, "rU") as fo:
-        contents = fo.read()
-    lines = contents.split("\n")
+    # Universal line endings to Unix
+    contents = original_contents.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    lines = contents.split(b"\n")
     fixed = 0
     for k, line in enumerate(lines):
         new_line = line.rstrip()
@@ -50,7 +51,7 @@ def fix_whitespace(fname):
             lines[k] = new_line
             fixed += 1
     with open(fname, "wb") as fo:
-        fo.write("\n".join(lines))
+        fo.write(b"\n".join(lines))
     if fixed or contents != original_contents:
         print("************* %s" % os.path.basename(fname))
     if fixed:
