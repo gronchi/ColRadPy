@@ -1,5 +1,10 @@
+import contextlib
+import io
+import warnings
 import numpy as np
 from colradpy.colradpy_class import *
+from colradpy.colradpy_class import parent_levels
+from colradpy.read_adf04_py3_class import read_adf04
 from colradpy.solve_matrix_exponential import *
 from scipy.interpolate import RectBivariateSpline
 from colradpy.read_adf11 import *
@@ -306,9 +311,25 @@ class ionization_balance():
                     meta = np.atleast_1d(np.asarray(metas_input[i], dtype=int))
                 elif i == 0:
                     meta = np.asarray(metas_input, dtype=int)
-                else:
-                    m = self.data['cr_data']['gcrs'][str(i - 1)]['scd'].shape[1]
-                    meta = np.arange(m)
+                if(i > 0):
+                    #the parents of the stage before are levels of this stage, found by their terms
+                    #and energies; ionization to parent p populates metastable p of this stage
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        levels = read_adf04(str(fils[i]))['atomic']
+                    try:
+                        parents = parent_levels(tmp.data['atomic']['ion_pot'], tmp.data['atomic']['ion_term'],
+                                                levels['energy'], levels['S'], levels['L'], levels['w'])
+                    except ValueError as err:
+                        if not explicit_metas:
+                            raise ValueError('the metastables of stage ' + str(i) + ' cannot be inferred: ' +
+                                             str(err) + '; give one level array per stage') from err
+                        parents = None
+                    if not explicit_metas:
+                        meta = parents
+                    elif(parents is not None and len(meta) == len(parents) and not np.array_equal(meta, parents)):
+                        warnings.warn('the metastables ' + str(meta) + ' of stage ' + str(i) + ' are not the ' +
+                                      'parents ' + str(parents) + ' of stage ' + str(i - 1) + ' (by term and ' +
+                                      'energy), which ionization from stage ' + str(i - 1) + ' populates')
                 #the metastables of a stage take the places of the parents of the stage before
                 if(i > 0 and len(meta) != self.data['cr_data']['gcrs'][str(i - 1)]['scd'].shape[1]):
                     raise ValueError('stage ' + str(i) + ' has ' + str(len(meta)) + ' metastables but stage ' +

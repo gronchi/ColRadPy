@@ -134,6 +134,57 @@ def parent_statistical_weight(term):
     return weight
 
 
+def parent_levels(ion_pot, ion_term, energy, S, L, w):
+    """Levels of the next ion that are the parents on the first line of an adf04 file. Each
+       parent is the level with its term (2S+1, L and, for IC terms, J) whose energy is
+       closest to the parent's energy above the lowest parent, ion_pot[p] - ion_pot[0].
+
+    :param ion_pot: ionization potentials of the parents (cm-1)
+    :type ion_pot: float array
+
+    :param ion_term: terms of the parents, e.g. 2P or 3P2.0
+    :type ion_term: str array
+
+    :param energy: level energies of the next ion (cm-1)
+    :type energy: float array
+
+    :param S: 2S+1 of the levels of the next ion
+    :type S: int array
+
+    :param L: L of the levels of the next ion
+    :type L: int array
+
+    :param w: J (IC files) or the term's (statistical weight - 1)/2 (LS files) of the levels
+    :type w: float array
+
+    :returns: int array --the parent levels (0 based)
+    """
+    energy, S, L, w = map(np.asarray, (energy, S, L, w))
+    levels = []
+    for p in range(len(ion_pot)):
+        term = str(ion_term[p]).strip()
+        match = re.fullmatch(r'(\d+)([A-Za-z])(\d+(?:\.\d*)?|\d+/\d+)?', term)
+        if(match is None or match.group(2).upper() not in L_LETTERS):
+            raise ValueError('parent term ' + repr(term) + ' is not (2S+1)L or (2S+1)LJ')
+        same = (S == int(match.group(1))) & (L == L_LETTERS.index(match.group(2).upper()))
+        if(match.group(3) is not None):
+            j = float(Fraction(match.group(3)) if '/' in match.group(3) else match.group(3))
+            same &= np.isclose(w, j)
+        target = ion_pot[p] - ion_pot[0]
+        candidates = np.where(same)[0]
+        if(candidates.size == 0):
+            raise ValueError('no level of the next ion has the term ' + term + ' of parent ' + str(p+1))
+        k = candidates[np.argmin(np.abs(energy[candidates] - target))]
+        if(abs(energy[k] - target) > max(0.05*target, 1000.)):
+            raise ValueError('parent ' + str(p+1) + ' (' + term + ', ' + str(target) + ' cm-1 above the ' +
+                             'lowest parent) matches no level of the next ion; the closest ' + term +
+                             ' level is at ' + str(energy[k]) + ' cm-1')
+        levels.append(k)
+    if(len(set(levels)) != len(levels)):
+        raise ValueError('parents ' + str(list(ion_term)) + ' match the same levels ' + str(levels))
+    return np.array(levels, dtype=int)
+
+
 def strip_closed_shells(conf, closed_shells, nist_ground):
     """Removes the closed subshells that lead a configuration, e.g. 1s2.2s2.2p6.3s.3p,
        and are not in the NIST ground configuration, e.g. 3s2, because NIST leaves out

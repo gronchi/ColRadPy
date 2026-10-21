@@ -7,13 +7,17 @@ the matrix exponential of the ionization balance matrix.
 
 import contextlib
 import io
+import os
 from pathlib import Path
+import tempfile
 import unittest
+import warnings
 
 import numpy as np
 from scipy.linalg import expm
 
 from colradpy import colradpy
+from colradpy.colradpy_class import parent_levels
 from colradpy.ionization_balance_class import ionization_balance
 
 
@@ -158,6 +162,53 @@ class ColradpyMetastableTests(unittest.TestCase):
         for metas in ([2, 0], [0]):
             colradpy(path, metas=np.array(metas), temp_grid=np.array([10.]), electron_den=np.array([1e13]))
         colradpy(path, temp_grid=np.array([10.]), electron_den=np.array([1e13]))
+
+
+class ParentLevelTests(unittest.TestCase):
+    """The metastables of a later stage are the parents on the first line of the stage before,
+    which need not be the lowest levels of the next ion."""
+
+    def test_neon_parents(self):
+        # Ne0 ionizes to Ne+ 2p5 2P and 2p4 3s 4P (219178.6 cm-1 above it); level 1 of the Ne+
+        # file is 2s2p6 2S, which decays in a nanosecond (OpenADAS cop98#10_ls#ne0/ne1).
+        energy, S, L, w = [0., 216787.5, 219179.3, 224031.0], [2, 2, 4, 2], [1, 0, 1, 1], [2.5, 0.5, 5.5, 2.5]
+        np.testing.assert_array_equal(
+            parent_levels([173929.7, 393108.3], ["2P", "4P"], energy, S, L, w), [0, 2])
+        # IC terms also match J
+        np.testing.assert_array_equal(
+            parent_levels([100., 2100.], ["2P1.5", "2P0.5"], [0., 2000., 2100.], [2, 2, 2], [1, 1, 1],
+                          [1.5, 1.5, 0.5]), [0, 2])
+        with self.assertRaisesRegex(ValueError, "no level of the next ion has the term 3D"):
+            parent_levels([0., 5000.], ["2P", "3D"], energy, S, L, w)
+        with self.assertRaisesRegex(ValueError, "matches no level"):
+            parent_levels([0., 100000.], ["2P", "4P"], energy, S, L, w)
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        # Be II whose second parent is the Be2+ 1s2s 1S (level 2 of be2_adf04) instead of 3S
+        lines = (INPUT / "cpb03_ls#be1.dat").read_text().splitlines()
+        lines[0] = lines[0].replace("1103374.0(3S)", "1128050.0(1S)")
+        self.be1 = os.path.join(tmp.name, "be1_1s_parent.dat")
+        with open(self.be1, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        self.files = [str(INPUT / "cpb03_ls#be0.dat"), self.be1, str(INPUT / "be2_adf04")]
+
+    def balance(self, metas):
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+            return ionization_balance(self.files, metas, np.array([10.]), np.array([1e13]))
+
+    def test_inferred_metastables_are_the_parents(self):
+        # The inferred metastables were the lowest levels, [0, 1] (the 1s2s 3S) here.
+        balance = self.balance(np.array([0]))
+        np.testing.assert_array_equal(balance.data["user"]["metas"][2], [0, 2])
+
+    def test_explicit_metastables_that_are_not_the_parents(self):
+        with self.assertWarnsRegex(UserWarning, r"metastables \[0 1\] of stage 2 are not the parents \[0 2\]"):
+            self.balance([np.array([0]), np.array([0]), np.array([0, 1])])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            self.balance([np.array([0]), np.array([0]), np.array([0, 2])])
 
 
 if __name__ == "__main__":
