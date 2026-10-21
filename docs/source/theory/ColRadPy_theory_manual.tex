@@ -283,6 +283,14 @@ An interpolated reduced coefficient is not itself the final ionization rate.
 The input parentage factor can be applied through \code{scale_file_ioniz},
 which multiplies the interpolated reduced coefficients whatever the
 interpolation; the ionization balance passes the option to each stage.
+Some files hold placeholders instead of rates at their lowest temperatures,
+where the rate underflowed when the file was made (reduced ionization rates of
+$10^{-2}$ to $10^{40}$\,cm$^3$\,s$^{-1}$ in OpenADAS neon files). Reduced
+ionization rates above $10^{-6}$\,cm$^3$\,s$^{-1}$ and recombination rates above
+$10^{-7}$\,cm$^3$\,s$^{-1}$, far above physical values, are left out with a
+warning, and those temperatures take the rates from the other points of the
+transition. Used literally, they reach three-body recombination through
+detailed balance.
 
 Radiative and dielectronic recombination supplied by a file are collected in
 $\alpha_{ip}^{\rm RR+DR}$. The effective recombination coefficient used at a
