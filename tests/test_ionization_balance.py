@@ -211,5 +211,17 @@ class ParentLevelTests(unittest.TestCase):
             self.balance([np.array([0]), np.array([0]), np.array([0, 2])])
 
 
+class PackageNameTests(unittest.TestCase):
+    def test_ionization_balance_is_the_class(self):
+        # An older copy of the class lived in colradpy/ionization_balance.py; importing it as
+        # colradpy.ionization_balance replaced the package attribute, so that
+        # 'from colradpy import ionization_balance' then gave the module instead of the class.
+        import importlib.util
+        import colradpy as package
+        from colradpy import ionization_balance_class
+        self.assertIsNone(importlib.util.find_spec("colradpy.ionization_balance"))
+        self.assertIs(package.ionization_balance, ionization_balance_class.ionization_balance)
+
+
 if __name__ == "__main__":
     unittest.main()
