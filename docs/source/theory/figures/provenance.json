@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "3a42b4c241c7a3ba3bbf364ca5ab12971a4be187",
+  "git_head": "eaf835314ada698d097df59bfe8d55c4fb7f5aac",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -15,8 +15,8 @@
     "colradpy\\colradpy_utility.py": "8fb0fefde8031a1a0026fed96155cb203d83d809799d81f6d54f94ff23a51062",
     "colradpy\\convert_eissner.py": "514325a62db0e13e533492bbc02cb6a4ca807ae2810cd2c9bc02bb6f2aa1b503",
     "colradpy\\ecip_rates.py": "a3dba0fbbb707f27afb014d794e059337daf065659f74a51b5a8108183b537f1",
-    "colradpy\\energy_balance.py": "3e0a9cb86ba25e3597848276487dd4f7a5a76b83dc5618098eb612856d6a2cb6",
-    "colradpy\\ionization_balance_class.py": "bc0e1537e711c2d37530ee804e3d51f333e24661c90c5f0ad81387889d69bbd5",
+    "colradpy\\energy_balance.py": "57ffc22dd742ba87ff6a528a03d51692a718638df41992e91b4c13c891209407",
+    "colradpy\\ionization_balance_class.py": "473e11498a8fac4d7b402a51e7f735f8eaa6ce111c3221e233354d2a55bbbe50",
     "colradpy\\nist_read.py": "9ae562f04023be028920c36900dd4c1829501e09f27cf8edb03550219e19a004",
     "colradpy\\nist_read_txt.py": "d21b8e32c85e4a3d5842932e2af61ee8f592c57f4199e1bdd29effa411b5367e",
     "colradpy\\r8necip.py": "cb180771317b4ce2b36e0c5186ed87b2b56088591ee6143e323d10c03cb5a476",
