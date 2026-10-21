@@ -42,6 +42,38 @@ class PecPlotTests(unittest.TestCase):
         np.testing.assert_allclose(heights * 10.**scaling, pecs[finite], rtol=1e-12)
         self.assertTrue(1 <= heights.max() < 10)
 
+    def be0_model(self):
+        m = colradpy(str(INPUT / "cpb03_ls#be0.dat"), metas=np.array([0]),
+                     temp_grid=np.array([10.]), electron_den=np.array([1e13]))
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+            m.solve_cr()
+        return m
+
+    def test_wavelength_range(self):
+        # The axis was fixed to 0-1300 nm, which hid 9 of the 31 Be I lines of at least 1e-3
+        # of the strongest (up to 3561 nm).
+        m = self.be0_model()
+        wave = m.data["processed"]["wave_air"]
+        pecs = m.data["processed"]["pecs"][:, 0, 0, 0]
+        shown = np.isfinite(wave) & (pecs >= 1e-3 * pecs.max())
+        with contextlib.redirect_stdout(io.StringIO()):
+            m.plot_pec_sticks(temp=[0], dens=[0], meta=[0])
+        low, high = plt.gca().get_xlim()
+        self.assertLessEqual(low, wave[shown].min())
+        self.assertGreaterEqual(high, wave[shown].max())
+        self.assertGreater(wave[shown].max(), 3500)
+        with contextlib.redirect_stdout(io.StringIO()):
+            m.plot_pec_sticks(temp=[0], dens=[0], meta=[0], wave_range=(200, 500))
+        np.testing.assert_allclose(plt.gca().get_xlim(), (200, 500))
+
+    def test_zero_pecs(self):
+        # log10 of a zero largest PEC failed
+        m = self.be0_model()
+        m.data["processed"]["pecs"][:, 0, 0, 0] = 0
+        with contextlib.redirect_stdout(io.StringIO()):
+            m.plot_pec_sticks(temp=[0], dens=[0], meta=[0])
+        self.assertEqual(plt.gca().get_ylabel(), "PEC (10$^{0}$ ph cm$^{3}$ s$^{-1}$)")
+
 
 if __name__ == "__main__":
     unittest.main()

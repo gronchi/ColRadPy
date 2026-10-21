@@ -2687,7 +2687,7 @@ class colradpy():
         
 
         
-    def plot_pec_sticks(self,temp=[0],dens=[0],meta=[0]):
+    def plot_pec_sticks(self,temp=[0],dens=[0],meta=[0],wave_range=None):
         """plot_pec_sticks will plot the the PEC values versus wavelength.
            **WARNING** wavelngth values will be wrong unless energy levels in the file
            have been 'shifted' to NIST values.
@@ -2702,6 +2702,10 @@ class colradpy():
 
         :param meta: array of metastable indexes
         :type metas: int array
+
+        :param wave_range: wavelength axis (min, max) in nm; by default it spans the lines with
+                           PECs of at least 1e-3 of the strongest
+        :type wave_range: float tuple
         """
 
         rc('axes', linewidth=2)
@@ -2723,18 +2727,26 @@ class colradpy():
             for j in p_t:
                 for k in p_m:
                     plt.figure()
+                    wave = self.data['processed']['wave_air']
+                    pecs = self.data['processed']['pecs'][:,k,j,i]
                     #the PECs are plotted in units of 10^scaling ph cm3 s-1, so the largest is from 1 to 10
-                    scaling = int(np.floor(np.log10(np.max(self.data['processed']['pecs'][:,k,j,i]))))
-                    plt.vlines(self.data['processed']['wave_air'],
-                           np.zeros_like(self.data['processed']['wave_air']),
-                                         self.data['processed']['pecs'][:,k,j,i]/10.**scaling)
+                    scaling = int(np.floor(np.log10(np.max(pecs)))) if np.max(pecs) > 0 else 0
+                    plt.vlines(wave, np.zeros_like(wave), pecs/10.**scaling)
 
                     plt.xlabel('Wavelength in air (nm)',weight='semibold')
                     plt.ylabel('PEC (10$^{' + str(scaling) + '}$ ph cm$^{3}$ s$^{-1}$)',weight='semibold')
                     plt.title('Temperature ' + str(self.data['user']['temp_grid'][j]) + ' eV,  '+\
                               'Density ' + format(self.data['user']['dens_grid'][i],'.2e') + ' cm$^{-3}$, '+\
                               'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
-                    plt.xlim(0,1300)
+                    if(wave_range is not None):
+                        plt.xlim(*wave_range)
+                    else:
+                        #the lines that show on the plot, at least 1e-3 of the strongest
+                        shown = np.isfinite(wave) & (pecs > 0) & (pecs >= 1e-3*np.max(pecs))
+                        if(shown.any()):
+                            low, high = np.min(wave[shown]), np.max(wave[shown])
+                            margin = 0.05*(high - low) if high > low else 0.05*high
+                            plt.xlim(max(0., low - margin), high + margin)
 
 
     def plot_pec_ratio_temp(self,pec1,pec2,dens=np.array([0]),meta = np.array([0])):
