@@ -29,3 +29,16 @@ def rate_interp_parse(rate_interp_str):
         interp_kind = 'cubic'
 
     return log_rate, interp_kind
+
+
+def rate_interp_log_values(rate_interp_str):
+    """Whether an interpolation option interpolates the logarithm of the rates on a logarithmic
+       temperature axis ('loglog_slinear'), rather than the rates themselves on a linear
+       ('slinear') or logarithmic ('log_slinear') temperature axis.
+
+    :param rate_interp_str: interpolation option, e.g. 'loglog_slinear'
+    :type rate_interp_str: str
+
+    :returns: bool
+    """
+    return rate_interp_str.startswith('loglog')

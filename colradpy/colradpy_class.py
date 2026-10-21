@@ -118,6 +118,53 @@ MAX_REDUCED_IONIZATION = 1e-6
 #Largest recombination rate coefficient (cm3 s-1) taken from the R lines of an adf04 file;
 #partial radiative and dielectronic coefficients stay below about 1e-9 cm3 s-1.
 MAX_RECOMBINATION = 1e-7
+#Steepest decrease d ln(rate)/d ln(T) of recombination rate coefficients: radiative recombination
+#into levels bound by less than kT and dielectronic recombination above its resonances fall as
+#T^-1.5, so points at the lowest temperatures of a file that fall faster towards the higher
+#temperatures, with a margin, are artifacts (OpenADAS cop98#10_ls#ne1 'R  2  +3' gives
+#2.56e-8 cm3 s-1, then 1e-30; cop98#10_ls#ne7 'R  3  +1' 5.90e-10, then 7.35e-14).
+STEEPEST_RECOMBINATION = -2.
+#Steepest decrease of reduced ionization rates exp(dE/kT)*S, which rise as T^1/2 near threshold
+#and fall as about T^-1/2 far above it (OpenADAS cop98#10_ls#ne3 'S  1  +1' gives 1.51e-7,
+#7.04e-8, then 8.50e-9 cm3 s-1 at its lowest temperatures).
+STEEPEST_REDUCED_IONIZATION = -1.
+#Exponents of the power laws (log-log interpolation) that the rates follow outside the
+#temperatures of a file: recombination falls at most as T^-1.5 and does not grow; reduced
+#ionization above them stays between T^-1 and T^1/2 (below them it follows its two lowest
+#points, or is held constant when they fall)
+RECOMBINATION_EXPONENTS = (-1.5, 0.)
+REDUCED_IONIZATION_EXPONENTS_BELOW = (0., None)
+REDUCED_IONIZATION_EXPONENTS_ABOVE = (-1., 0.5)
+
+
+def low_temperature_artifacts(temps, rates, steepest):
+    """Points at the lowest temperatures of each row of rates (one row for each transition,
+       temperatures temps sorted) that fall towards a later point faster than T^steepest, which
+       no rate of the kind does: they are left out from the lowest point up to the first one
+       that does not. Points that are not positive are not compared.
+
+    :param temps: temperatures, increasing
+    :type temps: float arr
+
+    :param rates: rates, one row for each transition
+    :type rates: float arr
+
+    :param steepest: steepest physical d ln(rate)/d ln(T), negative
+    :type steepest: float
+
+    :returns: bool arr -- True for the points that are left out
+    """
+    artifacts = np.zeros(np.shape(rates), dtype=bool)
+    log_temps = np.log(temps)
+    for i, row in enumerate(np.asarray(rates)):
+        positive = np.where(row > 0)[0]
+        for n, k in enumerate(positive[:-1]):
+            later = positive[n+1:]
+            slopes = (np.log(row[later]) - np.log(row[k]))/(log_temps[later] - log_temps[k])
+            if(slopes.min() >= steepest):
+                break
+            artifacts[i, k] = True
+    return artifacts
 
 
 def parent_statistical_weight(term):
@@ -372,16 +419,25 @@ class colradpy():
       :param temp_dens_pair: use temperature density pair array instead of temperature density grids
       :type temp_dens_pair: bool
 
-      :param rate_interp_ion: Interpolation type for ionization
+      :param rate_interp_ion: Interpolation of the reduced ionization rates of the adf04 file over
+                              temperature: a SciPy kind ('slinear', 'quadratic', 'cubic', ...) of
+                              the rates on a linear temperature axis, 'log_' and a kind on a log
+                              temperature axis, or 'loglog_' and a kind for the log of the rates on
+                              a log temperature axis, between the positive values of each
+                              transition and as a power law outside them (default
+                              'loglog_slinear'). Rates of the other options are extrapolated
+                              linearly above the file temperatures and as a power law below them.
       :type rate_interp_ion: string
 
-      :param rate_interp_recomb: Interpolation type for recombination
+      :param rate_interp_recomb: Interpolation of the recombination rates, as rate_interp_ion
+                                 (default 'loglog_slinear'); the other options extrapolate them
+                                 linearly on both sides, without negative values
       :type rate_interp_recomb: string
 
-      :param rate_interp_col: Interpolation type for excitation
+      :param rate_interp_col: Interpolation type for excitation, a kind or 'log_' and a kind
       :type rate_interp_col: string
 
-      :param rate_interp_cx: Interpolation type for charge exchange
+      :param rate_interp_cx: Interpolation type for charge exchange, a kind or 'log_' and a kind
       :type rate_interp_cx: string
 
       :param use_cx: Use charge exchange in the calculation
@@ -399,8 +455,8 @@ class colradpy():
                  htemp_grid = np.array([]), hdens_grid = np.array([]),
                  use_ionization=True,suppliment_with_ecip=True,use_recombination_three_body=True,
                  use_recombination = True, td_t = np.array([]), td_n0=np.array([]),td_source=np.array([]),
-                  default_pop_norm=True,temp_dens_pair=False,rate_interp_ion = 'slinear',
-                 rate_interp_recomb='log_slinear',rate_interp_col='log_slinear',
+                  default_pop_norm=True,temp_dens_pair=False,rate_interp_ion = 'loglog_slinear',
+                 rate_interp_recomb='loglog_slinear',rate_interp_col='log_slinear',
                  rate_interp_cx='log_quadratic',use_cx=False,scale_file_ioniz=False,
                  ne_tau = -1):
         
@@ -452,6 +508,14 @@ class colradpy():
         self.data['user']['rate_interp_kind_cx'] = rate_interp_cx
         self.data['user']['log_rate_cx'],\
             self.data['user']['interp_kind_cx'] = rate_interp_parse(rate_interp_cx)
+        #the log of the rates is interpolated (on a log temperature axis) for ionization and
+        #recombination
+        self.data['user']['loglog_rate_ion'] = rate_interp_log_values(rate_interp_ion)
+        self.data['user']['loglog_rate_recomb'] = rate_interp_log_values(rate_interp_recomb)
+        for name, option in (('rate_interp_col', rate_interp_col), ('rate_interp_cx', rate_interp_cx)):
+            if(rate_interp_log_values(option)):
+                raise ValueError(name + " = '" + option + "': the log-log interpolation is available for "
+                                 "ionization and recombination (rate_interp_ion, rate_interp_recomb)")
         
         
         '''
@@ -660,6 +724,53 @@ class colradpy():
                             fill_value='extrapolate')(np.log(user_temps)).clip(min=0)
         return interp1d(temps, rates, axis=1, kind=kind, fill_value='extrapolate')(user_temps).clip(min=0)
 
+    def _interp_rates_loglog(self, temps, rates, kind, below, above):
+        """Rates (one row for each transition) given at the increasing temperatures temps (eV),
+           on the user temperatures: the log of the rates interpolated on a log temperature axis
+           between the positive values of each row, and outside them a power law through the two
+           nearest ones, whose exponent is clipped to below or above, (min, max) with None for no
+           limit. Linear interpolation of the rates overestimates them between temperatures where
+           they change by orders of magnitude (the arithmetic mean of the two values instead of
+           their geometric mean), and its extrapolation crosses zero. Rows without a positive
+           value are zero, rows with one are constant.
+        """
+        user = np.log(self.data['user']['temp_grid'])
+        log_temps = np.log(temps)
+        grid = np.zeros((len(rates), len(user)))
+        for i, row in enumerate(np.asarray(rates)):
+            positive = row > 0
+            if(positive.sum() < 2):
+                grid[i] = row[positive].sum()
+                continue
+            x, y = log_temps[positive], np.log(row[positive])
+            k = kind if len(x) > {'quadratic': 2, 'cubic': 3}.get(kind, 1) else 'slinear'
+            log_grid = np.empty(len(user))
+            inside = (user >= x[0]) & (user <= x[-1])
+            if(inside.any()):
+                log_grid[inside] = interp1d(x, y, kind=k)(user[inside])
+            for outside, (a, b), limits in ((user < x[0], (0, 1), below), (user > x[-1], (-1, -2), above)):
+                if(outside.any()):
+                    power = np.clip((y[b] - y[a])/(x[b] - x[a]), *limits)
+                    log_grid[outside] = y[a] + power*(user[outside] - x[a])
+            grid[i] = np.exp(log_grid)
+        return grid
+
+    def _rates_left_out(self, temps, rates, bound, steepest):
+        """Placeholders (above bound, or not finite) and artifacts at the lowest temperatures
+           (falling faster than T^steepest) among rates given at the increasing temperatures temps.
+        """
+        placeholders = ~(np.isfinite(rates) & (rates <= bound))
+        artifacts = low_temperature_artifacts(temps, np.where(placeholders, 0., rates), steepest)
+        return placeholders, artifacts
+
+    def _warn_left_out(self, what, left_out, labels, temps):
+        """Warn of the rates left out, left_out (rows, temperatures), with a label for each row."""
+        rows = [labels[i] + ' at ' + ', '.join(format(t, '.3g') for t in temps[left_out[i]]) + ' eV'
+                for i in np.where(left_out.any(axis=1))[0]]
+        if(rows):
+            warnings.warn(str(self.data['user'].get('file_loc', 'the adf04 file')) + ': ' + what +
+                          ' are not physical and are left out: ' + '; '.join(rows))
+
     def _reduced_ionization_on_grid(self, temps, rates):
         """Reduced ionization rates (one row for each transition) given at the temperatures temps
            (eV), on the user temperatures. Below temps the rates follow a power law through the
@@ -706,27 +817,35 @@ class colradpy():
 
 
         #Placeholders instead of reduced rates (above MAX_REDUCED_IONIZATION, e.g. 1 to 1e40 cm3 s-1
-        #at the lowest temperatures of OpenADAS cop98#10_ls#ne4 to ne8) are left out, and the rates
-        #at those temperatures come from the other points of the transition
-        ion_excit = self.data['rates']['ioniz']['ion_excit']
+        #at the lowest temperatures of OpenADAS cop98#10_ls#ne4 to ne8), and smaller artifacts at the
+        #lowest temperatures that fall faster than any reduced rate, are left out, and the rates at
+        #those temperatures come from the other points of the transition
         file_temps = self.data['input_file']['temp_grid']/11604.5
-        valid = np.isfinite(ion_excit) & (ion_excit <= MAX_REDUCED_IONIZATION)
-        all_valid = valid.all(axis=1)
+        order = np.argsort(file_temps)
+        file_temps = file_temps[order]
+        ion_excit = self.data['rates']['ioniz']['ion_excit'][:, order]
+        placeholders, artifacts = self._rates_left_out(file_temps, ion_excit, MAX_REDUCED_IONIZATION,
+                                                       STEEPEST_REDUCED_IONIZATION)
+        valid = ~placeholders & ~artifacts
         ion_excit_interp_grid = np.zeros((len(ion_excit), len(self.data['user']['temp_grid'])))
-        if(all_valid.any()):
-            ion_excit_interp_grid[all_valid] = self._reduced_ionization_on_grid(file_temps, ion_excit[all_valid])
-        dropped = []
-        for i in np.where(~all_valid)[0]:
-            if(valid[i].any()):
+        if(self.data['user']['loglog_rate_ion']):
+            ion_excit_interp_grid = self._interp_rates_loglog(file_temps, np.where(valid, ion_excit, 0.),
+                                                              self.data['user']['interp_kind_ion'],
+                                                              REDUCED_IONIZATION_EXPONENTS_BELOW,
+                                                              REDUCED_IONIZATION_EXPONENTS_ABOVE)
+        else:
+            all_valid = valid.all(axis=1)
+            if(all_valid.any()):
+                ion_excit_interp_grid[all_valid] = self._reduced_ionization_on_grid(file_temps, ion_excit[all_valid])
+            for i in np.where(~all_valid & valid.any(axis=1))[0]:
                 ion_excit_interp_grid[i] = self._reduced_ionization_on_grid(file_temps[valid[i]],
                                                                           ion_excit[i:i+1, valid[i]])[0]
-            dropped.append('level ' + str(self.data['rates']['ioniz']['ion_transitions'][i,0]) + ' to parent ' +
-                           str(self.data['rates']['ioniz']['ion_transitions'][i,1]) + ' at ' +
-                           ', '.join(format(t, '.3g') for t in file_temps[~valid[i]]) + ' eV')
-        if(dropped):
-            warnings.warn(str(self.data['user'].get('file_loc', 'the adf04 file')) + ': reduced ionization rates ' +
-                          'above ' + format(MAX_REDUCED_IONIZATION, 'g') + ' cm3 s-1 are not physical and are ' +
-                          'left out: ' + '; '.join(dropped))
+        labels = ['level ' + str(level) + ' to parent ' + str(parent)
+                  for level, parent in self.data['rates']['ioniz']['ion_transitions']]
+        self._warn_left_out('reduced ionization rates above ' + format(MAX_REDUCED_IONIZATION, 'g') + ' cm3 s-1',
+                            placeholders, labels, file_temps)
+        self._warn_left_out('reduced ionization rates at the lowest temperatures that fall faster than T^' +
+                            format(STEEPEST_REDUCED_IONIZATION, 'g'), artifacts, labels, file_temps)
 
         #scale the rates by the {parent} values of the level list, whatever the interpolation;
         #levels without a value for the parent (-1) are not scaled
@@ -866,32 +985,37 @@ class colradpy():
         if(np.size(self.data['rates']['recomb']['recomb_excit'] > 0)):
 
             #Placeholders instead of recombination rates (above MAX_RECOMBINATION, e.g. 3.25e-5 cm3 s-1
-            #followed by 1e-30 at the lowest temperatures of OpenADAS cop98#10_ls#ne1) are left out, and
-            #the rates at those temperatures come from the other points of the transition
+            #followed by 1e-30 at the lowest temperatures of OpenADAS cop98#10_ls#ne1), and smaller
+            #artifacts at the lowest temperatures that fall faster than any recombination rate, are
+            #left out, and the rates at those temperatures come from the other points of the transition
             recomb_excit = self.data['rates']['recomb']['recomb_excit']
             file_temps = self.data['input_file']['temp_grid']/11604.5
             order = np.argsort(file_temps)
             file_temps, recomb_excit = file_temps[order], recomb_excit[:, order]
-            valid = np.isfinite(recomb_excit) & (recomb_excit <= MAX_RECOMBINATION)
-            all_valid = valid.all(axis=1)
+            placeholders, artifacts = self._rates_left_out(file_temps, recomb_excit, MAX_RECOMBINATION,
+                                                           STEEPEST_RECOMBINATION)
+            valid = ~placeholders & ~artifacts
             grid = np.zeros((len(recomb_excit), len(self.data['user']['temp_grid'])))
-            if(all_valid.any()):
-                grid[all_valid] = self._interp_rates(file_temps, recomb_excit[all_valid],
-                                                     self.data['user']['log_rate_recomb'],
-                                                     self.data['user']['interp_kind_recomb'])
-            dropped = []
-            for i in np.where(~all_valid)[0]:
-                if(valid[i].any()):
+            if(self.data['user']['loglog_rate_recomb']):
+                grid = self._interp_rates_loglog(file_temps, np.where(valid, recomb_excit, 0.),
+                                                 self.data['user']['interp_kind_recomb'],
+                                                 RECOMBINATION_EXPONENTS, RECOMBINATION_EXPONENTS)
+            else:
+                all_valid = valid.all(axis=1)
+                if(all_valid.any()):
+                    grid[all_valid] = self._interp_rates(file_temps, recomb_excit[all_valid],
+                                                         self.data['user']['log_rate_recomb'],
+                                                         self.data['user']['interp_kind_recomb'])
+                for i in np.where(~all_valid & valid.any(axis=1))[0]:
                     grid[i] = self._interp_rates(file_temps[valid[i]], recomb_excit[i:i+1, valid[i]],
                                                  self.data['user']['log_rate_recomb'],
                                                  self.data['user']['interp_kind_recomb'])[0]
-                dropped.append('parent ' + str(self.data['rates']['recomb']['recomb_transitions'][i,0]) +
-                               ' to level ' + str(self.data['rates']['recomb']['recomb_transitions'][i,1]) + ' at ' +
-                               ', '.join(format(t, '.3g') for t in file_temps[~valid[i]]) + ' eV')
-            if(dropped):
-                warnings.warn(str(self.data['user'].get('file_loc', 'the adf04 file')) + ': recombination rates ' +
-                              'above ' + format(MAX_RECOMBINATION, 'g') + ' cm3 s-1 are not physical and are ' +
-                              'left out: ' + '; '.join(dropped))
+            labels = ['parent ' + str(parent) + ' to level ' + str(level)
+                      for parent, level in self.data['rates']['recomb']['recomb_transitions']]
+            self._warn_left_out('recombination rates above ' + format(MAX_RECOMBINATION, 'g') + ' cm3 s-1',
+                                placeholders, labels, file_temps)
+            self._warn_left_out('recombination rates at the lowest temperatures that fall faster than T^' +
+                                format(STEEPEST_RECOMBINATION, 'g'), artifacts, labels, file_temps)
             self.data['rates']['recomb']['recomb_excit_interp_grid'] = grid
 
 

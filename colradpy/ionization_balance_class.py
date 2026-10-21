@@ -119,9 +119,10 @@ class ionization_balance():
     :param scale_file_ioniz: Scale ionization in the file
     :type scale_file_ioniz: bool
 
-    :param rate_interp_ion: Interpolation of the adf04 ionization rates, see colradpy; one string
-        for every stage or one for each adf04 file. Also rate_interp_recomb, rate_interp_col and
-        rate_interp_cx for recombination, excitation and charge exchange
+    :param rate_interp_ion: Interpolation of the adf04 ionization rates, see colradpy (default
+        'loglog_slinear'); one string for every stage or one for each adf04 file. Also
+        rate_interp_recomb ('loglog_slinear'), rate_interp_col ('log_slinear') and rate_interp_cx
+        ('log_quadratic') for recombination, excitation and charge exchange
     :type rate_interp_ion: str or list of str
 
     :param ne_tau: n_e*tau values for time dependent calc to be evaluated at can not be defined at the same time as td_t (cm-3 s)
@@ -138,7 +139,7 @@ class ionization_balance():
                  use_cx=False,
                  keep_charge_state_data=False,init_abund = np.array([]), source= np.array([]),
                  temp_dens_pair=False,scale_file_ioniz=False, ne_tau=np.array([-1]),adf11_files=False,
-                 hdf5_files=False, rate_interp_ion='slinear', rate_interp_recomb='log_slinear',
+                 hdf5_files=False, rate_interp_ion='loglog_slinear', rate_interp_recomb='loglog_slinear',
                  rate_interp_col='log_slinear', rate_interp_cx='log_quadratic'):
 
 

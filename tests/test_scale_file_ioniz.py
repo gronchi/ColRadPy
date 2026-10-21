@@ -32,7 +32,7 @@ def model(scale, rate_interp_ion="slinear", **kwargs):
 class ScaleFileIonizationTests(unittest.TestCase):
     def test_every_interpolation(self):
         # The scaling was only applied when the ionization rates were not interpolated in log.
-        for kind in ("slinear", "log_slinear", "log_quadratic"):
+        for kind in ("slinear", "log_slinear", "log_quadratic", "loglog_slinear"):
             with self.subTest(rate_interp_ion=kind):
                 plain = model(False, kind)
                 scaled = model(True, kind)
@@ -67,8 +67,8 @@ class ScaleFileIonizationTests(unittest.TestCase):
                                          suppliment_with_ecip=False, scale_file_ioniz=scale)
             return ion.data["cr_data"]["gcrs"]["0"]["scd"]
 
-        direct = model(True, use_recombination=False, use_recombination_three_body=False,
-                       suppliment_with_ecip=False)
+        direct = model(True, "loglog_slinear", use_recombination=False, use_recombination_three_body=False,
+                       suppliment_with_ecip=False)   # the default of both
         with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
             direct.solve_cr()
         self.assertFalse(np.allclose(scd(True), scd(False)))
