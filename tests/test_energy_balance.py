@@ -98,10 +98,24 @@ class EnergyBalanceTests(unittest.TestCase):
         balance = make_balance(10.0, 1e13)
         with warnings.catch_warnings():
             warnings.simplefilter("error", RuntimeWarning)
-            warnings.filterwarnings("ignore", "invalid value", RuntimeWarning)  # 0/0 for empty states
             balance.solve()
         self.assertTrue(balance.data["processed"]["success"])
         self.assertEqual(balance.data["processed"]["temperatures"].shape, (3, 3))
+
+    def test_charge_states_without_population(self):
+        # The temperatures were energies / (3/2 abundances), 0/0 with a RuntimeWarning for the
+        # empty charge states, e.g. every ion at t = 0.
+        balance = make_balance(10.0, 1e13)
+        balance.ion_balance.data["user"]["soln_times"] = np.array([0.0, 1e-3, 1e-1])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            balance.solve()
+        processed = balance.data["processed"]
+        empty = processed["abundances"] <= 0
+        self.assertTrue(empty[:, 0].any())
+        self.assertTrue(np.isnan(processed["temperatures"][empty]).all())
+        self.assertTrue(np.isfinite(processed["temperatures"][~empty]).all())
+        np.testing.assert_allclose(processed["temperatures"][0, 0], 1.0)  # init_temp
 
     def test_module_example(self):
         # The example run as __main__ called plasma_energy_transfer_frequency without

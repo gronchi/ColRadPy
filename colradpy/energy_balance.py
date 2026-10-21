@@ -98,7 +98,8 @@ class energy_balance(object):
         :param td_t: Solution times
         :type td_t: float array
 
-        populates the abundances, energies, and temperatures for all solution times
+        populates the abundances, energies, and temperatures for all solution times; the
+        temperature of a charge state without population is NaN
         """
         # Set default parameter values
         if(n0.size < 1):
@@ -162,7 +163,12 @@ class energy_balance(object):
         self.data["processed"]["time"] = np.asarray(td_t)[:num_times]
         self.data["processed"]["abundances"] = self.ion_balance.data["processed"]["pops_td"][:, :num_times, 0, 0]
         self.data["processed"]["energies"] = sol.y
-        self.data["processed"]["temperatures"] = self.data["processed"]["energies"] / (3/2 * self.data["processed"]["abundances"])
+        # charge states without population have no temperature (NaN)
+        abundances = self.data["processed"]["abundances"]
+        self.data["processed"]["temperatures"] = np.divide(
+            self.data["processed"]["energies"], 3/2 * abundances,
+            out=np.full(np.shape(abundances), np.nan), where=abundances > 0,
+        )
         self.data["processed"]["nfev"] = sol.nfev
         self.data["processed"]["status"] = sol.status
         self.data["processed"]["message"] = sol.message
