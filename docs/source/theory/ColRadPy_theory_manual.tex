@@ -1284,10 +1284,17 @@ interface because a downstream reader can silently drop or misidentify lines.
 
 \begin{implnote}[Export and reading]
 The ADF15 wrapper converts nm to Angstroms once; the writer declares every
-line--driver block and assigns distinct selectors. The ADF11 constructor
-collects coefficient files before filling missing QCD/XCD arrays, so their
-order does not require SCD first. Format edge cases, such as metastable
-resolved ADF11 files, still need validation against representative files.
+line--driver block and assigns distinct selectors, and writes the ion field
+(\texttt{C + 2}) and a source member name, without which the ADAS reader stops.
+The ADF11 constructor collects coefficient files before filling missing
+QCD/XCD arrays, so their order does not require SCD first. The readers follow
+the fixed fields of the ADAS specifications: ADF04 values are 8-character
+fields, so a negative value can follow the previous one without a space;
+ADF11 blocks are placed by their labels (IPRT, IGRD, JPRT, JGRD), whose order
+and meaning change with the class, including metastable resolved power files;
+each ADF13 block has its own grids and metastable. They were checked against
+the ADAS data collections: every ADF11 and ADF13 file, the condensed
+projection ADF17 files and a sample of ADF04 files from every collection.
 \end{implnote}
 
 The HDF5 dumping method uses an optional serialization dependency and can
