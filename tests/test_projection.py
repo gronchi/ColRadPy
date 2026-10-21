@@ -16,6 +16,7 @@ import warnings
 import numpy as np
 
 from colradpy import colradpy, ionization_balance
+from colradpy.colradpy_class import EV_PER_WAVENUMBER
 from colradpy.projection import _indirect, indirect_couplings
 from colradpy.read_adf17 import read_adf17
 from colradpy.read_adf18 import read_adf18
@@ -311,6 +312,38 @@ class ColradpyProjectionTests(unittest.TestCase):
                                    singlet["indirect"]["ionization"][0, 0, :] / DENS, rtol=1e-6)
         _, messages = project(TEMPS_K[1:] / 11604.5)
         self.assertEqual(messages, [])
+
+    def test_below_the_adf17_temperatures(self):
+        # Below the first adf17 temperature the couplings were held at their values there, so the
+        # ionization of Ne6+ at 1 eV was 6e21 times that of ADAS. They now follow power laws
+        # through the two lowest temperatures times the Boltzmann factors of their thresholds.
+        singlet = bundle(22, indirect_gain=1., indirect_ion=1., indirect_recomb=1.)
+        slope = -0.7                                                 #indirect recombination as T^-0.7
+        singlet["rhs"] += singlet["indirect"]["recombination"] * ((TEMPS_K / TEMPS_K[0])**slope - 1)[None, :, None]
+        first, second, t = TEMPS_K[0] / 11604.5, TEMPS_K[1] / 11604.5, 0.5
+        with warnings.catch_warnings(), contextlib.redirect_stdout(io.StringIO()):
+            warnings.simplefilter("ignore")
+            model = colradpy(BE0, np.array([0]), np.array([t, first]), DENS, projection=self.files(singlet, bundle(23)))
+            model.make_projection()
+        rates, atomic = model.data["rates"]["projection"], model.data["atomic"]
+        binding = (atomic["ion_pot"][0] - atomic["energy"]) * EV_PER_WAVENUMBER
+
+        def factor(energy, coupling_slope, limits):
+            # the reduced coupling (times exp(energy/T)) follows its slope, clipped to limits
+            reduced = np.clip(coupling_slope + energy * (1 / second - 1 / first) / np.log(second / first), *limits)
+            return (t / first)**reduced * np.exp(-energy * (1 / t - 1 / first))
+
+        #indirect ionization and transfers grow as T^0.5 (bundle); ionization of the ground needs its
+        #ionization energy, a transfer from 2s3s 1S (shell 3) the energy to reach shell 6
+        np.testing.assert_allclose(rates["ionization"][0, 0, 0], rates["ionization"][0, 0, 1] *
+                                   factor(binding[0], 0.5, (0., None)), rtol=1e-6)
+        g = {k: 2 * atomic["L"][k - 1] + 1 for k in LEVELS[1][5]}
+        shell_6 = sum(g[k] * binding[k - 1] for k in g) / sum(g.values()) * (5 / 6)**2
+        self.assertLess(factor(binding[4] - shell_6, 0.5, (0., None)), 0.5)
+        np.testing.assert_allclose(rates["couplings"][0, 4, 0], rates["couplings"][0, 4, 1] *
+                                   factor(binding[4] - shell_6, 0.5, (0., None)), rtol=1e-6)
+        np.testing.assert_allclose(rates["recombination"][0, 0, 0], rates["recombination"][0, 0, 1] *
+                                   (t / first)**slope, rtol=1e-6)
 
     def test_errors(self):
         flagged = write_adf17(os.path.join(self.dir, "c93.dat"), {1: bundle(14), 3: bundle(15)},

@@ -1227,8 +1227,8 @@ class colradpy():
         sorted_index[file_order] = np.arange(num_levels)
         records = [dict(r, level=int(sorted_index[r['level'] - 1]) + 1) if 1 <= r['level'] <= num_levels else r
                    for r in adf18['records']]
-        self.data['rates']['projection'] = project(adf17, dict(adf18, records=records), num_levels,
-                                                   len(self.data['atomic']['ion_pot']),
+        self.data['rates']['projection'] = project(adf17, dict(adf18, records=records),
+                                                   self.data['atomic']['energy'], self.data['atomic']['ion_pot'],
                                                    self.data['user']['temp_grid'], self.data['user']['dens_grid'],
                                                    pairs=self.data['user']['temp_dens_pair'])
 
