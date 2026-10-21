@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "370cc56157fd1e944175c14d12c158d01e6851e7",
+  "git_head": "645ce0cfbc323f7a9e4482e1959eec921bc3dc84",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -9,7 +9,7 @@
   "source_import": "colradpy\\__init__.py",
   "source_sha256": {
     "colradpy\\__init__.py": "5ed21e52614b13bc602d6a1340096708a1e6d14152b61e30141399038a6a4201",
-    "colradpy\\adf04_file_paths.py": "a0cb246cd60ab25d847a130bf1b0e23c72b9dae510a5c7758367f6f2673668ff",
+    "colradpy\\adf04_file_paths.py": "82eeb13f56c81c89d170e5d9812811981ee2ce8683827af070f465b5eb408e2c",
     "colradpy\\burgess_tully_rates.py": "3c7a65f9e36cc6e1864ff1587d081d94e372d7a376e8800fde41b8b1b5b4c4b8",
     "colradpy\\colradpy_class.py": "eef86e48d02316cc09748007593a697dcc63eee2f8c0a6e294d461cd6babfbb6",
     "colradpy\\colradpy_utility.py": "ec2faa8f789398c284226bc5c7e2ce78afef828a7189ff887b894c56b9a4d200",
@@ -19,7 +19,7 @@
     "colradpy\\ionization_balance_class.py": "148d3e37495ba2a5c271b44e927bbc00384834adecf9f3cb47291e571208772b",
     "colradpy\\nist_read.py": "9ae562f04023be028920c36900dd4c1829501e09f27cf8edb03550219e19a004",
     "colradpy\\nist_read_txt.py": "d21b8e32c85e4a3d5842932e2af61ee8f592c57f4199e1bdd29effa411b5367e",
-    "colradpy\\projection.py": "9e7ce41531348f9f8c49c938e55860ab8ff541c4feb0bdf5c4e217df03570f23",
+    "colradpy\\projection.py": "6dc786b245aa46e74e07b8f59a3fde76f3b116ef97d99bb87f1e841933339884",
     "colradpy\\r8necip.py": "cb180771317b4ce2b36e0c5186ed87b2b56088591ee6143e323d10c03cb5a476",
     "colradpy\\r8yip.py": "b1128ed23a9bf77974b48b85800b3bd4032a5ceccd0ea3c1ced3f483c564fb36",
     "colradpy\\read_adf04_py3_class.py": "6b74e149c310e95fef79813b8c08db3f1eef8d6fc209a736b66adee93453848f",

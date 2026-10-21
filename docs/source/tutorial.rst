@@ -997,6 +997,9 @@ The ADF18 file names the ADF04 file it maps (``DSNREF``) and its ADF17 file (``D
 files together (for H-like neon ADAS maps the n-resolved ``cop98#10_n#ne9.dat``). The indirect
 couplings are in ``ne1.data['rates']['projection']``. The ADF17 temperatures are scaled with the
 charge, and below the first one the projection keeps the values at that edge and gives a warning.
+At their lowest one to three temperatures most ADF17 files give negative indirect recombination,
+which shows that the condensed data are not reliable there; the projection leaves those
+temperatures out, also with a warning.
 In an ionization balance, ``projection`` takes
 one ``(adf17, adf18)`` pair, or ``None``, for each ADF04 file:
 

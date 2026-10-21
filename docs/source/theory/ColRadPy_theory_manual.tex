@@ -483,7 +483,7 @@ recombination passes through them: radiative capture into high $n$,
 dielectronic capture into Rydberg states, and the cascades that follow. At
 high density they also open stepwise ionization. For neon, the effective
 recombination into Ne$^{3+}$, Ne$^{4+}$ and Ne$^{5+}$ from the ADAS
-\code{cop98#10} ADF04 files alone is 0.17--0.69 of the ADAS coefficients made
+\texttt{cop98\#10} ADF04 files alone is 0.17--0.69 of the ADAS coefficients made
 from the same files with the high shells included (5--100\,eV), and the SCD of
 Ne$^{2+}$ at 1\,eV and $10^{14}$\,cm$^{-3}$ is 0.007 of the ADAS one.
 
@@ -524,8 +524,11 @@ subtracted. The indirect couplings through the high shells are then
  I^{\rm ind}=I'-D^{\rm I},\quad
  r^{\rm ind}=r'-d,\quad Q^{\rm ind}=Q'.
 \end{equation}
-Negative values, round-off of differences between nearly equal projected
-and direct values, are set to zero.
+Negative values up to $10^{-3}$ of the projected and direct values they are
+the difference of are round-off (the ADF17 files have 11 digits) and are set
+to zero. Larger ones show condensed data that are not reliable, as at the
+lowest temperatures of most ADF17 files; those temperatures are left out of
+that coupling of the parent and spin system.
 
 \subsection{Expansion over the levels}
 
@@ -559,8 +562,10 @@ group's own parent but keeps that loss on the diagonal; ColRadPy omits both,
 so the matrix conserves particles. The diagonal follows from the expanded
 gains and ionization rather than from $K_{nn}$; the two agree when the
 condensed data conserve particles. The condensed data are interpolated
-linearly in $\ln\Te$, $\ln\nelec$ and the logarithm of each coupling, and
-held at the edge of the ADF17 grid outside it. The fractional-parentage
+linearly in $\ln\Te$, $\ln\nelec$ and the logarithm of each coupling, without
+the temperatures where it is not reliable, and held at the edge of the ADF17
+grid outside it; both give a warning when the user temperatures need them.
+The fractional-parentage
 corrections of the lowest shell (switches \code{IEFPRE}, \code{IEFPRS}, set
 only by the superseded \code{cbnm93} files) are not implemented, and
 indirect charge-exchange recombination is not represented.
@@ -598,12 +603,19 @@ used here.
 The ADF17 grids are in reduced temperature, so their first temperature rises
 with the charge: 0.04\,eV for Ne$^{0}$, 1.1\,eV for Ne$^{4+}$ and 4.3\,eV for
 Ne$^{9+}$. Below it the projection holds the edge values, with a warning, and
-the coefficients of the highly charged ions there are not meaningful. Near
-the edge the condensed data may also be unreliable: \code{cbnm96#h_ne9ls}
-gives recombination of $+1.1\times10^{9}$ and $-1.1\times10^{9}$\,cm$^3$\,s$^{-1}$
-into $n=1$ and $n=2$ at 4.3\,eV, and with the negative value set to zero the
-ACD into Ne$^{9+}$ is 12 times that of ADAS at 10\,eV and far larger at 5\,eV.
-These ions are absent at such temperatures, so the balance is not affected.
+the coefficients of the highly charged ions there are not meaningful: the
+indirect ionization held at the edge gives an SCD orders of magnitude above
+that of ADAS. At the lowest grid temperatures the condensed data are not
+reliable either: \texttt{cbnm96\#h\_ne9ls} gives recombination of
+$+1.1\times10^{9}$ and $-1.1\times10^{9}$\,cm$^3$\,s$^{-1}$ into $n=1$ and
+$n=2$ at 4.3\,eV. Negative indirect values beyond round-off occur in the
+recombination of 125 of the 146 parents and spin systems of the ADAS
+\code{a17_p208} mappings, and in the parent coupling of 3, always at the
+lowest one to three temperatures. Without those temperatures the ACD into
+Ne$^{9+}$ is 0.70 of ADAS at 5\,eV and 0.90 at 10\,eV
+($10^{12}$\,cm$^{-3}$); keeping their positive values would give $10^{15}$
+and 12.6 times ADAS. These ions are absent at such temperatures, so the
+balance is not affected.
 The comparison is not part of the test suite: the ADAS files are not
 distributed with ColRadPy.
 
@@ -1486,7 +1498,7 @@ from implementation defects.
 \endfirsthead
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
-Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented; the ACD into Ne$^{+}$ differs from ADAS by 20--40\,\%; artifacts in the condensed data near the lowest ADF17 temperatures are not detected. & Section~\ref{sec:projection}\\
+Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented; the ACD into Ne$^{+}$ differs from ADAS by 20--40\,\%; below the first ADF17 temperature the couplings are held at their edge values, which makes the ionization of highly charged ions far too large there. & Section~\ref{sec:projection}\\
 Coupling assumptions & Intercombination and $|\Delta L|>1$ lines are kept unsplit rather than split with a coupling model. & Section~\ref{sec:spectra}\\
 \bottomrule
 \end{longtable}
