@@ -19,16 +19,21 @@ PARENT = re.compile(r'IPRT\s*=\s*(\d+)\s+TRMPRT\s*=\s*\(([^)]*)\)\s+SPNPRT\s*=\s
 SPIN_SYSTEM = re.compile(r'SPNSYS\s*=\s*([\d.]+)\s+NSHEL\s*=\s*(\d+)')
 SHELL = re.compile(r'N=\s*(\d+)')
 NUMBER = re.compile(r'[-+]?\d*\.?\d+(?:[DdEe][-+]?\d+)?')
+#a number with a three-digit exponent written without the D (9.0835111029+102)
+EXPONENT_WITHOUT_LETTER = re.compile(r'([-+]?\d*\.\d*)([-+]\d+)')
 
 
 def _float(text):
     """A Fortran number: D exponents, and three-digit exponents written without the D
-    (9.0835111029+102)."""
+    (9.0835111029+102), which float() does not read."""
     text = text.strip().replace('D', 'e').replace('d', 'e')
-    match = re.fullmatch(r'([-+]?\d*\.\d*)([-+]\d+)', text)
-    if(match):
-        text = match.group(1) + 'e' + match.group(2)
-    return float(text)
+    try:
+        return float(text)
+    except ValueError:
+        match = EXPONENT_WITHOUT_LETTER.fullmatch(text)
+        if(match is None):
+            raise
+        return float(match.group(1) + 'e' + match.group(2))
 
 
 def _value(line, start):
