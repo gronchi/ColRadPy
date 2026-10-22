@@ -3192,7 +3192,8 @@ class colradpy():
                     self.data['user']['temp_grid'], self.data['atomic']['metas'],
                     self.data['atomic']['ion_pot'],
                     user = self.data['user'], atomic = self.data['atomic'], num = num,
-                    num_recomb = num_recomb)
+                    num_recomb = num_recomb,
+                    pec_levels = None if pecs_split else processed['pec_levels'])
 
 
 

@@ -60,7 +60,7 @@ def _comment(text):
 
 def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                 charge_state, dens, temp, metas, ion_pot, user='', atomic='', num=8,
-                num_recomb=None):
+                num_recomb=None, pec_levels=None):
     """Write all or a subset of PECs to an adf15 formatted file.
 
     Standard adf15 units: wave in [A], PEC in [ph cm3 s-1], dens in [cm-3] and
@@ -115,6 +115,10 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
     :param num_recomb: number of recombination driver columns in pecs, len(ion_pot) by default
     :type num_recomb: int
 
+    :param pec_levels: upper and lower level of each line of pecs (all lines, as pecs), to list the
+                       blocks with their levels in the comments
+    :type pec_levels: int arr
+
     """
 
     pec_inds = np.atleast_1d(pec_inds)
@@ -124,6 +128,8 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                       'its readers will not read the ' + str(num) + ' written on each line')
     pecs = np.array(pecs, dtype=float)[pec_inds]#only take PECs requested, a copy
     wave = np.asarray(wave, dtype=float)[pec_inds]#only take wavelengths requested
+    if(pec_levels is not None):
+        pec_levels = np.asarray(pec_levels)[pec_inds]
 
     if(pecs.ndim != 4):
         raise ValueError('adf15 files need PECs on a temperature-density grid, '
@@ -151,6 +157,7 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                 ' PHOTON EMISSIVITY COEFFICIENTS/\n')
 
         isel = 0
+        blocks = []#ISEL, wavelength, type, INDM and line of each block, for the comments
         for j in range(0,num_drivers):#loop over driving populations
             #letting the user know if the PEC is excitation, recombination or charge exchange
             if(j <len(metas)):
@@ -165,6 +172,7 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
 
             for i in range(0, len(wave)):#loop over PECs
                 isel = isel + 1
+                blocks.append((isel, wave_fields[i], typ, indm, i))
                 #header information for the PEC, important things here are the wavelength
                 # number of temps and dens and metastable level
                 f.write(wave_fields[i] + ' A' + '{:4d}{:4d}'.format(len(dens), len(temp)) +
@@ -218,3 +226,13 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                         '  ' + str(atomic['L'][ii]) + \
                         '  ' + str(atomic['w'][ii]) + \
                         '  ' + str(atomic['energy'][ii])))
+
+        if(pec_levels is not None):
+            #the blocks with the upper and lower level of their line, numbered as in the level list
+            f.write('C\n')
+            f.write('C  ISEL  WAVELENGTH (A)  TYPE   INDM  UPPER  LOWER\n')
+            f.write('C  ----  --------------  -----  ----  -----  -----\n')
+            for isel, wave_field, typ, indm, i in blocks:
+                f.write('C' + '{:6d}'.format(isel) + '{:>16s}'.format(wave_field.strip()) + '  ' +
+                        '{:<5s}'.format(typ) + '{:>6s}'.format(indm) +
+                        '{:7d}{:7d}'.format(int(pec_levels[i][0]), int(pec_levels[i][1])) + '\n')

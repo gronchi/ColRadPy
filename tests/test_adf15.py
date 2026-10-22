@@ -124,6 +124,17 @@ class Adf15Tests(unittest.TestCase):
         self.assertIn("C  NUCLEAR CHARGE =  4", adf15.comments)
         self.assertIn("C  ION CHARGE +1  =  1", adf15.comments)
 
+        # The comments list each block with the levels of its line.
+        table = adf15.comments.index("C  ISEL  WAVELENGTH (A)  TYPE   INDM  UPPER  LOWER") + 2
+        rows = [line[1:].split() for line in adf15.comments[table:table + adf15.nsel]]
+        self.assertEqual(len(rows), adf15.nsel)
+        for row, block in zip(rows, adf15.blocks):
+            line = written[(block["isel"] - 1) % len(written)]
+            self.assertEqual(float(row[1]), block["wave"])
+            self.assertEqual(row[:1] + row[2:], [str(block["isel"]), block["type"], block["indm"],
+                                                str(processed["pec_levels"][line][0]),
+                                                str(processed["pec_levels"][line][1])])
+
     def test_selection_and_options_of_the_method(self):
         model = colradpy(str(INPUT / "cpb03_ls#be0.dat"), metas=np.array([0]),
                          temp_grid=np.array([10.]), electron_den=np.array([1e13]),
