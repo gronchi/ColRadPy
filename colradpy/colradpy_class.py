@@ -53,6 +53,7 @@ from colradpy.nist_read_txt import *
 from colradpy.solve_matrix_exponential import *
 from colradpy.colradpy_utility import *
 from colradpy.write_adf15 import *
+from colradpy.write_adf13 import MIN_SXB, write_adf13
 from colradpy.read_adf17 import read_adf17
 from colradpy.read_adf18 import read_adf18
 from colradpy.projection import project
@@ -1592,8 +1593,9 @@ class colradpy():
                 
     def solve_quasi_static(self):
         """This function will solve the CR matrix using the quasistatic approximation, after solving this problem
-           the generalized radiative coefficients GCRs will be calculated other claculated quanities such as 
-           PEC and SXB are also calculated. This function is analgous to ADAS208.
+           the generalized radiative coefficients GCRs will be calculated other claculated quanities such as
+           PECs are also calculated (write_sxb_adf13 makes S/XB from the SCD and PECs). This function is
+           analgous to ADAS208.
 
 
            Creates the ['processed'] dictionary which will hold all of the quanties that require the CR
@@ -3194,6 +3196,75 @@ class colradpy():
                     user = self.data['user'], atomic = self.data['atomic'], num = num,
                     num_recomb = num_recomb,
                     pec_levels = None if pecs_split else processed['pec_levels'])
+
+
+    def write_sxb_adf13(self,fil_name='', sxb_inds = None, num = 8, pecs_split=False):
+
+        """ This function writes the S/XB coefficients, the ionizations per emitted photon of
+            lines, to an adf13 file (ADAS appxa-13) with the write_adf13 function. For each
+            metastable m and line, as ADAS208 makes them,
+
+                S/XB = (sum over the parents p of SCD(m, p)) / PEC_exc(line, m),
+
+            the effective ionization of the metastable over the excitation PEC of the line from
+            it, with the same normalization of the populations. Wavelengths are written as by
+            write_pecs_adf15. By default every line with excitation emission and a wavelength
+            the file can hold is written. Where a line has no excitation emission its S/XB is
+            not defined, and it is written as 1e-74 with a warning. S/XB needs the ionization in
+            the calculation (use_ionization) and a temperature-density grid, not temp_dens_pair.
+
+        :param fil_name: name of the adf13 file
+        :type fil_name: str
+
+        :param sxb_inds: indices of the lines to write, by default those with excitation emission
+        :type sxb_inds: int arr
+
+        :param num: number of values on each line of the file
+        :type num: int
+
+        :param pecs_split: write the S/XB of the PECs split to j levels by split_pec_multiplet
+        :type pecs_split: bool
+
+        """
+
+        if(self.data['user']['temp_dens_pair']):
+            raise ValueError('adf13 files need S/XB on a temperature-density grid, '
+                             'they cannot be written with temp_dens_pair=True')
+        if(not self.data['user']['use_ionization']):
+            raise ValueError('S/XB needs the ionization of the ion, which use_ionization=False leaves out')
+
+        if(fil_name==''):#default file name if the user did not choose one
+            fil_name = 'adf13_colradpy_' + os.path.basename(self.data['user']['file_loc'])
+
+        if(pecs_split):
+            processed = self.data['processed']['split']
+        else:
+            processed = self.data['processed']
+        num_metas = len(self.data['atomic']['metas'])
+        excitation = processed['pecs'][:, :num_metas]                 #(lines, metastables, temp, dens)
+        ionization = self.data['processed']['scd'].sum(axis=1)        #(metastables, temp, dens)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            sxb = np.where(excitation > 0, ionization[None]/excitation, np.nan)
+        wave = processed['wave_air']*10#nm to A
+
+        if(sxb_inds is None):
+            sxb_inds = np.where((wave > 0) & (wave < MAX_WAVELENGTH) & (excitation > 0).any(axis=(1, 2, 3)))[0]
+            if(len(sxb_inds) < len(wave)):
+                warnings.warn(str(len(wave) - len(sxb_inds)) + ' of ' + str(len(wave)) + ' lines are not written '
+                              'to the adf13 file: they have no excitation emission, or their wavelengths are '
+                              'not positive, infinite or longer than ' + str(MAX_WAVELENGTH) + ' A')
+        undefined = np.isnan(sxb[np.atleast_1d(sxb_inds)])
+        if(undefined.any()):
+            warnings.warn(str(undefined.sum()) + ' S/XB values of the lines written are not defined, the lines '
+                          'have no excitation emission there, and are written as ' + str(MIN_SXB))
+        sxb = np.where(np.isnan(sxb), MIN_SXB, sxb)
+
+        write_adf13(fil_name, sxb_inds, wave, sxb, self.data['atomic']['element'],
+                    self.data['atomic']['charge_state'], self.data['user']['dens_grid'],
+                    self.data['user']['temp_grid'], self.data['atomic']['metas'],
+                    user = self.data['user'], atomic = self.data['atomic'], num = num,
+                    total = self.data['processed']['driving_populations_norm'] and num_metas == 1,
+                    sxb_levels = None if pecs_split else processed['pec_levels'])
 
 
 
