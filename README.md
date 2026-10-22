@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="logo.jpg" alt="ColRadPy" width="200">
+  <img src="logo.svg" alt="ColRadPy" width="200">
 </p>
-
-# ColRadPy
 
 ColRadPy is a collisional-radiative (CR) solver written in Python. It reads atomic data
 in the ADAS adf04 format, builds the CR matrix and solves it for level populations,
