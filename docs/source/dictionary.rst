@@ -405,5 +405,5 @@ Only with the projection option, see the theory manual. The first index of coupl
 +---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
 |         plt                     | time dependent total line power coefficient (W cm3)               | float arr      | (len(td_t), len(user_temp), len(user_dens))                                    |
 +---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
-|         scd                     | time dependent SCD                                                | float arr      | (len(metas_plus), len(td_t), len(user_temp), len(user_dens))                   |
+|         scd                     | time dependent SCD, sum over the levels of S n (cm3 s-1)          | float arr      | (len(metas_plus), len(td_t), len(user_temp), len(user_dens))                   |
 +---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+

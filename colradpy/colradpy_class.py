@@ -2120,10 +2120,18 @@ class colradpy():
         self.data['processed']['td']['plt'] =  np.sum(self.data['processed']['td']['pls'],axis=0)#sum up all contributions
         
 
-        #just the time dependent version of the SCD coefficient,calculated the same as SS version
+        #just the time dependent version of the SCD coefficient, calculated the same as SS version
+        #from the ionization in the CR matrix (with that through the high n-shells of the projection)
         #just remember not to include the population from the + stage
-        self.data['processed']['td']['scd'] =  np.einsum('ipk,itkl->ptkl',self.data['rates']['ioniz']['ionization'],
-                            self.data['processed']['td']['td_pop'][0:len(self.data['rates']['ioniz']['ionization']),:,:,:])
+        num_levels = len(self.data['atomic']['energy'])
+        td_pop = self.data['processed']['td']['td_pop'][0:num_levels]
+        num_parents = len(self.data['atomic']['ion_pot'])
+        if(not self.data['user']['use_ionization']):
+            self.data['processed']['td']['scd'] = np.zeros((num_parents,) + td_pop.shape[1:])
+        elif(self.data['user']['temp_dens_pair']):
+            self.data['processed']['td']['scd'] = np.einsum('ipk,itk->ptk', self._ionization_coefficients(), td_pop)
+        else:
+            self.data['processed']['td']['scd'] = np.einsum('ipkl,itkl->ptkl', self._ionization_coefficients(), td_pop)
 
 
     def split_pec_multiplet(self):

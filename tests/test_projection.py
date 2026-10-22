@@ -263,6 +263,29 @@ class ColradpyProjectionTests(unittest.TestCase):
                                      projection=[projection, None])
         np.testing.assert_allclose(ion.data["cr_data"]["gcrs"]["0"]["acd"], grid.data["processed"]["acd"], rtol=1e-9)
 
+    def test_time_dependent_scd(self):
+        # The time-dependent SCD sums the ionization of the CR matrix, with the projection's, over the
+        # populations, on a grid and with temperature-density pairs.
+        projection = self.files(bundle(30, indirect_ion=1.), bundle(31, indirect_ion=1.))
+        temps = TEMPS_K / 11604.5
+        times = np.array([1e-8, 1e-6, 1e-3])
+        for pairs in (False, True):
+            model = solve(projection, temps=temps, dens=DENS, temp_dens_pair=pairs)
+            levels = len(model.data["atomic"]["energy"])
+            n0 = np.zeros(len(model.data["cr_matrix"]["cr"]))
+            n0[0] = 1.
+            model.data["user"]["td_n0"], model.data["user"]["td_t"] = n0, times
+            model.solve_time_dependent()
+            pops = model.data["processed"]["td"]["td_pop"][:levels]
+            ionization = model.data["rates"]["ioniz"]["ionization"]
+            projected = model.data["rates"]["projection"]["ionization"]
+            if pairs:
+                expected = np.einsum("ipk,itk->ptk", ionization + projected, pops)
+            else:
+                expected = np.einsum("ipkl,itkl->ptkl", ionization[..., None] + projected, pops)
+            np.testing.assert_allclose(model.data["processed"]["td"]["scd"], expected, rtol=1e-12)
+            self.assertGreater(projected.max(), 0.)
+
     def test_level_order(self):
         # adf18 records number the levels as the adf04 file; levels out of energy order are sorted
         # by the reader, and the records follow them.
