@@ -1014,6 +1014,56 @@ within 0.06 at 1e12 cm-3, 0.07 at 1e13 cm-3 and 0.16 at 1e14 cm-3, where without
 they differ by up to 0.83.
 
 
+Atomic data from the Flexible Atomic Code
+=========================================
+``colradpy.read_fac`` reads the atomic data of the Flexible Atomic Code (FAC,
+https://github.com/flexible-atomic-code/fac) into the dictionary that ``read_adf04`` makes, which
+``colradpy`` takes as its file. FAC itself is not needed to read them. The ion's files share a
+prefix: ``Ar01a.en`` (levels), ``Ar01a.tr`` (radiative rates), ``Ar01a.ce`` (excitation),
+``Ar01a.rr`` (radiative recombination), ``Ar01a.ai`` (autoionization and dielectronic capture) and
+``Ar01a.ci`` (ionization), the ASCII tables that FAC's ``PrintTable(binary, ascii, 1)`` writes with
+energies in eV. The levels are those with ``nele`` electrons; the levels of the next ion, which
+FAC must also compute, are the parents.
+
+.. code-block:: python
+
+   import numpy as np
+   from colradpy import colradpy
+   from colradpy.read_fac import read_fac
+
+   temps = np.logspace(1, 4.9, 40)          # eV
+   dens = np.array([1e13, 1e14])           # cm-3
+   ar16 = colradpy(read_fac('Ar02', 2, temps), np.array([0]), temps, dens)
+   ar16.solve_cr()
+
+``read_fac`` averages FAC's cross-sections over a thermal electron distribution at the temperatures
+it is given, which should be those of the model (ColRadPy interpolates the rates otherwise). The
+distribution is Maxwell-Juttner and the speeds are relativistic, which lowers the rates at tens of
+keV (by 17% at 85 keV for the excitation of Ar\ :sup:`17+` Lyman-alpha); ``relativistic=False``
+takes Maxwell-Boltzmann. Outside the energies FAC tabulates, the cross-sections follow FAC's own
+asymptotic forms. ``eedf='Maxwellian_mr'`` takes instead the rate coefficients of
+``pfac.fac.MaxwellRate``, from ``Ar02ce.mr``, ``Ar02rr.mr`` and ``Ar02ci.mr``, on their
+temperatures. ``processes`` chooses the files (``'incl_all'`` reads all those found).
+
+FAC's levels are jj-coupled: their J is exact (``['atomic']['w']``) and their names are in
+``['atomic']['fac_name']``, but they have no LS term, so their L and S are -1. Multiplet splitting
+and NIST energy shifts, which need LS terms, do not apply to them. The weights of the parents in
+three-body recombination come from their J.
+
+ADF04 data have no autoionization, so ``read_fac`` folds it into the other rates. Each flow into an
+autoionizing level (dielectronic capture, excitation and radiative cascades) is multiplied by the
+fraction that stabilizes radiatively, and the excitation that autoionizes is ionization of the
+lower level (excitation-autoionization). The populations, satellite lines, dielectronic
+recombination and ionization are then those of a model with the autoionization in its CR matrix,
+as long as collisions from the autoionizing levels are slow beside their decays (below about
+1e20 cm-3 for highly charged ions). The capture that autoionizes to another parent, a process of
+the next ion, is left out. The autoionization rates and the stabilizing fractions are in
+``['input_file']``. The two-photon decays of the H-like 2s and He-like 1s2s 1S0 levels add to
+their A-values, so their PEC includes the two-photon continuum (``['rates']['two_photon']``).
+``colradpy.read_fac.fac_cross_sections`` gives the cross-sections ColRadPy integrates, for
+comparison with FAC's tables.
+
+
 Ionization Balance
 ====================
 An ionization balance can be used to get the relative abundances of charge states in a given species.

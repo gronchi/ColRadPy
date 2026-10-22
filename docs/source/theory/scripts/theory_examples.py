@@ -168,6 +168,8 @@ def examples():
             "solve", "plasma_energy_transfer_frequency", "neutral_energy_transfer_frequency",
             "coulomb_logarithm", "debye_length",
         ],
+        "colradpy/read_fac.py": ["read_fac", "_fold_autoionization", "fac_cross_sections"],
+        "colradpy/convolve_eedf.py": ["rate_coefficients", "resonance_rate_coefficients", "maxwellian"],
     }
     rows = [r"\begingroup\footnotesize",
             r"\begin{longtable}{>{\raggedright\arraybackslash}p{6.3cm}>{\raggedright\arraybackslash}p{5.9cm}r}",

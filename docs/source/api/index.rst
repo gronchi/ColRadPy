@@ -24,7 +24,7 @@ The classes that solve the collisional-radiative and balance problems.
 Atomic data files
 -----------------
 
-Readers and writers of ADAS and NIST data.
+Readers and writers of ADAS, NIST and Flexible Atomic Code (FAC) data.
 
 .. toctree::
    :maxdepth: 1
@@ -34,6 +34,7 @@ Readers and writers of ADAS and NIST data.
    read_adf13
    read_adf17
    read_adf18
+   read_fac
    write_adf15
    nist_read_txt
    nist_read
@@ -43,12 +44,14 @@ Readers and writers of ADAS and NIST data.
 Rate coefficients
 -----------------
 
-Extrapolation of excitation rates, ECIP ionization rates and the projection of the high n-shells.
+Extrapolation of excitation rates, ECIP ionization rates, the projection of the high n-shells and the
+Maxwellian averages of cross-sections.
 
 .. toctree::
    :maxdepth: 1
 
    burgess_tully_rates
+   convolve_eedf
    ecip_rates
    projection
    r8necip

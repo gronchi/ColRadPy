@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "cc0000459132f317c6ab4f994a0e76397a114a58",
+  "git_head": "bdc2191d27f88abc270c708333e4d4d5ae96ec9d",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -11,9 +11,10 @@
     "colradpy\\__init__.py": "5ed21e52614b13bc602d6a1340096708a1e6d14152b61e30141399038a6a4201",
     "colradpy\\adf04_file_paths.py": "82eeb13f56c81c89d170e5d9812811981ee2ce8683827af070f465b5eb408e2c",
     "colradpy\\burgess_tully_rates.py": "3c7a65f9e36cc6e1864ff1587d081d94e372d7a376e8800fde41b8b1b5b4c4b8",
-    "colradpy\\colradpy_class.py": "db2d6a018c7fb9d251a78b1fa78ae0aba6bef3ce7be8f3fa1fbc964762ff126a",
+    "colradpy\\colradpy_class.py": "a1765e41efcb80af063381a854cdfc915070155fe98522a7d55757446722c2b4",
     "colradpy\\colradpy_utility.py": "ec2faa8f789398c284226bc5c7e2ce78afef828a7189ff887b894c56b9a4d200",
     "colradpy\\convert_eissner.py": "514325a62db0e13e533492bbc02cb6a4ca807ae2810cd2c9bc02bb6f2aa1b503",
+    "colradpy\\convolve_eedf.py": "af961883b6c397992c7acfda376afc29774e1761363e34b7fbb34b20922d9ef7",
     "colradpy\\ecip_rates.py": "a3dba0fbbb707f27afb014d794e059337daf065659f74a51b5a8108183b537f1",
     "colradpy\\energy_balance.py": "57ffc22dd742ba87ff6a528a03d51692a718638df41992e91b4c13c891209407",
     "colradpy\\ionization_balance_class.py": "148d3e37495ba2a5c271b44e927bbc00384834adecf9f3cb47291e571208772b",
@@ -27,9 +28,10 @@
     "colradpy\\read_adf13.py": "fa4660ddaeedd47460f9d0fbc98cb812ab66c749a6e8864c844a2a71f0791242",
     "colradpy\\read_adf17.py": "9e9cd3d6034e0e8f17727912a8b823016bfa7de50dabe042aeb6e313eece82ca",
     "colradpy\\read_adf18.py": "34c9a67140dda0faecdf3651b3f29b1ab377a79ac2e683bbcd3ed553c79529e7",
+    "colradpy\\read_fac.py": "3409f0a2fbdc35b01ca8818e47f6be65d596f896cbf7e09da32d6e3d684d65e0",
     "colradpy\\saha_boltzmann_lte_pops.py": "2cb47c53cf733d6f6f35f9f5c504f8237629391ee8ec552963ec2e9a05ca69ce",
     "colradpy\\solve_matrix_exponential.py": "7e2ac430e41f8c535c955903d64cbfca8fe206816416f73dd2110e4acdd18412",
     "colradpy\\split_multiplet.py": "03017da8a7f00ce94e9bca567a98fe1b11f41e29be46245027103ccec2ac8a79",
-    "colradpy\\write_adf15.py": "8b1d87948db673c7d791de9f6c67ce96507027f8653365cb1349993fc26cecdd"
+    "colradpy\\write_adf15.py": "464e328296748fc444006571ec57be4eb7002e3ab074d7ccad48d6ef6f473ce2"
   }
 }

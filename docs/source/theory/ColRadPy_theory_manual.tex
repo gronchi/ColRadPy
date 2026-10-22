@@ -646,6 +646,113 @@ balance is not affected.
 The comparison is not part of the test suite: the ADAS files are not
 distributed with ColRadPy.
 
+\section{Atomic data from the Flexible Atomic Code}\label{sec:fac}
+
+The Flexible Atomic Code (FAC)~\cite{fac} computes level energies, radiative
+rates and cross-sections of electron collisions in a $jj$-coupled basis.
+\routine{read_fac} reads the ASCII tables that its \code{PrintTable} writes
+with energies in eV into the ADF04 dictionary of Section~\ref{sec:rates}, so
+the matrix of Section~\ref{sec:matrix} is built as for an ADF04 file and the
+solver is unchanged. The levels of the ion are sorted by energy; those of the
+next ion are the parents, with $I_p$ measured from the ion's ground. FAC levels
+have an exact $J$ but no LS term: their $L$ and $S$ are $-1$, and the parent
+weights of Eq.~\eqref{eq:saha} are $2J_p+1$.
+
+\subsection{Maxwellian averages from each threshold}
+
+A process with threshold $E_0$ has the rate coefficient
+\begin{equation}\label{eq:fac-rate}
+ q(T)=\int_{E_0}^{\infty}\sigma(E)\,v(E)\,f(E,T)\,\dd E
+     =e^{-E_0/T}\,T\int_0^\infty\sigma(E)\,v(E)\,\tilde f(E,T)\,e^{-u}\,\dd u,
+ \qquad E=E_0+uT,
+\end{equation}
+with $\tilde f=f\,e^{E/T}$. The distribution is Maxwell--J\"uttner,
+\begin{equation}
+ f(E,T)=\frac{\gamma^2\beta\,e^{-\gamma/\theta}}{\theta K_2(1/\theta)\,mc^2},
+ \qquad \gamma=1+\frac{E}{mc^2},\quad \theta=\frac{T}{mc^2},\quad v=c\beta,
+\end{equation}
+which is $2\sqrt{E/\pi}\,T^{-3/2}e^{-E/T}$ for $T\ll mc^2$. The last integral
+of Eq.~\eqref{eq:fac-rate} is taken with 64 Gauss--Laguerre nodes, so the
+nodes start at the threshold and follow the Boltzmann factor whatever $E_0/T$,
+and $\tilde f$ uses the exponentially scaled Bessel function, so nothing
+underflows. The reduced coefficient $q\,e^{E_0/T}$ gives the effective
+collision strength $\Upsilon=q\,e^{\Delta E/T}g_\ell\sqrt{T/13.6058}/
+2.1716\times10^{-8}$, with the constants of Eq.~\eqref{eq:qdown} so that the
+matrix holds the integrated rate, and the reduced ionization rate of
+Eq.~\eqref{eq:reduced-ion}. The cross-sections follow from FAC's tables as FAC
+defines them, with $k^2=2E(1+\alpha^2E/2)$ and $E$ in hartree:
+$\sigma=\pi a_0^2\Omega/(g_\ell k^2)$ for excitation, $a_0^2\Omega/(g k^2)$ for
+ionization, and, from the bound-free oscillator strength density $S$,
+$\sigma_{\rm RR}=2\pi\alpha S a_0^2(\alpha E_\gamma)^2/
+[2\varepsilon(1+\alpha^2\varepsilon/2)g_p]$ for radiative recombination of a
+free electron of energy $\varepsilon$ with a photon $E_\gamma$.
+
+Between the tabulated energies $\Omega$ and $S$ are interpolated log-log.
+Below the first one $\Omega$ of excitation and $S$ are held, as they are finite
+at threshold, and $\Omega$ of ionization follows FAC's fit. Above the last,
+excitation joins FAC's Bethe--Born limit $\Omega=b\ln(E/E_0)+c$ at the energy
+FAC computed it for (FAC's manual advises against its direct values at hundreds
+of thresholds), and a transition without a Born limit (exchange) follows the
+power law of its last two values, at least as steep as $E^{-1}$, as FAC does;
+ionization follows FAC's fit
+$\Omega=p_0\ln x+p_1y^2+p_2y/x+p_3y/x^2$ ($x=E/I$, $y=1-1/x$), and
+recombination FAC's fit of $S$, valid at high energies, with the angular
+momentum of the captured electron, both scaled to the last tabulated value.
+
+\subsection{Autoionization and dielectronic recombination}
+
+Dielectronic capture into an autoionizing level $d$ from parent $p$ has the
+strength $S_{\rm DC}$ (cm$^2$\,eV) at the resonance energy $E_r=E_d-I_p$, so
+$\alpha_{\rm DC}=S_{\rm DC}\,v(E_r)\,f(E_r,T)$, which for a Maxwellian is the
+detailed balance of the autoionization rate $A^a_{dp}$,
+$\alpha_{\rm DC}=\frac{g_d}{2g_p}\bigl(h^2/2\pi mT\bigr)^{3/2}A^a_{dp}e^{-E_r/T}$.
+ADF04 data have no autoionization channel, so \routine{_fold_autoionization}
+folds it into the other rates. With $R_{d\ell}$ the radiative rates of $d$,
+$R_d=\sum_\ell R_{d\ell}$ and $A^a_d=\sum_pA^a_{dp}$, from the lowest
+autoionizing level up,
+\begin{equation}
+ b_d=\frac{\sum_\ell R_{d\ell}\,b_\ell}{R_d+A^a_d},\qquad
+ P_{dp}=\frac{A^a_{dp}+\sum_\ell R_{d\ell}P_{\ell p}}{R_d+A^a_d},
+\end{equation}
+with $b=1$ and $P=0$ for levels that do not autoionize: $b_d$ is the fraction
+of the population of $d$ that ends in stable levels and $P_{dp}$ the fraction
+that reaches parent $p$. Every flow into $d$ (capture, excitation and cascades,
+$R_{d'd}\to b_dR_{d'd}$) is multiplied by $b_d$, and the excitation of a stable
+level $\ell$ into $d$ that autoionizes becomes its ionization
+(excitation-autoionization),
+\begin{equation}
+ \widetilde S_{\ell p}\mathrel{+}=\tilde q_{\ell d}\,P_{dp}\,
+ e^{-(E_d-I_p)/T},
+\end{equation}
+with $\tilde q_{\ell d}$ the reduced excitation rate. The population of $d$
+is then the inflow over $R_d+A^a_d$, as with the autoionization in the matrix,
+while collisions from $d$ are slow beside its decays (below about
+$10^{20}$\,cm$^{-3}$ for highly charged ions), and so are its lines, the
+dielectronic recombination and the ionization. Left out are the capture that
+autoionizes to another parent, a process of the next ion; the emission of
+lines between two autoionizing levels beyond $b$ of the lower; and
+autoionizing levels without radiative decays, which never stabilize. The
+two-photon decays of H-like $2s$ and He-like $1s2s\,{}^1S_0$~\cite{drake}
+add to their A-values.
+
+\begin{implnote}[Checks]
+The tests write FAC tables for a toy ion and check: a constant $\Omega$ gives
+$\Upsilon=\Omega$; $\Omega=b\ln x+c$ gives $c+b\,e^yE_1(y)$ with $y=E_0/T$;
+a constant $S$ gives the closed-form radiative recombination; capture follows
+the detailed balance above; and the folded rates give the populations, SCD and
+ACD of the model with the autoionization in its matrix to $10^{-14}$. On FAC's
+own reference tables the cross-sections made from $\Omega$ and $S$ are those
+FAC prints to $8\times10^{-5}$. The average of Mewe's Gaunt-factor
+cross-section~\cite{mewe} for Ar$^{17+}$ $1s$--$2p_{1/2}$ matches its closed form to
+$5\times10^{-5}$ from 10\,eV to 85\,keV, and the relativistic average is lower
+by 2\% at 10\,keV and 17\% at 85\,keV.
+\end{implnote}
+
+The averages assume a thermal distribution: ColRadPy derives de-excitation and
+three-body recombination by detailed balance, which holds for no other.
+Magnetic-sublevel tables are not read, and FAC parents have no LS term to
+link the stages of an ionization balance.
+
 \section{Quasistatic elimination of excited levels}\label{sec:quasistatic}
 
 Partition the population vector into retained states $N_r$ and excited states
@@ -1567,6 +1674,16 @@ coefficients}.
 \bibitem{source} ColRadPy development branch working tree used for this
 manual. The recorded HEAD, source-file hashes and runtime versions are in
 \code{docs/source/theory/figures/provenance.json}.
+\bibitem{fac} M. F. Gu, ``The flexible atomic code,'' \emph{Canadian Journal
+of Physics} \textbf{86}, 675 (2008).
+\href{https://doi.org/10.1139/P07-197}{doi:10.1139/P07-197};
+\url{https://github.com/flexible-atomic-code/fac}.
+\bibitem{mewe} R. Mewe, ``Interpolation formulae for the electron impact
+excitation of ions in the H-, He-, Li-, and Ne-sequences,'' \emph{Astronomy
+and Astrophysics} \textbf{20}, 215 (1972).
+\bibitem{drake} G. W. F. Drake, ``Spontaneous two-photon decay rates in
+hydrogenlike and heliumlike ions,'' \emph{Physical Review A} \textbf{34}, 2871
+(1986).
 \bibitem{numpy24} NumPy developers, \emph{NumPy 2.4.0 release notes},
 expired deprecations and removed APIs.
 \url{https://numpy.org/doc/2.4/release/2.4.0-notes.html}.
