@@ -1086,9 +1086,12 @@ class colradpy():
             self.make_ioniz_from_reduced_ionizrates()
             if(self.data['user']['suppliment_with_ecip']):
                 self.suppliment_with_ecip()
-        #statistical weight of each parent
-        self.data['rates']['recomb']['w_ion'] = np.array([parent_statistical_weight(term)
-                                                          for term in self.data['atomic']['ion_term']])
+        #statistical weight of each parent, from its J when the data give it (FAC) or else its term
+        if('ion_w' in self.data['atomic']):
+            self.data['rates']['recomb']['w_ion'] = 2*np.asarray(self.data['atomic']['ion_w'], dtype=float) + 1
+        else:
+            self.data['rates']['recomb']['w_ion'] = np.array([parent_statistical_weight(term)
+                                                              for term in self.data['atomic']['ion_term']])
         #reduced ionization exp(dE/kT)*S, so the Boltzmann factors of detailed balance cancel
         #without the overflow and underflow of exp(dE/kT) and S at low temperature
         if('ionization_reduced' in self.data['rates']['ioniz']):

@@ -111,6 +111,12 @@ class ThreeBodyTests(unittest.TestCase):
                 model.make_three_body_recombination()
                 np.testing.assert_allclose(model.data["rates"]["recomb"]["recomb_three_body"],
                                            ls * 2 / weight)
+        # Data that give the parents' J (FAC, whose jj-coupled levels have no LS term) take the
+        # weights 2J + 1 from it, whatever the term.
+        model.data["atomic"]["ion_term"] = np.array(["1s+1(1)1"])
+        model.data["atomic"]["ion_w"] = np.array([1.5])
+        model.make_three_body_recombination()
+        np.testing.assert_allclose(model.data["rates"]["recomb"]["recomb_three_body"], ls * 2 / 4)
 
     def test_low_temperature_is_not_zero(self):
         # dE/kT is 1500 to 15000 for the Be2+ ground state, where exp(dE/kT) * S
