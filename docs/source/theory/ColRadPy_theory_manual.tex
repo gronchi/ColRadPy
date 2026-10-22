@@ -1013,12 +1013,15 @@ simple one-ionization-per-entering-particle interpretation. A zero excitation
 PEC does not define a finite ratio.
 
 \begin{implnote}[Computing S/XB from development output]
-Use a parent sum of \code{scd} and the matching excitation column of
-\code{pecs}, with consistent normalization. Despite its docstring, the
-quasistatic routine does not store a computed SXB array. The repository has a
-separate \routine{read_adf13} reader for tabulated SXB data. The paper's
-compact coefficient notation should not be used to mix a per-driver photon
-rate in s$^{-1}$ with an ionization coefficient in cm$^3$/s.
+The quasistatic routine does not store an SXB array; \routine{write_sxb_adf13}
+forms Eq.~\eqref{eq:sxb} for each retained driver from the parent sum of
+\code{scd} and the matching excitation column of \code{pecs}, with the same
+normalization, and writes it to an ADF13 file~\cite{adf13}, as ADAS208 does.
+A line without excitation emission has no finite ratio and is written as the
+format's floor $10^{-74}$ with a warning. The writer needs ionization in the
+calculation and a temperature--density grid. The paper's compact coefficient
+notation should not be used to mix a per-driver photon rate in s$^{-1}$ with
+an ionization coefficient in cm$^3$/s.
 \end{implnote}
 
 \section{Generalized collisional radiative coefficients}\label{sec:gcr}
@@ -1582,8 +1585,9 @@ charge-state coefficients on temperature and density grids. The ADF11 reader
 stores logarithmic data and the ionization-balance path interpolates the
 logged grids and coefficients before converting to physical values.
 File naming and block interpretation identify coefficient families.
-The separate ADF13 reader loads tabulated SXB ratios; it does not add a new
-SXB computation to the quasistatic solution.
+ADF13 holds S/XB ratios of selected lines in blocks like those of ADF15,
+each with its driver~\cite{adf13}; ColRadPy reads them and writes its own
+from the SCD and excitation PECs (Section~\ref{sec:sxb}).
 
 ADF15 records line photon emission coefficients with wavelength and driver
 identifiers. Its wavelength convention is Angstroms~\cite{adf15}, so a
@@ -1596,6 +1600,9 @@ interface because a downstream reader can silently drop or misidentify lines.
 The ADF15 wrapper converts nm to Angstroms once; the writer declares every
 line--driver block and assigns distinct selectors, and writes the ion field
 (\texttt{C + 2}) and a source member name, without which the ADAS reader stops.
+The ADF13 writer uses the same fields, with \texttt{INDM = T} for populations
+normalized to the whole ion and the driver index otherwise; the ADAS reader
+keeps three digits of the selector, so at most 999 blocks are read.
 The ADF11 constructor collects coefficient files before filling missing
 QCD/XCD arrays, so their order does not require SCD first. The readers follow
 the fixed fields of the ADAS specifications: ADF04 values are 8-character
@@ -1668,6 +1675,9 @@ generalized collisional radiative definitions and separate emission drivers.
 \bibitem{adf04} ADAS User Manual, Appendix A, \emph{ADF04: resolved specific
 ion data collections}.
 \url{https://www.adas.ac.uk/man/appxa-04.pdf}.
+\bibitem{adf13} ADAS User Manual, Appendix A, \emph{ADF13: ionisation per
+photon coefficients}.
+\url{https://www.adas.ac.uk/man/appxa-13.pdf}.
 \bibitem{adf15} ADAS User Manual, Appendix A, \emph{ADF15: photon emissivity
 coefficients}.
 \url{https://www.adas.ac.uk/man/appxa-15.pdf}.

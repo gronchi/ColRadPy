@@ -267,6 +267,7 @@ The theorical spectrum can be plotted describe in `Plotting Theorical Spectrum (
 
 The line ratios versus temperature and density is describe in `Plotting PEC ratios`_
 
+The PECs and S/XB coefficients can be written to ADAS files as described in `Writing adf15 and adf13 files`_
 
 
 Plotting Theorical Spectrum (PEC sticks)
@@ -424,9 +425,27 @@ The inputs are the indexes of pec1, pec2, array of densities and array of metast
                 plt.legend(loc='best')
 
 
-            
+Writing adf15 and adf13 files
+------------------------------
+The PECs can be written to an adf15 file, and the S/XB coefficients (ionizations per emitted
+photon) to an adf13 file, in the ADAS formats that ADAS and other codes read.
+For each metastable and line the S/XB is the effective ionization of the metastable, summed over
+the parents, over the excitation PEC of the line from it, as ADAS208 makes it.
+S/XB needs ionization in the calculation and a temperature-density grid.
+Wavelengths are written in Angstroms, and the comments list each block with the upper and lower
+level of its line.
 
+.. code-block:: python
+   :linenos:
 
+      be.write_pecs_adf15('be0.adf15')
+      be.write_sxb_adf13('be0.adf13')
+
+By default every line is written to the adf15 file and every line with excitation emission to the
+adf13 file; ``pec_inds`` and ``sxb_inds`` select lines by their index in ``be.data['processed']['wave_air']``.
+The ADAS reader of adf13 files keeps three digits of the block index, so select at most 999 lines and
+metastables for files that ADAS will read.
+An adf13 file is read back with ``colradpy.read_adf13``.
 
 
 Post processing analysis advanced

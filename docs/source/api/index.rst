@@ -35,6 +35,7 @@ Readers and writers of ADAS, NIST and Flexible Atomic Code (FAC) data.
    read_adf17
    read_adf18
    read_fac
+   write_adf13
    write_adf15
    nist_read_txt
    nist_read
