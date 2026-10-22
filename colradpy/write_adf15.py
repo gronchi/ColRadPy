@@ -58,6 +58,66 @@ def _comment(text):
     return 'C  ' + ' '.join(str(text).split()) + '\n'
 
 
+def _ion(element_sym, charge_state):
+    """The ion as ADAS writes it in the first line of adf13 and adf15 files, a2,'+',i2 (C + 2,
+    AR+16): the ADAS readers need the + (or a :) and stop otherwise."""
+    return '{:<2s}+{:2d}'.format(str(element_sym).strip(), int(charge_state))
+
+
+def _write_information(f, title, charge_state, user, atomic):
+    """The comments after the data blocks: the ion, the source file, the user settings and the
+    level list (the 'user' and 'atomic' dictionaries of colradpy)."""
+    f.write('C-----------------------------------------------------------------------\n')
+    f.write('C\n')
+    f.write('C  ' + title + '\n')
+    f.write('C\n')
+    f.write('C\n')
+    f.write('C  INFORMATION\n')
+    f.write('C  -----------\n')
+    f.write('C\n')
+    f.write('C   ***MADE WITH ColRadPy***\n')
+    if(type(atomic) == dict and 'iz0' in atomic):
+        f.write('C  NUCLEAR CHARGE =  ' + str(atomic['iz0']) + '\n')
+    f.write('C  ION CHARGE +1  =  ' + str(charge_state + 1) + '\n')
+    f.write('C\n')
+    if(type(user) == dict and 'file_loc' in user):
+        f.write(_comment('SPECIFIC ION FILE  : ' + str(user['file_loc'])))
+    f.write('C\n')
+    f.write('C\n')
+    if(type(user) == dict):
+        for i in user.keys():
+            f.write(_comment(i + ' ' + str(user[i])))
+
+    if(type(atomic) == dict):
+        f.write('C  ' + 'lvl' +'  '+ 'config' +
+                    '  ' + 'S'+
+                    '  ' + 'L'+
+                    '  ' + 'w'+
+                    '  ' + 'eng\n')
+
+        f.write('C-----------------------------------------------------------------------\n')
+        f.write('C\n')
+        for ii in range(0,len(atomic['config'])):
+
+            f.write(_comment(str(ii) +'  '+ str(atomic['config'][ii])+\
+                    '  ' + str(atomic['S'][ii]) + \
+                    '  ' + str(atomic['L'][ii]) + \
+                    '  ' + str(atomic['w'][ii]) + \
+                    '  ' + str(atomic['energy'][ii])))
+
+
+def _write_block_table(f, blocks, levels):
+    """The blocks (ISEL, wavelength field, type, INDM, line) with the upper and lower level of
+    their line, numbered as in the level list."""
+    f.write('C\n')
+    f.write('C  ISEL  WAVELENGTH (A)  TYPE   INDM  UPPER  LOWER\n')
+    f.write('C  ----  --------------  -----  ----  -----  -----\n')
+    for isel, wave_field, typ, indm, i in blocks:
+        f.write('C' + '{:6d}'.format(isel) + '{:>16s}'.format(wave_field.strip()) + '  ' +
+                '{:<5s}'.format(typ) + '{:>6s}'.format(indm) +
+                '{:7d}{:7d}'.format(int(levels[i][0]), int(levels[i][1])) + '\n')
+
+
 def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                 charge_state, dens, temp, metas, ion_pot, user='', atomic='', num=8,
                 num_recomb=None, pec_levels=None):
@@ -149,11 +209,8 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
 
     with open(fil_name,'w') as f:
 
-        #first line in the adf15 file format, the number of blocks
-        #the ion as ADAS writes it, a2,'+',i2 (C + 2, AR+16): the ADAS reader needs the + (or
-        #a :) and stops otherwise
-        f.write('{:5d}'.format(len(wave)*num_drivers) + '    /' +
-                '{:<2s}+{:2d}'.format(str(element_sym).strip(), int(charge_state)) +
+        #first line in the adf15 file format, the number of blocks and the ion
+        f.write('{:5d}'.format(len(wave)*num_drivers) + '    /' + _ion(element_sym, charge_state) +
                 ' PHOTON EMISSIVITY COEFFICIENTS/\n')
 
         isel = 0
@@ -189,50 +246,6 @@ def write_adf15(fil_name,pec_inds, wave, pecs, element_sym,
                     _write_values(f, pecs[i,j,:,d], num)
 
         #write out calculation details
-        f.write('C-----------------------------------------------------------------------\n')
-        f.write('C\n')
-        f.write('C  PHOTON EMISSIVITY COEFFICIENTS:\n')
-        f.write('C\n')
-        f.write('C\n')
-        f.write('C  INFORMATION\n')
-        f.write('C  -----------\n')
-        f.write('C\n')
-        f.write('C   ***MADE WITH ColRadPy***\n')
-        if(type(atomic) == dict and 'iz0' in atomic):
-            f.write('C  NUCLEAR CHARGE =  ' + str(atomic['iz0']) + '\n')
-        f.write('C  ION CHARGE +1  =  ' + str(charge_state + 1) + '\n')
-        f.write('C\n')
-        if(type(user) == dict and 'file_loc' in user):
-            f.write(_comment('SPECIFIC ION FILE  : ' + str(user['file_loc'])))
-        f.write('C\n')
-        f.write('C\n')
-        if(type(user) == dict):
-            for i in user.keys():
-                f.write(_comment(i + ' ' + str(user[i])))
-
-        if(type(atomic) == dict):
-            f.write('C  ' + 'lvl' +'  '+ 'config' +
-                        '  ' + 'S'+
-                        '  ' + 'L'+
-                        '  ' + 'w'+
-                        '  ' + 'eng\n')
-
-            f.write('C-----------------------------------------------------------------------\n')
-            f.write('C\n')
-            for ii in range(0,len(atomic['config'])):
-
-                f.write(_comment(str(ii) +'  '+ str(atomic['config'][ii])+\
-                        '  ' + str(atomic['S'][ii]) + \
-                        '  ' + str(atomic['L'][ii]) + \
-                        '  ' + str(atomic['w'][ii]) + \
-                        '  ' + str(atomic['energy'][ii])))
-
+        _write_information(f, 'PHOTON EMISSIVITY COEFFICIENTS:', charge_state, user, atomic)
         if(pec_levels is not None):
-            #the blocks with the upper and lower level of their line, numbered as in the level list
-            f.write('C\n')
-            f.write('C  ISEL  WAVELENGTH (A)  TYPE   INDM  UPPER  LOWER\n')
-            f.write('C  ----  --------------  -----  ----  -----  -----\n')
-            for isel, wave_field, typ, indm, i in blocks:
-                f.write('C' + '{:6d}'.format(isel) + '{:>16s}'.format(wave_field.strip()) + '  ' +
-                        '{:<5s}'.format(typ) + '{:>6s}'.format(indm) +
-                        '{:7d}{:7d}'.format(int(pec_levels[i][0]), int(pec_levels[i][1])) + '\n')
+            _write_block_table(f, blocks, pec_levels)
