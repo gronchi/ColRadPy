@@ -43,7 +43,7 @@ exclude_patterns = ['theory/scripts', 'theory/figures']
 pygments_style = 'sphinx'
 
 html_theme = 'sphinx_rtd_theme'
-html_logo = '../../logo.jpg'
+html_logo = '../../logo.svg'
 html_theme_options = {
     'navigation_depth': 3,
 }
