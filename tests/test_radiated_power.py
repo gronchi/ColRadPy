@@ -98,6 +98,35 @@ class RadiatedPowerTests(unittest.TestCase):
                 np.testing.assert_allclose(processed["prc"].ravel(), photon * 3 / 1e13)
                 np.testing.assert_allclose(processed["plt"].ravel(), 0.0)
 
+    def test_metastables_emit_their_own_lines(self):
+        # A retained metastable decays to the levels below it (Summers et al 2006, eq. 26); the
+        # line was missing from the PECs and PLT, where ADAS includes it. Be I 2s2p 3P -> 2s2 1S.
+        dens = np.array([1e12, 1e14])
+        for paired, norm in ((False, True), (True, True), (False, False)):
+            with self.subTest(paired=paired, default_pop_norm=norm):
+                model = colradpy(str(INPUT / "cpb03_ls#be0.dat"), metas=np.array([0, 1]),
+                                 temp_grid=np.array([2., 10.]), electron_den=dens, temp_dens_pair=paired,
+                                 default_pop_norm=norm)
+                with contextlib.redirect_stdout(io.StringIO()), np.errstate(divide="ignore"):
+                    model.solve_cr()
+                processed = model.data["processed"]
+                levels = [tuple(pair) for pair in processed["pec_levels"]]
+                line = levels.index((1, 0))
+                a_value = model.data["cr_matrix"]["A_ji"][1, 0]
+                own = a_value / dens
+                if not norm:
+                    # populations normalized to the whole ion: the 3P share is 1 - sum of its excited fractions
+                    own = own * (1 - processed["pops"][:, 1].sum(axis=0))
+                np.testing.assert_allclose(processed["pecs"][line, 1], own * np.ones_like(processed["pecs"][line, 1]),
+                                           rtol=1e-12)
+                np.testing.assert_array_equal(processed["pecs"][line, 0], 0)
+                np.testing.assert_array_equal(processed["pecs"][line, 2:], 0)
+                photon = photon_energies(model).reshape((-1, 1) + (1,) * (processed["pecs"].ndim - 2))
+                np.testing.assert_allclose(processed["pls"], photon * processed["pecs"], rtol=1e-12)
+                np.testing.assert_allclose(processed["plt"], processed["pls"][:, :2].sum(axis=0))
+                # every pair of levels is a line, as with the ground alone
+                self.assertEqual(len(levels), 29 * 28 // 2)
+
 
 if __name__ == "__main__":
     unittest.main()

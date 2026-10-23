@@ -1591,6 +1591,13 @@ class colradpy():
             
 
                 
+    def _line_pairs(self):
+        """The (lower, upper) level pairs of the lines whose PECs are made, in the order of
+           ['processed']['pec_levels']: by lower level, then upper level. Every level above the
+           lower one is an upper level, metastables included, as they also emit."""
+        num_levels = len(self.data['cr_matrix']['A_ji'])
+        return [(i, upper) for i in range(num_levels) for upper in range(i + 1, num_levels)]
+
     def solve_quasi_static(self):
         """This function will solve the CR matrix using the quasistatic approximation, after solving this problem
            the generalized radiative coefficients GCRs will be calculated other claculated quanities such as
@@ -1703,9 +1710,16 @@ class colradpy():
         #metastable of this ion. Recombination and charge exchange populations are relative
         #to the parent populations, which are not part of this ion.
         nmeta = len(self.data['atomic']['metas'])
+        #the retained metastables also emit lines to the levels below them (Summers et al 2006,
+        #eq. 26): their population relative to a driver is one for their own excitation column,
+        #normalized as the excited populations, and zero for the other drivers
+        own_pops = np.zeros((nmeta,) + np.shape(self.data['processed']['pops'])[1:])
+        norm = np.ones((nmeta,) + np.shape(self.data['processed']['pops'])[2:])
         if(self.data['processed']['driving_populations_norm']):
-            self.data['processed']['pops'][:,0:nmeta] = self.data['processed']['pops'][:,0:nmeta] /\
-                                             (1 + np.sum(self.data['processed']['pops'][:,0:nmeta],axis=0))
+            total = 1 + np.sum(self.data['processed']['pops'][:,0:nmeta],axis=0)
+            norm = 1/total
+            self.data['processed']['pops'][:,0:nmeta] = self.data['processed']['pops'][:,0:nmeta]/total
+        own_pops[np.arange(nmeta), np.arange(nmeta)] = norm
 
         #setup pec and wavelength stuff start them as lists because
         #we wont know which levels actually have pec values before we loop through them
@@ -1714,26 +1728,26 @@ class colradpy():
         self.data['processed']['pec_levels'] = []
         self.data['processed']['wave_vac'] = []
 
+        excited_index = {level: j for j, level in enumerate(levels_to_keep)}
+        meta_index = {level: m for m, level in enumerate(self.data['atomic']['metas'])}
         pls = []
-        for i in range(0,len(self.data['cr_matrix']['A_ji'])):
-            for j in range(0,len(levels_to_keep)):
-                #if statement here because there will be a number of transitions that have zero
-                #for the PEC value and don't want to have to keep track of these.
+        for i, upper in self._line_pairs():
+            if(upper in excited_index):
+                pop = self.data['processed']['pops'][excited_index[upper]]
+            else:
+                pop = own_pops[meta_index[upper]]
+            pec = self.data['cr_matrix']['A_ji'][upper,i]*pop/self.data['user']['dens_grid']
+            self.data['processed']['pecs'].append(pec)
+            #line power, photon energy * PEC, in W cm3
+            pls.append(np.abs(self.data['atomic']['energy'][upper] - self.data['atomic']['energy'][i])*
+                       J_PER_WAVENUMBER*pec)
 
-                if(levels_to_keep[j] > i ):#and self.data['cr_matrix']['A_ji'][j,i] > 1E-31):
+            #levels with equal energies (degenerate in the file) have an infinite wavelength
+            with np.errstate(divide='ignore'):
+                self.data['processed']['wave_vac'].append(1.e7/abs(self.data['atomic']['energy'][upper]\
+                                                                    - self.data['atomic']['energy'][i]))
 
-                    self.data['processed']['pecs'].append( self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*\
-                                                        self.data['processed']['pops'][j]/ \
-                                                        self.data['user']['dens_grid'])
-                    #line power, photon energy * PEC, in W cm3
-                    pls.append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] - self.data['atomic']['energy'][i])*                               J_PER_WAVENUMBER*(self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*                                                        self.data['processed']['pops'][j]/                                                         self.data['user']['dens_grid']))
-
-                    #levels with equal energies (degenerate in the file) have an infinite wavelength
-                    with np.errstate(divide='ignore'):
-                        self.data['processed']['wave_vac'].append(1.e7/abs(self.data['atomic']['energy'][levels_to_keep[j]]\
-                                                                            - self.data['atomic']['energy'][i]))
-
-                    self.data['processed']['pec_levels'].append( np.array([levels_to_keep[j],i]))
+            self.data['processed']['pec_levels'].append( np.array([upper,i]))
 
 
         #radiated line power coefficients in W cm3, summed over lines for the driving populations:
@@ -2097,27 +2111,18 @@ class colradpy():
                                             self.data['user']['td_t'])
 
 
-        levels_to_keep = np.setdiff1d( np.linspace(0,len(self.data['atomic']['energy'])-1,
-                                              len(self.data['atomic']['energy']) ,dtype='int64'),
-                                       self.data['atomic']['metas'])
-        
         self.data['processed']['td']['pecs'] = []#photon emissivity coefficients
         self.data['processed']['td']['pls'] = []
 
-        
-        for i in range(0,len(self.data['cr_matrix']['A_ji'])):
-            for j in range(0,len(levels_to_keep)):
-                #if statement here because there will be a number of transitions that have zero
-                #for the PEC value and don't want to have to keep track of these.
-
-                if(levels_to_keep[j] > i ):#and self.data['cr_matrix']['A_ji'][j,i] > 1E-31):
-                    #same ways the SS version
-                    self.data['processed']['td']['pecs'].append( self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*\
-                                                                 self.data['processed']['td']['td_pop'][levels_to_keep[j]]/\
-                                                                 self.data['user']['dens_grid'])
-
-                    #line power, photon energy * PEC, in W cm3
-                    self.data['processed']['td']['pls'].append(np.abs(self.data['atomic']['energy'][levels_to_keep[j]] -                                                                       self.data['atomic']['energy'][i])*J_PER_WAVENUMBER*                                           (self.data['cr_matrix']['A_ji'][levels_to_keep[j],i]*self.data['processed']['td']['td_pop'][levels_to_keep[j]]/                                                         self.data['user']['dens_grid']))
+        #same lines as the SS version, those of the metastables included; the time dependent
+        #populations of the metastables are solved with the others
+        for i, upper in self._line_pairs():
+            pec = self.data['cr_matrix']['A_ji'][upper,i]*self.data['processed']['td']['td_pop'][upper]/\
+                  self.data['user']['dens_grid']
+            self.data['processed']['td']['pecs'].append(pec)
+            #line power, photon energy * PEC, in W cm3
+            self.data['processed']['td']['pls'].append(np.abs(self.data['atomic']['energy'][upper] -
+                                                              self.data['atomic']['energy'][i])*J_PER_WAVENUMBER*pec)
 
 
         self.data['processed']['td']['pecs'] = np.asarray(self.data['processed']['td']['pecs'])

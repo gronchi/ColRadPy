@@ -75,6 +75,21 @@ class TimeDependentRadiatedPowerTests(unittest.TestCase):
         unpopulated = np.abs(td["pls"][levels.index((3, 0))][0]).max()
         self.assertLess(unpopulated, 1e-10 * expected.min())
 
+    def test_metastable_lines(self):
+        # A retained metastable also emits (Summers et al 2006, eq. 26): with all of the
+        # population in metastable 2 at t=0 its 2->0 line was missing from the time-dependent
+        # PECs, and the lines no longer matched the quasistatic pec_levels.
+        model, densities = solve_be0([0, 2], upper=2)
+        td = model.data["processed"]["td"]
+        levels = [tuple(pair) for pair in model.data["processed"]["pec_levels"]]
+        self.assertEqual(len(td["pecs"]), len(levels))
+        energy = model.data["atomic"]["energy"]
+        a_value = model.data["cr_matrix"]["A_ji"][2, 0]
+        expected = abs(energy[2] - energy[0]) * J_PER_WAVENUMBER * a_value / densities
+        power = td["pls"][levels.index((2, 0))][0]
+        for temperature in range(power.shape[0]):
+            np.testing.assert_allclose(power[temperature], expected, rtol=1e-4)
+
 
 if __name__ == "__main__":
     unittest.main()
