@@ -174,6 +174,37 @@ class Adf13Tests(unittest.TestCase):
         with self.assertWarnsRegex(UserWarning, "three digits of ISEL"):
             write((np.arange(1000), np.full(1000, 1000.), np.ones((1000, 1, 3, 1)), "Ar", 16) + grids)
 
+    def test_get_sxb(self):
+        # S/XB is not stored: get_sxb returns the SCD summed over the parents over the excitation
+        # PEC of each line and metastable, NaN where the line has no excitation emission.
+        for metas in ([0], [0, 1]):
+            with self.subTest(metas=metas):
+                model = solve(metas)
+                processed = model.data["processed"]
+                sxb = model.get_sxb()
+                excitation = processed["pecs"][:, :len(metas)]
+                self.assertEqual(sxb.shape, excitation.shape)
+                defined = excitation > 0
+                np.testing.assert_allclose(sxb[defined], np.broadcast_to(
+                    processed["scd"].sum(axis=1)[None], excitation.shape)[defined] / excitation[defined])
+                self.assertTrue(np.isnan(sxb[~defined]).all())
+                # the adf13 file holds the same values, undefined ones as its floor
+                adf13, _ = self.written(model, sxb_inds=np.array([0]))
+                for m, block in enumerate(adf13.blocks):
+                    expected = np.clip(np.where(np.isnan(sxb[0, m]), MIN_SXB, sxb[0, m]), MIN_SXB, MAX_SXB)
+                    np.testing.assert_allclose(block["sxb"], expected.T, rtol=5e-3)
+        paired = colradpy(str(INPUT / "cpb03_ls#be0.dat"), metas=np.array([0]), temp_grid=np.array([10., 20.]),
+                          electron_den=np.array([1e12, 1e13]), temp_dens_pair=True)
+        with self.assertRaisesRegex(ValueError, "solve_cr first"):
+            paired.get_sxb()
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+            paired.solve_cr()
+        self.assertEqual(paired.get_sxb().shape, paired.data["processed"]["pecs"][:, :1].shape)
+        with self.assertRaisesRegex(ValueError, "split_pec_multiplet first"):
+            paired.get_sxb(pecs_split=True)
+        with self.assertRaisesRegex(ValueError, "use_ionization"):
+            solve([0], use_ionization=False).get_sxb()
+
     def test_errors_of_the_method(self):
         with self.assertRaisesRegex(ValueError, "use_ionization"):
             solve([0], use_ionization=False).write_sxb_adf13(fil_name=os.devnull)

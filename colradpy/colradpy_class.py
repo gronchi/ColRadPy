@@ -3203,17 +3203,47 @@ class colradpy():
                     pec_levels = None if pecs_split else processed['pec_levels'])
 
 
-    def write_sxb_adf13(self,fil_name='', sxb_inds = None, num = 8, pecs_split=False):
+    def get_sxb(self, pecs_split=False):
 
-        """ This function writes the S/XB coefficients, the ionizations per emitted photon of
-            lines, to an adf13 file (ADAS appxa-13) with the write_adf13 function. For each
-            metastable m and line, as ADAS208 makes them,
+        """ S/XB, the ionizations per emitted photon of each line, from the solved model. For
+            each metastable m and line, as ADAS208 makes them,
 
                 S/XB = (sum over the parents p of SCD(m, p)) / PEC_exc(line, m),
 
             the effective ionization of the metastable over the excitation PEC of the line from
-            it, with the same normalization of the populations. Wavelengths are written as by
-            write_pecs_adf15. By default every line with excitation emission and a wavelength
+            it, with the same normalization of the populations. It is a ratio of stored results,
+            not stored itself. Where a line has no excitation emission from a metastable its
+            S/XB is not defined and is NaN. Needs the ionization in the calculation
+            (use_ionization).
+
+        :param pecs_split: S/XB of the PECs split to j levels by split_pec_multiplet
+        :type pecs_split: bool
+
+        :returns: array --S/XB (dimensionless), (lines, metastables, temperatures, densities)
+                  as processed['pecs'], or (lines, metastables, pairs) with temp_dens_pair
+
+        """
+
+        if('processed' not in self.data):
+            raise ValueError('S/XB needs the solved model, call solve_cr first')
+        if(not self.data['user']['use_ionization']):
+            raise ValueError('S/XB needs the ionization of the ion, which use_ionization=False leaves out')
+        if(pecs_split and 'split' not in self.data['processed']):
+            raise ValueError('S/XB of the split PECs needs split_pec_multiplet first')
+
+        processed = self.data['processed']['split'] if pecs_split else self.data['processed']
+        num_metas = len(self.data['atomic']['metas'])
+        excitation = processed['pecs'][:, :num_metas]                 #(lines, metastables, grid)
+        ionization = self.data['processed']['scd'].sum(axis=1)        #(metastables, grid)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return np.where(excitation > 0, ionization[None]/excitation, np.nan)
+
+
+    def write_sxb_adf13(self,fil_name='', sxb_inds = None, num = 8, pecs_split=False):
+
+        """ This function writes the S/XB coefficients, the ionizations per emitted photon of
+            lines (get_sxb), to an adf13 file (ADAS appxa-13) with the write_adf13 function.
+            Wavelengths are written as by write_pecs_adf15. By default every line with excitation emission and a wavelength
             the file can hold is written. Where a line has no excitation emission its S/XB is
             not defined, and it is written as 1e-74 with a warning. S/XB needs the ionization in
             the calculation (use_ionization) and a temperature-density grid, not temp_dens_pair.
@@ -3235,25 +3265,18 @@ class colradpy():
         if(self.data['user']['temp_dens_pair']):
             raise ValueError('adf13 files need S/XB on a temperature-density grid, '
                              'they cannot be written with temp_dens_pair=True')
-        if(not self.data['user']['use_ionization']):
-            raise ValueError('S/XB needs the ionization of the ion, which use_ionization=False leaves out')
+        sxb = self.get_sxb(pecs_split)
 
         if(fil_name==''):#default file name if the user did not choose one
             fil_name = 'adf13_colradpy_' + os.path.basename(self.data['user']['file_loc'])
 
-        if(pecs_split):
-            processed = self.data['processed']['split']
-        else:
-            processed = self.data['processed']
+        processed = self.data['processed']['split'] if pecs_split else self.data['processed']
         num_metas = len(self.data['atomic']['metas'])
-        excitation = processed['pecs'][:, :num_metas]                 #(lines, metastables, temp, dens)
-        ionization = self.data['processed']['scd'].sum(axis=1)        #(metastables, temp, dens)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            sxb = np.where(excitation > 0, ionization[None]/excitation, np.nan)
         wave = processed['wave_air']*10#nm to A
 
         if(sxb_inds is None):
-            sxb_inds = np.where((wave > 0) & (wave < MAX_WAVELENGTH) & (excitation > 0).any(axis=(1, 2, 3)))[0]
+            #the lines with excitation emission, a defined S/XB somewhere
+            sxb_inds = np.where((wave > 0) & (wave < MAX_WAVELENGTH) & (~np.isnan(sxb)).any(axis=(1, 2, 3)))[0]
             if(len(sxb_inds) < len(wave)):
                 warnings.warn(str(len(wave) - len(sxb_inds)) + ' of ' + str(len(wave)) + ' lines are not written '
                               'to the adf13 file: they have no excitation emission, or their wavelengths are '
