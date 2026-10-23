@@ -447,6 +447,15 @@ The ADAS reader of adf13 files keeps three digits of the block index, so select 
 metastables for files that ADAS will read.
 An adf13 file is read back with ``colradpy.read_adf13``.
 
+S/XB is not stored with the results, as it is a ratio of them; ``get_sxb`` returns it with the shape
+of the excitation columns of the PECs, (line, metastable, temperature, density), NaN where a line has
+no excitation emission:
+
+.. code-block:: python
+   :linenos:
+
+      sxb = be.get_sxb()
+
 
 Post processing analysis advanced
 ====================================

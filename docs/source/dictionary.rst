@@ -368,6 +368,13 @@ Only with the projection option, see the theory manual. The first index of coupl
 +---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
 
 
+``pecs`` has a line for every pair of levels, by lower and then upper level as in
+``pec_levels`` (the time dependent ``['td']['pecs']`` in the same order). The lines of a
+retained metastable are driven by the metastable itself: their column for it is A/n_e,
+normalized as the excited populations when the populations are, and the other columns
+are zero. ``plt`` therefore includes the radiation of the metastables, as ADAS's PLT does.
+
+
 **split**
 
 

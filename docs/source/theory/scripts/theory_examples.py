@@ -155,7 +155,7 @@ def examples():
             "make_three_body_recombination", "make_electron_excitation_rates",
             "populate_cr_matrix", "solve_quasi_static", "solve_time_dependent",
             "split_pec_multiplet", "shift_j_res_energy_to_nist", "solve_cr",
-            "make_nat_broad", "make_dopp_broad", "write_pecs_adf15", "write_sxb_adf13",
+            "make_nat_broad", "make_dopp_broad", "write_pecs_adf15", "get_sxb", "write_sxb_adf13",
         ],
         "colradpy/ionization_balance_class.py": [
             "populate_ion_matrix", "solve_no_source", "solve_source", "solve_time_independent",
