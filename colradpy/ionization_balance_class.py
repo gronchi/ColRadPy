@@ -41,6 +41,37 @@ def interp_rates_adf11(logged_temp,logged_dens,temp,dens,logged_gcr): # y are lo
     return 10**gcr_arr
 
 
+def metastable_fractions(qcd, scd):
+    """Fractions of a stage's population in each of its metastables when they are in steady state
+       with each other: the metastable cross coupling (QCD) and the ionization loss (SCD summed over
+       the parents), without recombination from the next stage. These are the MET data of ADAS that
+       ADAS404 uses to make unresolved ADF11 files; the first metastable is the ground.
+
+    :param qcd: metastable cross coupling coefficients [from, to], (metas, metas, temperature-density grid)
+    :type qcd: float array
+
+    :param scd: effective ionization coefficients, (metas, parents, temperature-density grid)
+    :type scd: float array
+
+    :returns: array --fractions, (metas, temperature-density grid), summing to one
+
+    """
+    num = np.shape(qcd)[0]
+    grid = np.shape(qcd)[2:]
+    if(num == 1):
+        return np.ones((1,) + grid)
+    #(grid, from, to) without the diagonal, and the ionization loss (grid, metas)
+    coupling = np.moveaxis(qcd, (0, 1), (-2, -1))*(1 - np.eye(num))
+    loss = np.moveaxis(np.sum(scd, axis=1), 0, -1)
+    #rows are dN_r/dt: gains from the other metastables, losses to them and by ionization
+    rates = np.swapaxes(coupling, -1, -2) - \
+            np.einsum('...i,ij->...ij', np.sum(coupling, axis=-1) + loss, np.eye(num))
+    #ratios to the ground, which is set to one
+    ratios = np.linalg.solve(rates[..., 1:, 1:], -rates[..., 1:, 0:1])[..., 0]
+    ratios = np.concatenate((np.ones(grid + (1,)), np.maximum(ratios, 0)), axis=-1)
+    return np.moveaxis(ratios/np.sum(ratios, axis=-1, keepdims=True), -1, 0)
+
+
 class ionization_balance():
     """The ionization balance class takes adf04 file inputs runs CR calcualations
        'colradpy_class.py' to get GCR coefficients. The GCR coefficients are then
@@ -135,6 +166,21 @@ class ionization_balance():
     :param adf11_files: the files provided are adf11 formatted files
     :type adf11_files: bool
 
+    :param use_met: Collapse each stage of an adf04 balance to one population, as ADAS404 makes the
+        unresolved ADF11 files: SCD and PLT weighted by the stage's metastable fractions (MET, see
+        metastable_fractions), ACD and CCD by those of the next stage. The balance is then solved
+        stage to stage, so init_abund and source have one entry per stage. Default False: the
+        metastable resolved balance, which is the physically correct one. Use it to compare with
+        ADAS's unresolved data, not for accuracy: MET only counts metastable atoms made by
+        excitation from the ground. In He0, most recombinations land on the triplets, and the
+        1s2s 3S metastable is easily ionized, so most of those atoms go straight back to He+; the
+        collapse counts them as recombined but never as re-ionized, so He0 comes out too abundant
+        (up to 2.2 times the resolved balance in equilibrium). Be0's 3P holds more atoms than the
+        ground, so there the conventional model (only the ground retained) does worse: it drops
+        the recombination-fed 3P atoms from the stage entirely. No stage-to-stage model is right
+        for every ion. Not for adf11 or hdf5 inputs: unresolved ADF11 files already have it applied.
+    :type use_met: bool
+
     """
  
     def __init__(self,fils,metas,temp_grid, dens_grid, htemp_grid=np.array([]), hdens_grid=np.array([]),
@@ -144,8 +190,12 @@ class ionization_balance():
                  keep_charge_state_data=False,init_abund = np.array([]), source= np.array([]),
                  temp_dens_pair=False,scale_file_ioniz=False, ne_tau=np.array([-1]),adf11_files=False,
                  hdf5_files=False, rate_interp_ion='loglog_slinear', rate_interp_recomb='loglog_slinear',
-                 rate_interp_col='log_slinear', rate_interp_cx='log_quadratic', projection=None):
+                 rate_interp_col='log_slinear', rate_interp_cx='log_quadratic', projection=None,
+                 use_met=False):
 
+        if(use_met and (adf11_files or hdf5_files)):
+            raise ValueError('use_met collapses the coefficients made from adf04 files; unresolved ADF11 '
+                             'files already have the metastable fractions applied')
 
         #this is basic input data that is the same whether adf04 or adf11 inputs are used
         self.data = {}        
@@ -161,6 +211,7 @@ class ionization_balance():
         self.data['user']['htemp_grid'] = np.asarray(htemp_grid) #eV
         self.data['user']['hdens_grid'] = np.asarray(hdens_grid) #cm-3
         self.data['user']['ne_tau'] = np.atleast_1d(ne_tau)
+        self.data['user']['use_met'] = use_met
         if(self.data['user']['ne_tau'][0] != -1):
             print('ne_tau was not equal to -1 so overwiting solution times with ne_tau calculated values')
             self.data['user']['soln_times'] = self.ne_tau_times(self.data['user']['ne_tau'])
@@ -389,6 +440,7 @@ class ionization_balance():
                 self.data['cr_data']['gcrs'][str(i)]['scd'] = tmp.data['processed']['scd']
                 self.data['cr_data']['gcrs'][str(i)]['acd'] = tmp.data['processed']['acd']
                 self.data['cr_data']['gcrs'][str(i)]['xcd'] = tmp.data['processed']['xcd']
+                self.data['cr_data']['gcrs'][str(i)]['plt'] = tmp.data['processed']['plt']
                 if(self.data['user']['use_cx'][i]):
                     self.data['cr_data']['gcrs'][str(i)]['ccd'] = tmp.data['processed']['ccd']
 
@@ -399,6 +451,9 @@ class ionization_balance():
                     raise ValueError('the final stage has ' + str(len(final_metas)) + ' metastables but stage ' +
                                      str(last) + ' ionizes to ' + str(num_parents) + ' parents')
                 self.data['user']['metas'].append(final_metas)
+
+            if(use_met):
+                self.collapse_metastables()
 
             if self.data['user']['init_abund'].size == 0:
                 gcrs = self.data['cr_data']['gcrs']
@@ -431,6 +486,47 @@ class ionization_balance():
         n0 = np.zeros(len(self.data['ion_matrix']))
         n0[0] = 1.
         return n0
+
+    def collapse_metastables(self):
+        """Collapses the metastable resolved coefficients of every stage to one population per
+           stage (use_met), as ADAS404 makes unresolved ADF11 files: SCD and PLT weighted by the
+           metastable fractions of the stage (metastable_fractions), ACD and CCD summed over the
+           metastables of the stage and weighted by the fractions of the next stage. QCD and XCD,
+           which only move atoms within a stage, become zero.
+
+           The resolved coefficients are kept in ['cr_data']['gcrs_resolved'], and each collapsed
+           stage keeps its fractions as 'met'. The final stage has no adf04 file; when it has more
+           than one metastable its population is taken to be in its ground, with a warning.
+        """
+        resolved = self.data['cr_data'].get('gcrs_resolved', self.data['cr_data']['gcrs'])
+        self.data['cr_data']['gcrs_resolved'] = resolved
+        num = len(resolved)
+        fractions = [metastable_fractions(resolved[str(i)]['qcd'], resolved[str(i)]['scd']) for i in range(num)]
+        #the final stage: its fractions need data that the balance does not have
+        last = resolved[str(num - 1)]['scd']
+        final = np.zeros((np.shape(last)[1],) + np.shape(last)[2:])
+        final[0] = 1.
+        if(np.shape(last)[1] > 1):
+            warnings.warn('use_met: the final stage has ' + str(np.shape(last)[1]) + ' metastables and no adf04 '
+                          'file, its recombination is taken from its ground; add the adf04 file of the '
+                          'stage to weight its metastables')
+        fractions.append(final)
+
+        collapsed = {}
+        for i in range(num):
+            gcrs = resolved[str(i)]
+            met, met_plus = fractions[i], fractions[i + 1]
+            grid = np.shape(met)[1:]
+            collapsed[str(i)] = {'met': met,
+                                 'scd': np.sum(met*np.sum(gcrs['scd'], axis=1), axis=0)[None, None],
+                                 'acd': np.sum(met_plus*np.sum(gcrs['acd'], axis=0), axis=0)[None, None],
+                                 'qcd': np.zeros((1, 1) + grid),
+                                 'xcd': np.zeros((1, 1) + grid)}
+            if('ccd' in gcrs):
+                collapsed[str(i)]['ccd'] = np.sum(met_plus*np.sum(gcrs['ccd'], axis=0), axis=0)[None, None]
+            if('plt' in gcrs):
+                collapsed[str(i)]['plt'] = np.sum(met*gcrs['plt'], axis=0)[None]
+        self.data['cr_data']['gcrs'] = collapsed
 
     def populate_ion_matrix(self):
         """This will populate the ionization matrix from the various GCR coefficients

@@ -18,7 +18,7 @@ from scipy.linalg import expm
 
 from colradpy import colradpy
 from colradpy.colradpy_class import parent_levels
-from colradpy.ionization_balance_class import ionization_balance
+from colradpy.ionization_balance_class import ionization_balance, metastable_fractions
 
 
 INPUT = Path(__file__).resolve().parents[1] / "examples" / "input"
@@ -252,6 +252,74 @@ class InterpolationOptionTests(unittest.TestCase):
                                       default.data["cr_data"]["gcrs"]["1"]["scd"])
         with self.assertRaisesRegex(ValueError, "rate_interp_col must be one string or one for each"):
             balance(rate_interp_col=["slinear"])
+
+
+class UseMetTests(unittest.TestCase):
+    # use_met collapses every stage to one population as ADAS404 makes unresolved ADF11 files.
+    BE = [str(INPUT / f) for f in ("cpb03_ls#be0.dat", "cpb03_ls#be1.dat", "be2_adf04", "be3_adf04")]
+    TEMPS, DENS = np.array([2., 10., 50.]), np.array([1e12, 1e14])
+
+    def balance(self, files, **kwargs):
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            balance = ionization_balance(files, np.array([0, 1]), self.TEMPS, self.DENS, **kwargs)
+            balance.populate_ion_matrix()
+            balance.solve_time_independent()
+        return balance
+
+    def test_metastable_fractions(self):
+        rng = np.random.default_rng(1)
+        # two metastables: N1/N0 = Q(0->1) / (Q(1->0) + S1)
+        qcd = rng.uniform(1e-9, 1e-7, (2, 2, 3, 2))
+        scd = rng.uniform(1e-9, 1e-7, (2, 2, 3, 2))
+        f = metastable_fractions(qcd, scd)
+        np.testing.assert_allclose(f[1] / f[0], qcd[0, 1] / (qcd[1, 0] + scd[1].sum(axis=0)), rtol=1e-12)
+        np.testing.assert_allclose(f.sum(axis=0), 1, rtol=1e-12)
+        # four metastables: the fractions are the steady state of the gains and losses
+        qcd = rng.uniform(1e-9, 1e-7, (4, 4, 3))
+        scd = rng.uniform(1e-9, 1e-7, (4, 3, 3))
+        f = metastable_fractions(qcd, scd)
+        off = qcd * (1 - np.eye(4))[:, :, None]
+        rate = np.einsum("sr...,s...->r...", off, f) - (off.sum(axis=1) + scd.sum(axis=1)) * f
+        np.testing.assert_allclose(rate[1:], 0, atol=1e-12 * np.abs(off).max())
+        self.assertTrue((f >= 0).all())
+        np.testing.assert_array_equal(metastable_fractions(qcd[:1, :1], scd[:1]), np.ones((1, 3)))
+
+    def test_collapse_of_the_be_stages(self):
+        resolved, collapsed = self.balance(self.BE), self.balance(self.BE, use_met=True)
+        r, c = resolved.data["cr_data"]["gcrs"], collapsed.data["cr_data"]["gcrs"]
+        # the default is the metastable resolved balance
+        self.assertNotIn("met", r["0"])
+        self.assertEqual(r["0"]["qcd"].shape[:2], (2, 2))
+        np.testing.assert_array_equal(collapsed.data["cr_data"]["gcrs_resolved"]["2"]["acd"], r["2"]["acd"])
+        # one population per stage: Be0 (2 metastables), Be+, Be2+ (2), Be3+ and Be4+
+        self.assertEqual(collapsed.data["ion_matrix"].shape[:2], (5, 5))
+        np.testing.assert_allclose(collapsed.data["ion_matrix"].sum(axis=0), 0,
+                                   atol=1e-12 * np.abs(collapsed.data["ion_matrix"]).max())
+        np.testing.assert_allclose(collapsed.data["processed"]["pops_ss"].sum(axis=0), 1, rtol=1e-10)
+        for i in range(4):
+            f = metastable_fractions(r[str(i)]["qcd"], r[str(i)]["scd"])
+            f_plus = (metastable_fractions(r[str(i + 1)]["qcd"], r[str(i + 1)]["scd"]) if i < 3
+                      else np.ones((1,) + f.shape[1:]))
+            np.testing.assert_allclose(c[str(i)]["met"], f)
+            np.testing.assert_allclose(c[str(i)]["scd"][0, 0], (f * r[str(i)]["scd"].sum(axis=1)).sum(axis=0))
+            np.testing.assert_allclose(c[str(i)]["plt"][0], (f * r[str(i)]["plt"]).sum(axis=0))
+            # ACD weighted by the fractions of the recombining stage (Be2+ for Be+)
+            np.testing.assert_allclose(c[str(i)]["acd"][0, 0], (f_plus * r[str(i)]["acd"].sum(axis=0)).sum(axis=0))
+            np.testing.assert_array_equal(c[str(i)]["qcd"], 0)
+            np.testing.assert_array_equal(c[str(i)]["xcd"], 0)
+        # Be0 2s2p 3P is populated, Be2+ 1s2s 3S almost not at these temperatures
+        self.assertGreater(c["0"]["met"][1].min(), 0.02)
+        self.assertLess(c["2"]["met"][1].max(), 0.05)
+
+    def test_final_stage_and_inputs(self):
+        # Be2+ (two metastables) ends a Be0-Be+ balance without its adf04 file
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), \
+                self.assertWarnsRegex(UserWarning, "final stage has 2 metastables"):
+            ionization_balance(self.BE[:2], np.array([0, 1]), self.TEMPS, self.DENS, use_met=True)
+        with self.assertRaisesRegex(ValueError, "use_met collapses the coefficients made from adf04"):
+            ionization_balance([str(INPUT / "Open-ADAS" / "adas#26" / "scd89_fe.dat")], np.array([0]),
+                               self.TEMPS, self.DENS, adf11_files=True, use_met=True)
 
 
 if __name__ == "__main__":
