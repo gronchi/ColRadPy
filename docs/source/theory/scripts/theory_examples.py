@@ -159,6 +159,7 @@ def examples():
         ],
         "colradpy/ionization_balance_class.py": [
             "populate_ion_matrix", "solve_no_source", "solve_source", "solve_time_independent",
+            "metastable_fractions", "collapse_metastables",
         ],
         "colradpy/solve_matrix_exponential.py": [
             "solve_matrix_exponential", "eval_matrix_exponential_solution",

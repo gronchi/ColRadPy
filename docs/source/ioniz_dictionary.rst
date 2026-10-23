@@ -26,7 +26,7 @@ ionization balance data dictionary
 
 
  gcrs holds the gcr data the individual charge states.
- Each charge state then has its own qcd, scd, acd and xcd.
+ Each charge state then has its own qcd, scd, acd and xcd (and plt for ADF04 inputs).
 
 
  **user**
@@ -60,6 +60,8 @@ ionization balance data dictionary
 +---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
 | keep_charge_state_data          | keep all of the data from the CR calculations not just GCRs       | bool           | -                                |
 +---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
+| use_met                         | Collapse each stage to one population with metastable fractions   | bool           | -                                |
++---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
 | soln_times                      | Solution times (s); derived from ne_tau when supplied             | float arr      | (user chosen)                    |
 +---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
 | init_abund                      | Initial state populations; first state populated by default       | float arr      | (num_states)                     |
@@ -78,6 +80,17 @@ set to one. ``processed['pops_td']`` has axes (state, time, temperature,
 density), while ``processed['pops_ss']`` has axes (state, temperature,
 density).
 
+With ``use_met=True`` (ADF04 inputs only) every stage is collapsed to one
+population, as ADAS404 makes the unresolved ADF11 files: SCD and PLT are
+weighted by the metastable fractions of the stage (``met``, the steady state of
+its metastables under QCD and their ionization loss), ACD and CCD are summed
+over its metastables and weighted by the fractions of the next stage, and QCD
+and XCD become zero. The states of ``ion_matrix``, ``init_abund``, ``source``
+and the populations are then the stages. The resolved coefficients are kept in
+``cr_data['gcrs_resolved']``. The default (``False``) is the metastable
+resolved balance, which is the physically correct one; the collapse is for
+comparison with ADAS's unresolved data (see the theory manual, Section 10.5).
+
 
 
 
@@ -92,6 +105,8 @@ density).
 | ['gcrs']['X']                   | GCR coefficients for a given charge state X                       | dict           | (num_charge)                     |
 +---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
 | stage_data                      | Dictionary with all data from individual charge CR calculations   | dict           | (user chosen)                    |
++---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
+| gcrs_resolved                   | Resolved GCRs of each stage before the use_met collapse           | dict           | (num_charge)                     |
 +---------------------------------+-------------------------------------------------------------------+----------------+----------------------------------+
 
 
@@ -110,6 +125,10 @@ density).
 |   xcd                           | parent metastable cross coupling coefficient  (cm3 s-1)           | float arr      | (len(metas_plus), len(metas_plus), user_temp, user_dens)                       |
 +---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
 |   ccd                           | charge exchange recombination coefficient     (cm3 s-1)           | float arr      | (len(metas_plus), len(metas_plus), user_temp, user_dens)                       |
++---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
+|   plt                           | total line power from excitation (W cm3)                          | float arr      | (len(metas), user_temp, user_dens)                                             |
++---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
+|   met                           | metastable fractions of the stage (use_met), summing to one       | float arr      | (len(metas), user_temp, user_dens)                                             |
 +---------------------------------+-------------------------------------------------------------------+----------------+--------------------------------------------------------------------------------+
 
 

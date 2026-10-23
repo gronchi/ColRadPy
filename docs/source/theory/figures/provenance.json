@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "53bd15413064a74b6fcca0059f191c60498a47fd",
+  "git_head": "2524e5ca1894d38babcbf0672323766f97700636",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -17,7 +17,7 @@
     "colradpy\\convolve_eedf.py": "af961883b6c397992c7acfda376afc29774e1761363e34b7fbb34b20922d9ef7",
     "colradpy\\ecip_rates.py": "a3dba0fbbb707f27afb014d794e059337daf065659f74a51b5a8108183b537f1",
     "colradpy\\energy_balance.py": "57ffc22dd742ba87ff6a528a03d51692a718638df41992e91b4c13c891209407",
-    "colradpy\\ionization_balance_class.py": "148d3e37495ba2a5c271b44e927bbc00384834adecf9f3cb47291e571208772b",
+    "colradpy\\ionization_balance_class.py": "9a18e983a92fb539aeaef389c5c315cdb7db90ac539125d2c3be432477419975",
     "colradpy\\nist_read.py": "9ae562f04023be028920c36900dd4c1829501e09f27cf8edb03550219e19a004",
     "colradpy\\nist_read_txt.py": "d21b8e32c85e4a3d5842932e2af61ee8f592c57f4199e1bdd29effa411b5367e",
     "colradpy\\projection.py": "fd805421ae21cdc7cd2a62467971ecc819c510005ca93deca2375f551e4f20c8",

@@ -1019,7 +1019,9 @@ forms Eq.~\eqref{eq:sxb} for each retained driver from the parent sum of
 normalization, and writes it to an ADF13 file~\cite{adf13}, as ADAS208 does.
 A line without excitation emission has no finite ratio and is written as the
 format's floor $10^{-74}$ with a warning. The writer needs ionization in the
-calculation and a temperature--density grid. The paper's compact coefficient
+calculation and a temperature--density grid. For Be I the S/XB agree with the
+ADAS ones made from the same files when the projection is included
+(Table~\ref{tab:adf11be}). The paper's compact coefficient
 notation should not be used to mix a per-driver photon rate in s$^{-1}$ with
 an ionization coefficient in cm$^3$/s.
 \end{implnote}
@@ -1105,6 +1107,165 @@ Array & First index & Second index & Rate multiplier\\\midrule
 \end{tabularx}
 \caption{Stored coefficient orientation. Equal matrix dimensions can conceal
 an accidental transpose, so checking shapes alone is insufficient.}
+\end{table}
+
+\subsection{The ADAS ADF11 coefficients}\label{sec:adf11adas}
+
+ADF11 is a derived format~\cite{adf11}: its coefficients, functions of the
+electron temperature and density, come from collisional-radiative models and
+are given by element at two levels of refinement~\cite{summers2006}. In the
+\emph{unresolved} or stage-to-stage data only the ground states of the ions
+are taken as dominant populations: these are conventional
+collisional-radiative (CR) coefficients, one per charge stage, of the classes
+ACD, SCD, CCD, PLT, PRB and PRC (for example \code{scd96}, \code{acd96}). In
+the \emph{metastable resolved} data the ground and the metastables of each ion
+may be dominant: these are the generalized collisional-radiative (GCR)
+coefficients of this section, the same classes with the block of each ion
+subdivided by metastable (and parent), plus QCD and XCD (for example
+\code{scd96r}, \code{qcd96r}, \code{xcd96r}). QCD and XCD exist only for GCR
+data, because they move population between the metastables of one stage or
+between parents, which a single population per stage does not have. Three codes
+make the GCR-project data (classes \code{96}). ADAS204~\cite{adas204} solves a bundle-$nS$ model and writes the
+condensed matrices that Section~\ref{sec:projection} projects onto the low
+levels. ADAS208~\cite{adas208} solves the model of an ADF04 file with that
+projection and partitions the reduced matrix into the coefficients above:
+the ionization of each level is that of the S lines of the file, or ECIP
+without them, optionally replaced by zero-density ADF07 rates for the
+metastables, and three-body recombination follows from it by detailed
+balance, as in ColRadPy. The results are stored per isoelectronic sequence
+(ADF10~\cite{adf10}) on the scaled grids $\Te/z_1^2$ and $\nelec/z_1^7$, $z_1$
+being the charge of the recombining ion, and ADAS404~\cite{adas404} makes the
+ADF11 files by cubic-spline interpolation in $z_1$, temperature and density.
+PRB does not come from ADAS208: it is the bundle-$n$ recombination power of
+ADAS204, the recombination continuum, bremsstrahlung weighted by spin system,
+the cascade and dielectronic stabilization, whereas \code{prb} in ColRadPy is
+the line power of the levels of the ADF04 file after capture only.
+
+The unresolved coefficients of the GCR project (classes \code{96}, and
+\code{93} from the earlier resolved data), although described as conventional
+CR data, are not made with a separate model;
+other unresolved classes (\code{74}, \code{85}, \code{89}, \code{92},
+\code{12}, \code{50}) come from other codes without resolved data, and the
+code that made a file is named in its comments. ADAS404
+contracts the resolved ones with metastable fractions
+$f_\rho=m_\rho/\sum_\sigma m_\sigma$ of the ionizing stage, and $f^+_p$ of the
+recombining stage:
+\begin{equation}\label{eq:unresolved}
+ \mathcal S_{\rm stage}=\sum_\rho f_\rho\sum_p\mathcal S_{\rho p},\qquad
+ \mathrm{PLT}_{\rm stage}=\sum_\rho f_\rho\,\mathrm{PLT}_\rho,\qquad
+ \mathcal A_{\rm stage}=\sum_p f^+_p\sum_\rho\mathcal A_{\rho p}.
+\end{equation}
+It changes only the stages with more than one metastable: in the \code{96r}
+files these are, for example, He$^0$, Li$^+$, Be$^0$ and Be$^{2+}$, and all but
+the H-, Li- and Na-like stages of C, N, O, Ne and Si.
+The fractions are ADAS's MET data (``equilibrium metastable fractions'',
+an ADF10 class of their own, \texttt{adf10/met96/pj\#met96\_<seq>\#\#.dat},
+written by ADAS208 for each ion): they tell how the population of a stage is
+shared among its metastables, which the unresolved coefficients cannot track.
+The files hold the ratios $m_\rho=N_\rho/N_g$ to the ground ($m_g=1$; for
+Be$^0$ $m_{^3\mathrm P}=1.49$ at 2\,eV), which ADAS404 normalizes to the
+fractions $f_\rho$ after interpolation. The ratios are the steady state of the
+retained metastables of the stage alone: excitation, de-excitation and their
+ionization loss, without capture from the next stage. For a ground $g$ and one
+metastable $\mu$,
+\begin{equation}\label{eq:met}
+ m_\mu=\frac{\mathcal Q_{g\to\mu}}
+            {\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p}}.
+\end{equation}
+In a plasma the metastable is also fed by capture, and in steady state
+\begin{equation}\label{eq:met-plasma}
+ \frac{N_\mu}{N_g}=m_\mu
+   +\frac{\sum_p\mathcal A_{\mu p}N^+_p}
+         {(\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p})\,N_g}.
+\end{equation}
+The contraction neglects the second term, which holds in an ionizing plasma,
+where the next stage is scarce. Where the next stage dominates, most
+metastable atoms come from capture and are ionized again before they reach
+the ground. Equation~\eqref{eq:unresolved} then weights the ionization with
+too small a metastable share; metastables ionize more readily than the
+ground, so the stage-to-stage SCD is too small and the population of the
+stage too large. Retaining only the ground in ColRadPy is a different
+stage-to-stage model: the metastable becomes an excited level whose
+excitation-driven population enters the stage normalization and the SCD,
+while its capture-driven population is not counted in the stage and the ACD
+counts only captures that reach the ground. The population of the stage
+from ACD/SCD is then too small. Retaining the metastables avoids both
+assumptions. The model with only the ground retained is the one ADAS uses for
+line emission: its
+unresolved photon emissivity and S/XB files (prefixes \code{pju}, \code{llu};
+\code{INDM = T}) come from an ADAS208 run with the ground as the only
+metastable and the populations normalized to the whole stage, its resolved
+ones (\code{pjr}, \code{llr}) from a run with the metastables. So
+``unresolved'' means a collapse of GCR data for the ADF11 coefficients of
+the GCR project, but the conventional model for ADAS's PECs and S/XB, which
+ColRadPy reproduces with the ground as its only metastable
+(Table~\ref{tab:adf11be}).
+
+\routine{ionization_balance} makes the same contraction from ADF04 inputs with
+\code{use_met=True} (default \code{False}): each stage is solved with its
+metastables, their fractions follow from Eq.~\eqref{eq:met}, solved as a
+linear system for more than two metastables (\routine{metastable_fractions}),
+Eq.~\eqref{eq:unresolved} gives one SCD, ACD, CCD and PLT per stage, and the
+balance is solved stage to stage. It reproduces ADAS's unresolved data where
+ADAS's own data are consistent, but it is not more accurate than the
+conventional model. MET only counts metastable atoms made by excitation from
+the ground. In He$^0$, most recombinations land on the triplets, and the
+1s2s\,$^3$S metastable is easily ionized, so most of those atoms go straight
+back to He$^+$. The collapse counts them as recombined but never as
+re-ionized, so He$^0$ comes out too abundant. Be$^0$'s $^3$P holds more atoms
+than the ground, so there the conventional model's error dominates instead:
+it drops the recombination-fed $^3$P atoms from the stage entirely. Against
+the equilibrium $N(\mathrm X^0)/N(\mathrm X^+)$ of the resolved balance
+(1--100\,eV, $10^{10}$--$10^{14}$\,cm$^{-3}$, ADAS's ADF04, ADF17 and ADF18
+files: \texttt{cpb03\_ls\#be0.dat} and \texttt{mom97\_ls\#he0.dat} with their
+\texttt{cbnm96} and \texttt{exp96} projection), the collapse gives
+1.00--1.34 for Be$^0$ and 1.02--2.21 for He$^0$, the conventional model
+0.26--1.00 and 0.88--1.00. So no stage-to-stage model is right for every ion.
+The physically correct option is the resolved balance, the default.
+
+\begin{implnote}[Check against ADAS: Be I]
+The ADAS central data for Be I were made from \texttt{adf04/adas\#4/cpb03\_ls\#be0.dat}
+(dated 01-02-2006; the copy \texttt{examples/input/cpb03\_ls\#be0.dat} differs only
+in line endings) with the projection \texttt{adf17/cbnm96\#be/cbnm96\#be\_be0ls.dat}
+and \texttt{adf18/a17\_p208/exp96\#be/exp96\#be\_be0ls.dat} (02/02/06), by ADAS208 on
+02.02.06 with the metastables 2s$^2$\,$^1$S and 2s2p\,$^3$P (options
+\code{LNORM LIOSEL LRSEL LNSEL} on, \code{LPSEL LHSEL LISEL} off; ADF10 Be-like
+files such as \texttt{adf10/met96/pj\#met96\_be\#\#.dat}), and ADAS404 on 23/02/06:
+\texttt{adf11/\textless{}class\textgreater{}/\textless{}class\textgreater{}\_be.dat} for \code{scd96r}, \code{acd96r},
+\code{qcd96r}, \code{plt96r}, \code{prb96r}, \code{scd96}, \code{acd96},
+\code{plt96} and \code{prb96}. ColRadPy was run from the same ADF04, ADF17 and
+ADF18 files on the ADF11 points 2, 4.5, 11, 18, 45 and 100\,eV and $10^{10}$,
+$10^{12}$, $10^{13}$ and $10^{14}$\,cm$^{-3}$. Table~\ref{tab:adf11be} gives
+the ratios. OPEN-ADAS may distribute newer versions of these files; the
+comparison holds for the versions named here.
+\end{implnote}
+
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{Xl}\toprule
+Quantity & ColRadPy / ADAS\\\midrule
+\multicolumn{2}{l}{\emph{Resolved, ColRadPy with $^1$S, $^3$P and the projection}}\\
+SCD of $^1$S and $^3$P & 0.99--1.01\\
+ACD into $^1$S; into $^3$P & 0.97--1.00; 0.93--1.01\\
+QCD $^1$S$\to{}^3$P and $^3$P$\to{}^1$S & 0.99--1.03\\
+PLT of $^1$S and $^3$P & 0.99--1.05\\
+$m_{^3\mathrm P}$, Eq.~\eqref{eq:met}, against ADF10 MET & 0.97--1.04\\
+PRB (a different quantity, see text) & 0.01--0.08\\
+\multicolumn{2}{l}{\emph{Unresolved}}\\
+ADAS \code{96r} contracted by Eq.~\eqref{eq:unresolved} with ADF10 MET / ADAS \code{96} & SCD, PLT 0.99--1.00; ACD 1.00\\
+ColRadPy resolved, contracted by Eqs.~\eqref{eq:unresolved}, \eqref{eq:met} & SCD 0.99--1.01; PLT 1.00--1.02; ACD 0.95--1.00\\
+ColRadPy with the ground only & SCD 0.93--1.01; PLT 0.94--1.02; ACD 0.19--0.94\\
+\multicolumn{2}{l}{\emph{Equilibrium $N(\mathrm{Be}^0)/N(\mathrm{Be}^+)$ against the resolved balance of $^1$S, $^3$P and Be$^+$}}\\
+ColRadPy resolved / ADAS resolved & 0.95--1.01\\
+ADAS unresolved \code{acd96}/\code{scd96} & 1.01--1.03 at 2\,eV; 1.19--1.34 at 100\,eV\\
+ColRadPy with the ground only & 0.92--0.98 at 2\,eV; 0.26--0.34 at 100\,eV\\
+\multicolumn{2}{l}{\emph{S/XB, ADF13 \texttt{sxb96\#be/sxb96\#be\_pju\#be0.dat} (ADAS208, 23/02/06), 23 lines}}\\
+With the projection, 1--200\,eV and $10^{10}$--$10^{15}$\,cm$^{-3}$ & 0.91--1.11\\
+Without the projection (median per line) & 0.28--0.79\\\bottomrule
+\end{tabularx}
+\caption{Be I against the ADAS data named in the note above. In the resolved
+balance the share of $^3$P atoms that come from capture is 4--14\,\% at
+2\,eV, 63--72\,\% at 11\,eV and 98--99\,\% at 100\,eV, which is what the
+unresolved contraction leaves out.}\label{tab:adf11be}
 \end{table}
 
 \section{Time-dependent evolution and matrix exponentials}\label{sec:time}
@@ -1581,7 +1742,8 @@ an ionization parent.
 \subsection{ADF04, ADF11, ADF13, ADF15 and HDF5}
 
 ADF04 is a level-resolved atomic-data format, whereas ADF11 holds effective
-charge-state coefficients on temperature and density grids. The ADF11 reader
+charge-state coefficients on temperature and density grids, made as described
+in Section~\ref{sec:adf11adas}. The ADF11 reader
 stores logarithmic data and the ionization-balance path interpolates the
 logged grids and coefficients before converting to physical values.
 File naming and block interpretation identify coefficient families.
@@ -1640,6 +1802,7 @@ from implementation defects.
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
 Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented; the ACD into Ne$^{+}$ differs from ADAS by 20--40\,\%; below the first ADF17 temperature the couplings are continued with estimated thresholds and limited power laws, and above the last one held at its values. & Section~\ref{sec:projection}\\
+Radiated power & \code{prb} is the line power of the ADF04 levels after capture; it does not include the recombination continuum, bremsstrahlung or the radiation of the projected shells that the ADAS PRB contains (1--8\,\% of it for Be I). & Section~\ref{sec:adf11adas}\\
 Coupling assumptions & Intercombination and $|\Delta L|>1$ lines are kept unsplit rather than split with a coupling model. & Section~\ref{sec:spectra}\\
 \bottomrule
 \end{longtable}
@@ -1675,6 +1838,26 @@ generalized collisional radiative definitions and separate emission drivers.
 \bibitem{adf04} ADAS User Manual, Appendix A, \emph{ADF04: resolved specific
 ion data collections}.
 \url{https://www.adas.ac.uk/man/appxa-04.pdf}.
+\bibitem{adf10} ADAS User Manual, Appendix A, \emph{ADF10: iso-electronic
+master files}.
+\url{https://www.adas.ac.uk/man/appxa-10.pdf}.
+\bibitem{adf11} ADAS User Manual, Appendix A, \emph{ADF11: iso-nuclear master
+files}.
+\url{https://www.adas.ac.uk/man/appxa-11.pdf}.
+\bibitem{adas204} ADAS User Manual, \emph{ADAS204: specific z recom/ionis --
+process collisional radiative coefficients and populations}.
+\url{https://www.adas.ac.uk/man/chap2-04.pdf}.
+\bibitem{adas208} ADAS User Manual, \emph{ADAS208: specific z excitation --
+advanced population processing}.
+\url{https://www.adas.ac.uk/man/chap2-08.pdf}.
+\bibitem{adas404} ADAS User Manual, \emph{ADAS404: isonuclear master data --
+extract from isoelectronic master data}.
+\url{https://www.adas.ac.uk/man/chap4-04.pdf}.
+\bibitem{summers2006} H. P. Summers \emph{et al.}, ``Ionization state, excited
+populations and emission of impurities in dynamic finite density plasmas:
+I. The generalized collisional-radiative model for light elements,''
+\emph{Plasma Physics and Controlled Fusion} \textbf{48}, 263 (2006).
+\href{https://doi.org/10.1088/0741-3335/48/2/007}{doi:10.1088/0741-3335/48/2/007}.
 \bibitem{adf13} ADAS User Manual, Appendix A, \emph{ADF13: ionisation per
 photon coefficients}.
 \url{https://www.adas.ac.uk/man/appxa-13.pdf}.
