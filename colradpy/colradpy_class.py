@@ -62,7 +62,6 @@ if( (sys.version_info[0] ==3) & (sys.version_info[1] >=10)):
 else:
     from collections import Mapping
     
-from matplotlib import rc,rcParams
 from fractions import Fraction
 import os
 import warnings
@@ -2953,8 +2952,9 @@ class colradpy():
            **WARNING** wavelngth values will be wrong unless energy levels in the file
            have been 'shifted' to NIST values.
            User provides index arrays for the temperature density and metastable
-           for the PECs to be plotted.
-           
+           for the PECs to be plotted. One figure is made for each combination, in the default
+           matplotlib style of the session.
+
         :param temp: Array of temperature indexes
         :type temp: int array
 
@@ -2967,10 +2967,9 @@ class colradpy():
         :param wave_range: wavelength axis (min, max) in nm; by default it spans the lines with
                            PECs of at least 1e-3 of the strongest
         :type wave_range: float tuple
-        """
 
-        rc('axes', linewidth=2)
-        rc('font', weight='semibold')
+        :returns: list of the matplotlib figures
+        """
 
         if('processed' not in self.data.keys()):
             self.solve_cr()
@@ -2984,30 +2983,32 @@ class colradpy():
         if(np.asarray(meta).size>0):
             p_m = p_m[meta]
 
+        wave = self.data['processed']['wave_air']
+        figures = []
         for i in p_n:
             for j in p_t:
                 for k in p_m:
-                    plt.figure()
-                    wave = self.data['processed']['wave_air']
+                    fig, ax = plt.subplots(layout='constrained')
                     pecs = self.data['processed']['pecs'][:,k,j,i]
                     #the PECs are plotted in units of 10^scaling ph cm3 s-1, so the largest is from 1 to 10
                     scaling = int(np.floor(np.log10(np.max(pecs)))) if np.max(pecs) > 0 else 0
-                    plt.vlines(wave, np.zeros_like(wave), pecs/10.**scaling)
-
-                    plt.xlabel('Wavelength in air (nm)',weight='semibold')
-                    plt.ylabel('PEC (10$^{' + str(scaling) + '}$ ph cm$^{3}$ s$^{-1}$)',weight='semibold')
-                    plt.title('Temperature ' + str(self.data['user']['temp_grid'][j]) + ' eV,  '+\
-                              'Density ' + format(self.data['user']['dens_grid'][i],'.2e') + ' cm$^{-3}$, '+\
-                              'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
+                    ax.vlines(wave, np.zeros_like(wave), pecs/10.**scaling)
+                    ax.set(xlabel='Wavelength in air (nm)',
+                           ylabel='PEC (10$^{' + str(scaling) + '}$ ph cm$^{3}$ s$^{-1}$)',
+                           title='Temperature ' + str(self.data['user']['temp_grid'][j]) + ' eV,  ' +
+                                 'Density ' + format(self.data['user']['dens_grid'][i],'.2e') + ' cm$^{-3}$, ' +
+                                 'Metastable ' + str(self.data['atomic']['metas'][k]))
                     if(wave_range is not None):
-                        plt.xlim(*wave_range)
+                        ax.set_xlim(*wave_range)
                     else:
                         #the lines that show on the plot, at least 1e-3 of the strongest
                         shown = np.isfinite(wave) & (pecs > 0) & (pecs >= 1e-3*np.max(pecs))
                         if(shown.any()):
                             low, high = np.min(wave[shown]), np.max(wave[shown])
                             margin = 0.05*(high - low) if high > low else 0.05*high
-                            plt.xlim(max(0., low - margin), high + margin)
+                            ax.set_xlim(max(0., low - margin), high + margin)
+                    figures.append(fig)
+        return figures
 
 
     def plot_pec_ratio_temp(self,pec1,pec2,dens=np.array([0]),meta = np.array([0])):
@@ -3015,7 +3016,7 @@ class colradpy():
            Density values for the ratio are choosen by the user by specifying the indices from the user
            density array to be plot. Each density chosen will show up as a new line in the figure.
            The user can also choose the metastable by default only the ground is plotted.
-           The user specifies the indices of the metastable to be plot. 
+           The user specifies the indices of the metastable to be plot.
            A new figure for each metastable chosen will be made with the number of density lines chosen.
 
         :param pec1: Index of pec on the top of the ratio
@@ -3030,37 +3031,38 @@ class colradpy():
         :param meta: array of metastable indexes
         :type metas: int array
 
+        :returns: list of the matplotlib figures, one per metastable
         """
 
         if('processed' not in self.data.keys()):
             self.solve_cr()
-        dens = np.array(dens)
         p_n = np.arange(0,len(self.data['user']['dens_grid']),dtype=int)
         p_m = np.arange(0,len(self.data['atomic']['metas']),dtype=int)
-        
+
         if(np.asarray(dens).size>0):
-            p_n = p_n[dens]
+            p_n = p_n[np.asarray(dens)]
         if(np.asarray(meta).size>0):
-            p_m = p_m[meta]
+            p_m = p_m[np.asarray(meta)]
 
+        figures = []
         for k in p_m:
-            plt.figure()                        
+            fig, ax = plt.subplots(layout='constrained')
             for i in p_n:
-                
-                plt.plot(self.data['user']['temp_grid'],
-                     self.data['processed']['pecs'][pec1,k,:,i]/ \
-                         self.data['processed']['pecs'][pec2,k,:,i],
-                         label='$n_e$ = ' + format(self.data['user']['dens_grid'][i],'.1e') + ' cm$^{-3}$')
+                ax.plot(self.data['user']['temp_grid'],
+                        self.data['processed']['pecs'][pec1,k,:,i]/self.data['processed']['pecs'][pec2,k,:,i],
+                        label='$n_e$ = ' + format(self.data['user']['dens_grid'][i],'.1e') + ' cm$^{-3}$')
+            ax.set(xlabel='Temperature (eV)', ylabel='Ratio (-)',
+                   title=self._pec_ratio_title(pec1, pec2, k))
+            ax.legend(loc='best')
+            figures.append(fig)
+        return figures
 
-                plt.xlabel('Temperature (eV)',weight='semibold')
-                plt.ylabel('Ratio (-)',weight='semibold')
-                plt.title('Ratio of PEC '+str(pec1)+', ' + format(self.data['processed']['wave_air'][pec1],'.2f') + ' nm'+\
-                          ' to PEC '+str(pec2)+', ' + format(self.data['processed']['wave_air'][pec2],'.2f') + ' nm, '+\
-                              'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
-                plt.legend(loc='best')
-
-
-
+    def _pec_ratio_title(self, pec1, pec2, meta):
+        """Title of the PEC ratio plots: the two lines and the metastable."""
+        wave = self.data['processed']['wave_air']
+        return ('Ratio of PEC ' + str(pec1) + ', ' + format(wave[pec1],'.2f') + ' nm' +
+                ' to PEC ' + str(pec2) + ', ' + format(wave[pec2],'.2f') + ' nm, ' +
+                'Metastable ' + str(self.data['atomic']['metas'][meta]))
 
 
     def return_level_info(self,level_num,split=False):
@@ -3115,37 +3117,34 @@ class colradpy():
 
         :param scale: scale for the density axis default is log
         :type scale: str
+
+        :returns: list of the matplotlib figures, one per metastable
         """
-        
-        temp = np.array(temp)
-        p_n = np.arange(0,len(self.data['user']['temp_grid']),dtype=int)
+
+        if('processed' not in self.data.keys()):
+            self.solve_cr()
+        p_t = np.arange(0,len(self.data['user']['temp_grid']),dtype=int)
         p_m = np.arange(0,len(self.data['atomic']['metas']),dtype=int)
-        
+
         if(np.asarray(temp).size>0):
-            p_n = p_n[temp]
+            p_t = p_t[np.asarray(temp)]
         if(np.asarray(meta).size>0):
-            p_m = p_m[meta]
+            p_m = p_m[np.asarray(meta)]
 
+        figures = []
         for k in p_m:
-            plt.figure()                        
-            for i in p_n:
-                
-                plt.plot(self.data['user']['dens_grid'],
-                     self.data['processed']['pecs'][pec1,k,i,:]/ \
-                         self.data['processed']['pecs'][pec2,k,i,:],
-                         label='$T_e$ = ' + format(self.data['user']['temp_grid'][i],'.1f') + ' eV')
-
-                plt.xlabel('Density (cm$^{-3}$)',weight='semibold')
-                plt.ylabel('Ratio (-)',weight='semibold')
-                plt.title('Ratio of PEC '+str(pec1)+', ' + format(self.data['processed']['wave_air'][pec1],'.2f') + ' nm'+\
-                          ' to PEC '+str(pec2)+', ' + format(self.data['processed']['wave_air'][pec2],'.2f') + ' nm, '+\
-                              'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
-                if(scale=='log'):
-                    plt.semilogx()
-                plt.legend(loc='best')
-
-
-
+            fig, ax = plt.subplots(layout='constrained')
+            for i in p_t:
+                ax.plot(self.data['user']['dens_grid'],
+                        self.data['processed']['pecs'][pec1,k,i,:]/self.data['processed']['pecs'][pec2,k,i,:],
+                        label='$T_e$ = ' + format(self.data['user']['temp_grid'][i],'.1f') + ' eV')
+            ax.set(xlabel='Density (cm$^{-3}$)', ylabel='Ratio (-)',
+                   title=self._pec_ratio_title(pec1, pec2, k))
+            if(scale=='log'):
+                ax.set_xscale('log')
+            ax.legend(loc='best')
+            figures.append(fig)
+        return figures
 
 
     def write_pecs_adf15(self,fil_name='', pec_inds = None, num = 8, pecs_split=False):

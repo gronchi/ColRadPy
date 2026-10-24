@@ -74,6 +74,24 @@ class PecPlotTests(unittest.TestCase):
             m.plot_pec_sticks(temp=[0], dens=[0], meta=[0])
         self.assertEqual(plt.gca().get_ylabel(), "PEC (10$^{0}$ ph cm$^{3}$ s$^{-1}$)")
 
+    def test_default_style_and_returned_figures(self):
+        # plot_pec_sticks set the axes line width and font weight with rc(), so every later
+        # figure of the session was drawn with thick axes and semibold text. The plot methods
+        # now use the session's style, leave it unchanged and return their figures.
+        m = self.be0_model()
+        before = dict(plt.rcParams)
+        with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"):
+            sticks = m.plot_pec_sticks(temp=[0], dens=[0], meta=[0])
+            ratio_t = m.plot_pec_ratio_temp(0, 1, [0], [0])
+            ratio_n = m.plot_pec_ratio_dens(0, 1, [0], [0])
+        self.assertEqual(dict(plt.rcParams), before)
+        for figures in (sticks, ratio_t, ratio_n):
+            self.assertEqual(len(figures), 1)
+            ax = figures[0].axes[0]
+            self.assertEqual(ax.spines["left"].get_linewidth(), plt.rcParams["axes.linewidth"])
+            self.assertEqual(ax.title.get_fontweight(), plt.rcParams["axes.titleweight"])
+        self.assertEqual(ratio_n[0].axes[0].get_xscale(), "log")
+
 
 if __name__ == "__main__":
     unittest.main()
