@@ -3,42 +3,34 @@
 =============
 Tutorial
 =============
-This tutorial will take the user through the basics of atomic data needed for Collisional Radiative (CR) modeling.
-The python scripts for these examples can be found in the 'examples' folder.
-The code blocks below are run from the repository root, where they find the bundled
-adf04 files in 'examples/input'.
+This tutorial takes the user through the atomic data needed for collisional-radiative (CR)
+modeling, running ColRadPy, and analysing its results. The code blocks below are run from the
+repository root, where they find the bundled adf04 files in ``examples/input``; scripts with more
+examples are in the ``examples`` folder. The figures of this page are made by running its code
+blocks in order with ``python docs/source/scripts/tutorial_figures.py``.
 
-For a detailed introduction to CR theory see the ColRadPy paper included in the 'user_doc' folder.
-Summers 2006 also provides a more detailed overview of CR theory.
+For an introduction to CR theory see the ColRadPy paper (:download:`colradpy_paper.pdf
+<files/colradpy_paper.pdf>`, Johnson et al. 2019) and Summers et al. (2006); the
+:doc:`theory manual <theory_manual>` develops the equations that ColRadPy solves.
 
-Neither the local thermodynamic equilibrium (LTE) or conornal approximations are valid
-for fusion plasmas.
-These plasmas must be modeled with a collisional radiative (CR) model which includes effects
-of electron density.
-Collisional Radiative theory has been updated to included general collisional radiative (GCR) theory,
-this is outlined in (Summers 2006).
+Many plasmas of interest, fusion edge plasmas among them, are neither in local thermodynamic
+equilibrium (LTE) nor in the coronal (low-density) limit. Their level populations depend on the
+electron density as well as on the temperature, and must be calculated with a CR model.
+The generalized collisional-radiative (GCR) theory of Summers et al. (2006) extends the CR model to
+ions with metastable levels, whose populations are followed separately.
 
+The tutorial covers the following topics:
 
-
-The tutrial will go over the following major topics
-
-Installing ColRadPy `Installing ColRadPy`_
-
-
-The atomic data input for colradpy is overviewed in `Atomic Data and the ADF04 File`_
-
-Running ColRadPy will be outlined in `Running ColRadPy`_
-
-Built in post processes in ColRadPy is described in `Post processing analysis built in functions`_
-
-Posted processing for advanced users will be outlined in `Post processing analysis advanced`_
-
-The generalized collisional radiative coefficients will be discussed in `Generalized radiative coefficients (GCRs)`_
-
-Functionality for advanced users is outlined in `Advanced functionality`_
-
-Ionization balance is outlined in `Ionization Balance`_
-
+* `Installing ColRadPy`_
+* `Atomic Data and the ADF04 File`_
+* `Running ColRadPy`_
+* `Post processing analysis built in functions`_
+* `Post processing analysis advanced`_
+* `Generalized collisional-radiative coefficients (GCRs)`_
+* `Advanced functionality`_
+* `Projection of the high n-shells`_
+* `Atomic data from the Flexible Atomic Code`_
+* `Ionization Balance`_
 
 
 Installing ColRadPy
@@ -50,387 +42,223 @@ From a clone of the repository, install it in editable mode (see :ref:`installat
 
    pip install -e .
 
-
-
-
-Colradpy can now be called like anyother package.
-
-
+ColRadPy can then be imported like any other package:
 
 .. code-block:: python
    :linenos:
-      
+
    from colradpy import colradpy #import the colradpy class
    from colradpy import ionization_balance #import the ionization_balance class
 
 
-
-
-
-
-
 Atomic Data and the ADF04 File
 ==============================
-Atomic data is generally made by calculating cross-sections (probablity) of transitions.
-From these cross-sections rates are then made by convolving with a maxwellian temperature distriubtion (or some of distribution) of electron
-energies with the cross section.
-The rates produced by this method are what is used in the CR model.
+Atomic data are generally made by calculating the cross-sections of the processes that change the
+state of an ion. Rate coefficients are then made by averaging the cross-sections over the energy
+distribution of the electrons, usually a Maxwellian at the electron temperature.
+These rate coefficients are what the CR model uses.
 
-The ADF04 file format from `ADAS <http://www.adas.ac.uk/>`_ that is used to hold atomic rate data for input into the CR model.
-
-
+ColRadPy reads them from the ADF04 file format of `ADAS <http://www.adas.ac.uk/>`_, which holds
+the levels of one ion and its atomic rate data.
 
 
 Electron Impact De/Excitation
 -----------------------------
-Electron impact excitation and deexcitation is what causes transitions be the ground and excited states and within excited
-states. There rates are stored as "effective collisional strengths" in the adf04 file.
-These can then be converted to the excitiation and deexcitation rates that are needed for CR modeling.
+Electron impact excitation and de-excitation cause transitions between the ground and the excited
+levels and among the excited levels. The adf04 file stores them as effective collision strengths,
+which ColRadPy converts to excitation and de-excitation rate coefficients.
 
 
 Electron Impact Ionization
 ----------------------------
-Electrons can also ionize atoms to the next charge state. Ionization can be stored in the adf04 file as reduced ionization
-rates. ColRadPy is also capable of making ECIP ionization rates. ECIP ionization is a very approximate way of making ionization
-and should be avoid if possible. Ground and metastable states generally have calculated ionization rates while excited states
-generally have rates that are supplimented with ECIP.
+Electrons can also ionize the ion to the next charge state. The adf04 file can store ionization as
+reduced ionization rates. ColRadPy can also make ionization rates with the ECIP approximation.
+ECIP is a rough approximation and should be avoided where calculated rates exist. Ground and
+metastable levels generally have calculated ionization rates, while the rates of excited levels are
+generally supplemented with ECIP.
 
-Radative Recombination
+Radiative Recombination
 -------------------------
-
+In radiative recombination a free electron is captured by the next charge state (the parent) and
+the excess energy is emitted as a photon. The adf04 file gives these rates, level resolved and
+from each parent, in its recombination (R) lines, together with dielectronic recombination.
 
 Dielectronic Recombination
 ----------------------------
-
 Dielectronic recombination is the dominant recombination process in many plasmas.
-Dielectronic recombination is a two step process.
-First, there is a resonance capture of a free electron.
-In this processes a bound electron gains some energy and the free electron loses some energy.
-Second, the atom radiates a phonton.
-
+It is a two-step process. First, a free electron is captured resonantly while a bound electron is
+excited, so that the free electron loses its energy to the bound one. Second, the doubly excited
+state stabilizes by emitting a photon instead of autoionizing.
 
 Three-Body Recombination
 --------------------------
-Three-body recombination is calculated from using detailed balance from the ionization.
-In this process, free electrons and a ion recombine to produce a new ion and one free electron.
+In three-body recombination two free electrons collide with the parent ion; one is captured and the
+other carries away the excess energy. ColRadPy calculates it from the ionization rates by detailed
+balance.
 
 
 Solutions
 -----------
-Once rates from the basic atomic data have been input.
-ColRadPy can then solve the set of rate equations known as the collisional radiative equations.
-There are two ways that ColRadPy can solve the CR set of equations.
-The general user will probably be interested in the first way of solving the CR equations, this is same way ADAS solves the equations.
-The Quasistatic approximation solves the equations assuming that excited states do not have
-time changing populations. It assumes that these populations and in their equilbrium values with the
-ground and any metastable levels. This is the way that ADAS solves the CR set of equations.
+Once the rates are made from the atomic data, ColRadPy solves the set of rate equations known as
+the collisional-radiative equations. It can solve them in two ways.
 
-ColRadPy is also capable of solving the system of equations time dependently using the matrix exponentialation method.
-This solution makes no assumptions of equilbrium time scales for excited states.
-This is an excact solution.
-In equilbrium, the non-quasistatic and quastistic solutions will be the same.
+The quasistatic approximation, which most users need and which is also what ADAS uses, assumes that
+the excited levels relax so fast that their populations follow the ground and any metastable levels
+instantaneously. Their populations are then expressed through the populations of those retained
+levels.
 
-
-
+ColRadPy can also solve the full system of equations in time with the matrix exponential. This
+solution makes no assumption about the time scales of the excited levels and is exact for fixed
+plasma conditions. Once the excited levels have relaxed, it agrees with the quasistatic solution.
 
 
 Running ColRadPy
 ===================
 
-:ref:`ColRadPy <colradpy>` requires multiple inputs from the user to run.
-The basic quasistatic run will be discussed first. This should be sufficient for most users.
-Once the code runs data is store in a dictionary accessed through the '.data' method.
-The entries of this dictionary and descriptions are documented :ref:`here.<colradpy_dict>`
+:ref:`ColRadPy <colradpy>` needs the following inputs. The basic quasistatic run, discussed first,
+is sufficient for most users. Once the code runs, its data are stored in the dictionary ``.data``,
+whose entries are documented :ref:`here <colradpy_dict>`.
 
-* Atomic data input file - currently this is limitted to an ADF04 file but there is nothing special about it.
+* Atomic data input file - an ADF04 file (or the dictionary that ``colradpy.read_fac`` makes).
 
-* array of metastable levels - This is an array of levels that includes the ground and any levels that could be considered metastable.
+* Array of metastable levels - the indices of the ground and any levels that are treated as
+  metastable.
 
-* temperature grid - This is an array of electron temperatures for the calculation in eV.
+* Temperature grid - an array of electron temperatures in eV.
 
-* Density grid     - This is an array of electron densities for the calculation in cm-3.
+* Density grid - an array of electron densities in cm-3.
 
+In the example below Be I (neutral beryllium) is used, with only the ground as a metastable.
+If you don't know which levels are metastable, choose only level 0 (the ground). Metastable levels
+matter when their populations are not in equilibrium with the ground; in equilibrium their
+fractions are fixed by the temperature and density.
 
+The options choose the processes that are included:
 
+* ``use_recombination=True`` uses the recombination rates of the adf04 file.
 
-In this example Be II (Be+) is used because it is a simple system that has a parent ion
-(the next charge state) that has a metastable.
-This allows all of the different functionality to be shown and tested.
+* ``use_recombination_three_body=True`` makes three-body recombination rates and includes them.
+  Three-body recombination is made from the ionization rates, so it needs ionization data.
 
+* ``use_ionization=True`` uses the ionization rates of the adf04 file.
 
-#. The module  must be executed
-#. Input file, temperature, density and metastable inputs defined.
-#. Ionization, recombination options chosen default values are true
+* ``suppliment_with_ecip=True`` makes ECIP ionization rates and uses them wherever the adf04 file
+  has no ionization rate.
 
-
-
-
-There are are highlevel class definitions that a general user can use.
-These high level definitions will be shown as well as the more basic definitions that
-these high level definitions call.
-A basic user needs to only care about the high level definitions
-
-Below is an example of running ColRadPy.
-The user chooses an input adf04 file, temperature and density grids as well as the number of metastables.
-If you don't know how many metastables exist only choose level '0' (the ground) as being metastable.
-Choices were also made to include ionization and recombination.
-Note that metastable levels are only important if the plasma is not in equilbrium.
-In equilbrium metastable fraction is set and will not vary for a given temperature and density.
-
-The 'use_recombination' flag when true will use any recombination rates that are included in the adf04 file.
-
-The 'use_recombination_three_body' flag when true will have ColRadPy make and include three body recombination rates.
-
-Note inorder to have three body recombination there must be some ionization included in the calculation.
-
-The 'use_ionization' flag when true will use any ionization rates that are included in the adf04 file.
-
-The 'suppliment_with_ecip' when true will have ColRadPy make ECIP ionization rates and include these rates anywhere
-that there are no ionization rates included in the adf04 file.
-
-
-Note that ionization should always be included in the calculation even if it is just ECIP.
-Ionization can significantly change both absolute values of PECs as well as relative values of PECs.
-
+Ionization should always be included in the calculation, even if only from ECIP: it can change both
+the absolute values of the PECs and their ratios.
 
 .. code-block:: python
    :linenos:
 
-    from colradpy import colradpy
-    import numpy as np
+   from colradpy import colradpy
+   import numpy as np
 
-    fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
-    temperature_arr = np.linspace(1,100,100) #eV
-    metastable_levels = np.array([0])   #metastable level, just ground chosen here
-    density_arr =     np.array([1.e13,4.e14]) # cm-3
+   fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
+   temperature_arr = np.linspace(1,100,100) #eV
+   metastable_levels = np.array([0])   #metastable level, just ground chosen here
+   density_arr = np.geomspace(1.e10,1.e15,11) # cm-3
 
-    #calling the colradpy class with the various inputs
-    be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True, 
-		  use_recombination_three_body = True,use_ionization=True,suppliment_with_ecip=True)
+   #calling the colradpy class with the various inputs
+   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
+                 use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True)
 
-    be.solve_cr() #solve the CR equations with the quasistatic method
-    
+   be.solve_cr() #solve the CR equations with the quasistatic method
 
-'be' is now a colradpy class that has been solved. There are various methods for getting the data out.
-Data that required ColRadPy to solve the CR set of equations is now stored in the 'processed' sub dictionary.
-There are many different calls that could be made from the class :ref:`documented here <colradpy>`.
-
-
+``be`` is now a solved ``colradpy`` object. The results that needed the solution of the CR
+equations are in the ``be.data['processed']`` sub dictionary. The methods of the class are
+:ref:`documented here <colradpy>`.
 
 .. hidden-code-block:: python
     :linenos:
     :label: --- Show/details of solve_cr()---
 
-	    
-    #The flow of the code is below
-    # 1. create rates from adf04 or internal
-    # 2. populate matrix
-    # 3. solve matrix and create post processed data.
-	    
-    #the block of code below is what 'solve_cr()' is doing
-    if(be.data['user']['use_ionization']):
-	be.make_ioniz_from_reduced_ionizrates()
+    #what solve_cr() does
+    # 1. make the rates from the adf04 file or internally (ECIP, three-body recombination)
+    # 2. populate the CR matrix
+    # 3. solve the matrix and make the processed data
+    if(be.data['user']['use_ionization'] or be.data['user']['use_recombination_three_body']):
+        be.make_ioniz_from_reduced_ionizrates()
     if(be.data['user']['suppliment_with_ecip']):
-	be.make_ecip()
-	be.suppliment_with_ecip()
+        be.make_ecip()
+        be.suppliment_with_ecip()
     if(be.data['user']['use_recombination']):
-	be.make_recombination_rates_from_file()
+        be.make_recombination_rates_from_file()
     if(be.data['user']['use_recombination_three_body']):
-	be.make_three_body_recombination()
+        be.make_three_body_recombination()
+    if(be.data['user']['use_cx']):
+        be.make_cx_rates_from_file()
     be.make_electron_excitation_rates()
+    if(be.data['user'].get('projection')):
+        be.make_projection()   #indirect couplings through the high n-shells
 
-    # This call takes in all of the rates that were provided by
-    # the adf04 file as well as any rates that were bade in
-    # ColRadPy and puts them into the matrix.
-    
+    #put all of the rates into the CR matrix
     be.populate_cr_matrix()
 
-    # This call solves the CR matrix and creates the 'processed'
-    # sub dictionary with all of the processed data.
-    
+    #solve the CR matrix and make the 'processed' sub dictionary
     be.solve_quasi_static()
-
-
-Data from the calculation is now avaible in the '.data' dictionary.
-Various postpocessing can be done to now analysis the calcuation.
-
 
 
 Post processing analysis built in functions
 =============================================
-There are some built in functions avaible for post processing analysis
-these will of use for the general user.
-The basic functions  require minimal knowelge of the underlying datastructure.
-These basic functions will be overviewed first then a more complex analysis will be presented after.
+A few built-in functions cover common analyses and need little knowledge of the data structure.
+They are described first, and a more detailed analysis follows.
 
-The theorical spectrum can be plotted describe in `Plotting Theorical Spectrum (PEC sticks)`_
-
-The line ratios versus temperature and density is describe in `Plotting PEC ratios`_
-
-The PECs and S/XB coefficients can be written to ADAS files as described in `Writing adf15 and adf13 files`_
+* The theoretical spectrum can be plotted as described in `Plotting Theoretical Spectrum (PEC sticks)`_.
+* Line ratios versus temperature and density are described in `Plotting PEC ratios`_.
+* The PECs and S/XB coefficients can be written to ADAS files as described in `Writing adf15 and adf13 files`_.
 
 
-Plotting Theorical Spectrum (PEC sticks)
+Plotting Theoretical Spectrum (PEC sticks)
 ------------------------------------------
-The theorical spectral spectrum from the adf04 file can be plotted with the below command.
-The parameters are the lists or arrays of the index of the metastable,
-temperature and density grids.
-*WARNING* Note that wavelengths will not match NIST wavelengths
-unless the adf04 energy levels have been shifted to the NIST values.
-This generally hasn't been done in the past so there are many adf04 files that don't
-use NIST energy values.
+The spectrum of photon emissivity coefficients (PECs) can be plotted with the command below.
+Its arguments are lists of indices into the temperature grid, the density grid and the metastables;
+one figure is made for each combination. The optional ``wave_range=(min, max)`` sets the wavelength
+axis in nm, which otherwise spans the lines with PECs of at least 1e-3 of the strongest.
+The plotting methods use the matplotlib style of the session and return the list of figures they
+make, so a figure can be changed or saved, e.g. ``fig, = be.plot_pec_sticks([0],[0],[0])`` and
+``fig.savefig('be0_sticks.png')``.
+
+*WARNING*: the wavelengths match the NIST wavelengths only if the adf04 energy levels have been
+shifted to the NIST values. This has not generally been done in the past, so many adf04 files do
+not use NIST energies (see `Split LS resolved data to LSJ`_).
 
 .. code-block:: python
    :linenos:
 
-      
-      be.plot_pec_sticks([0],[0],[0])
+   be.plot_pec_sticks([0],[0],[0])
 
-      
-
-.. hidden-code-block:: python
-    :linenos:
-    :label: --- Show/details of plot_pec_sticks()---
-
-
-            
-      rc('axes', linewidth=2)
-      rc('font', weight='semibold')
-
-      if('processed' not in self.data.keys()):
-          self.solve_cr()
-
-      p_t = np.arange(0,len(self.data['user']['temp_grid']))
-      p_n = np.arange(0,len(self.data['user']['dens_grid']))
-      p_m = np.arange(0,len(self.data['atomic']['metas']))
-      if(np.asarray(temp).size>0):
-          p_t = p_t[temp]
-      if(np.asarray(dens).size>0):
-          p_n = p_n[dens]
-      if(np.asarray(meta).size>0):
-          p_m = p_m[meta]
-
-      for i in p_n:
-          for j in p_t:
-              for k in p_m:
-                  plt.figure()
-                  scaling = int(np.floor(np.log2(np.max(self.data['processed']['pecs'][:,k,j,i]))/np.log2(10)))
-                  plt.vlines(self.data['processed']['wave_air'],
-                         np.zeros_like(self.data['processed']['wave_air']),
-                                       self.data['processed']['pecs'][:,k,j,i]*10**np.abs(scaling))
-
-                  plt.xlabel('Wavelength in air (nm)',weight='semibold')
-                  plt.ylabel('PEC X 1E' +str(scaling) + ' (ph cm$^{-1}$ s$^{-1}$)',weight='semibold')
-                  plt.title('Temperature ' + str(self.data['user']['temp_grid'][j]) + ' eV,  '+\
-                            'Density ' + format(self.data['user']['dens_grid'][i],'.2e') + ' cm$^{-3}$, '+\
-                            'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
-                  plt.xlim(0,1300)
-
-      
 
 Plotting PEC ratios
 ---------------------
-Spectral line intenties are functions of both electron temperature and density as well as ion density.
-Different spectral lines will have different functional forms on temperature and density.
-It is therefore possible to find ratios of spectral lines that are depenended on either temperature or density as the ion density cancels out.
-It is then possible to dianose electron temperature and density from line ratios where the charge state exists in the plasma.
+Spectral line intensities depend on the electron temperature and density as well as on the ion
+density. Different lines depend differently on temperature and density, so the ratios of some lines,
+in which the ion density cancels, depend mainly on temperature or mainly on density. Such ratios can
+diagnose the electron temperature and density where the charge state exists in the plasma.
 
-
-
-Temperature ratios can be plotted with the below function.
-The temperature ratio of the two pecs will be plotted with new figures made for each density and metastable requested.
-The inputs are the indexes of pec1, pec2, array of densities and array of metastables
+The temperature dependence of the ratio of two PECs is plotted below, with one figure for each
+metastable requested. The arguments are the indices of the two PECs, then lists of density and
+metastable indices:
 
 .. code-block:: python
    :linenos:
 
-      
-      be.plot_pec_ratio_temp(0,1,[0],[0])
+   be.plot_pec_ratio_temp(0,1,[0],[0])
 
-
-
-.. hidden-code-block:: python
-    :linenos:
-    :label: --- Show/details of plot_pec_ratio_temp()---
-
-
-        if('processed' not in self.data.keys()):
-            self.solve_cr()
-
-        
-        dens = np.array(dens)
-        p_n = np.arange(0,len(self.data['user']['dens_grid']),dtype=int)
-        p_m = np.arange(0,len(self.data['atomic']['metas']),dtype=int)
-        
-        if(np.asarray(dens).size>0):
-            p_n = p_n[dens]
-        if(np.asarray(meta).size>0):
-            p_m = p_m[meta]
-
-        for k in p_m:
-            plt.figure()                        
-            for i in p_n:
-                
-                plt.plot(self.data['user']['temp_grid'],
-                     self.data['processed']['pecs'][pec1,k,:,i]/ \
-                         self.data['processed']['pecs'][pec2,k,:,i],
-                         label='$n_e$ = ' + format(self.data['user']['dens_grid'][i],'.1e') + ' cm$^{-3}$')
-
-                plt.xlabel('Temperature (eV)',weight='semibold')
-                plt.ylabel('Ratio (-)',weight='semibold')
-                plt.title('Ratio of PEC '+str(pec1)+', ' + format(self.data['processed']['wave_air'][pec1],'.2f') + ' nm'+\
-                          ' to PEC '+str(pec2)+', ' + format(self.data['processed']['wave_air'][pec2],'.2f') + ' nm, '+\
-                              'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
-                plt.legend(loc='best')
-
+The density dependence is plotted in the same way, with lists of temperature and metastable indices:
 
 .. code-block:: python
    :linenos:
 
-      
-      be.plot_pec_ratio_dens([0],[0],[0])
-      
-
-
-.. hidden-code-block:: python
-    :linenos:
-    :label: --- Show/details of plot_pec_ratio_dens()---
-
-
-        temp = np.array(temp)
-        p_n = np.arange(0,len(self.data['user']['temp_grid']),dtype=int)
-        p_m = np.arange(0,len(self.data['atomic']['metas']),dtype=int)
-        
-        if(np.asarray(temp).size>0):
-            p_n = p_n[temp]
-        if(np.asarray(meta).size>0):
-            p_m = p_m[meta]
-
-        for k in p_m:
-            plt.figure()                        
-            for i in p_n:
-                
-                plt.plot(self.data['user']['dens_grid'],
-                     self.data['processed']['pecs'][pec1,k,i,:]/ \
-                         self.data['processed']['pecs'][pec2,k,i,:],
-                         label='$T_e$ = ' + format(self.data['user']['temp_grid'][i],'.1f') + ' eV')
-
-                plt.xlabel('Density (cm$^{-3}$)',weight='semibold')
-                plt.ylabel('Ratio (-)',weight='semibold')
-                plt.title('Ratio of PEC '+str(pec1)+', ' + format(self.data['processed']['wave_air'][pec1],'.2f') + ' nm'+\
-                          ' to PEC '+str(pec2)+', ' + format(self.data['processed']['wave_air'][pec2],'.2f') + ' nm, '+\
-                              'Metastable ' + str(self.data['atomic']['metas'][k]),weight='semibold')
-                if(scale=='log'):
-                    plt.semilogx()
-                plt.legend(loc='best')
+   be.plot_pec_ratio_dens(0,1,[0],[0])
 
 
 Writing adf15 and adf13 files
 ------------------------------
 The PECs can be written to an adf15 file, and the S/XB coefficients (ionizations per emitted
 photon) to an adf13 file, in the ADAS formats that ADAS and other codes read.
-For each metastable and line the S/XB is the effective ionization of the metastable, summed over
-the parents, over the excitation PEC of the line from it, as ADAS208 makes it.
+For each metastable and line, the S/XB is the effective ionization of the metastable, summed over
+the parents, divided by the excitation PEC of the line from it, as ADAS208 makes it.
 S/XB needs ionization in the calculation and a temperature-density grid.
 Wavelengths are written in Angstroms, and the comments list each block with the upper and lower
 level of its line.
@@ -438,8 +266,8 @@ level of its line.
 .. code-block:: python
    :linenos:
 
-      be.write_pecs_adf15('be0.adf15')
-      be.write_sxb_adf13('be0.adf13')
+   be.write_pecs_adf15('be0.adf15')
+   be.write_sxb_adf13('be0.adf13')
 
 By default every line is written to the adf15 file and every line with excitation emission to the
 adf13 file; ``pec_inds`` and ``sxb_inds`` select lines by their index in ``be.data['processed']['wave_air']``.
@@ -454,7 +282,7 @@ no excitation emission:
 .. code-block:: python
    :linenos:
 
-      sxb = be.get_sxb()
+   sxb = be.get_sxb()
 
 
 Post processing analysis advanced
@@ -462,166 +290,140 @@ Post processing analysis advanced
 
 Photon emissivity coefficients (PECs)
 ----------------------------------------
-
-A theortical spectrum can be made from the PEC coefficients.
-PEC coefficient are stored in array that has shape (#pecs,metastable,temperature,density).
-The code below produces a PEC spectrum for on temperature and density.
-The wavelength and pec arrays share the same length.
+A theoretical spectrum can be made from the PECs. They are stored in an array of shape
+(line, driver, temperature, density). The drivers are the excitation from each metastable, followed
+by the recombination from each parent (and charge exchange, when it is used); for this Be I run,
+driver 0 is excitation from the ground and driver 1 recombination from the Be II ground.
+The wavelength and PEC arrays share the line axis. The code below plots the excitation PEC spectrum
+at one temperature and density.
 
 .. code-block:: python
    :linenos:
 
    import matplotlib.pyplot as plt
-   plt.ion()
-   met = 0 #metastable 0, this corresponds to the ground state
-   te = 0 #first temperature in the grid
-   ne = 0 #frist density in the grid
+   met = 0 #driver 0, excitation from the ground
+   te = 9  #10 eV in the temperature grid
+   ne = 6  #1e13 cm-3 in the density grid
 
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.105,right=0.965)
-   ax1.vlines(be.data['processed']['wave_air'],
-	      np.zeros_like(be.data['processed']['wave_air']),
-	      be.data['processed']['pecs'][:,met,te,ne])
-   ax1.set_xlim(0,1000)
-   ax1.set_title('PEC spectrum  T$_e$=' +str(be.data['user']['temp_grid'][te])+\
-		 ' eV  ne=' + "%0.*e"%(2,be.data['user']['dens_grid'][ne]) + ' cm$^{-3}$',size=10)
-   ax1.set_xlabel('Wavelength (nm)')
-   ax1.set_ylabel('PEC (ph cm$^{-3}$ s$^{-1}$)')
+   T = be.data['user']['temp_grid'][te]
+   n = be.data['user']['dens_grid'][ne]
 
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.vlines(be.data['processed']['wave_air'], 0, be.data['processed']['pecs'][:,met,te,ne])
+   ax.set(xlim=(0, 1000), xlabel='Wavelength (nm)', ylabel='PEC (ph cm$^3$ s$^{-1}$)',
+          title=f'PEC spectrum, $T_e$ = {T:.0f} eV, ' + '$n_e$ = 1e13 cm$^{-3}$')
 
 .. figure:: images/be0_pec_0_1000.png
    :scale: 50 %
-   :alt: Be I pecs 0-1000 nm
+   :alt: Be I PECs 0-1000 nm
 
+Often the index of a specific PEC is needed to find its temperature or density dependence.
+It can be found in two ways:
 
-   
-Often the index of a specific pec is wanted to find its temperature or density dependence.
-This can be accomplished in two basic ways.
+#. from the upper and lower levels of the transition, or
+#. from the wavelength of the transition.
 
-#. Upper and lower levels of the transitions are known
-#. The wavelength of the transition is known
-
-There is a map from transition numbers to pec index levels. .data['processed']['pec_levels'] has
-the same order as .data['processed']['wave_air'] and .data['processed']['pecs'].
-
+``be.data['processed']['pec_levels']`` holds the upper and lower level of each line, in the same
+order as ``be.data['processed']['wave_air']`` and ``be.data['processed']['pecs']``.
+The example below takes the 2s2p 1P - 2s2 1S resonance line, from level 2 to level 0.
 
 .. code-block:: python
    :linenos:
 
    print(np.shape(be.data['processed']['wave_air']),
-	 np.shape(be.data['processed']['pecs']),
-	 np.shape(be.data['processed']['pec_levels']))
-   #(320,) (320, 3, 1, 1) (320, 2)
+         np.shape(be.data['processed']['pecs']),
+         np.shape(be.data['processed']['pec_levels']))
+   #(406,) (406, 2, 100, 11) (406, 2)
 
-   upper_ind = 7 #ninth excited state
-   lower_ind = 0  #ground state
+   upper_ind = 2 #2s2p 1P, the third level
+   lower_ind = 0 #ground state
 
-   pec_ind = np.where( (be.data['processed']['pec_levels'][:,0] == upper_ind) &\
-		       (be.data['processed']['pec_levels'][:,1] == lower_ind))[0]
+   pec_ind = np.where( (be.data['processed']['pec_levels'][:,0] == upper_ind) &
+                       (be.data['processed']['pec_levels'][:,1] == lower_ind))[0][0]
+   line = f"{be.data['processed']['wave_air'][pec_ind]:.2f} nm"
 
-   #plot the temeprature dependence of the chosen pec at first density in the grid
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.93,left=0.105,right=0.965)
-   ax1.set_title('Temperature dependence of line ' +\
-		 str(be.data['processed']['wave_air'][pec_ind]) +' nm',size=10)
-   ax1.plot(be.data['user']['temp_grid'],be.data['processed']['pecs'][pec_ind[0],met,:,ne])
-   ax1.set_xlabel('Temperature (eV)')
-   ax1.set_ylabel('PEC (ph cm$^{-3}$ s$^{-1}$)')
+   #plot the temperature dependence of the chosen PEC at 1e13 cm-3
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(be.data['user']['temp_grid'], be.data['processed']['pecs'][pec_ind,met,:,ne])
+   ax.set(xlabel='Temperature (eV)', ylabel='PEC (ph cm$^3$ s$^{-1}$)',
+          title=f'{line} line, ' + '$n_e$ = 1e13 cm$^{-3}$')
 
-   #plot the density dependence of the chosen pec at first density in the grid
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.93,left=0.125,right=0.965)
-   ax1.set_title('Density dependence of line ' +\
-		 str(be.data['processed']['wave_air'][pec_ind]) +' nm',size=10)
-   ax1.plot(be.data['user']['dens_grid'],be.data['processed']['pecs'][pec_ind[0],met,te,:])
-   ax1.set_xlabel('Density (cm$^{-3}$)')
-   ax1.set_ylabel('PEC (ph cm$^{-3}$ s$^{-1}$)')
-
-
-If the wavelength of a line of interest is known, the index can be found by looking at the
-wavelength array.
-The indices of all pecs that fall within the upper and lower bound of the 'where' statement are
-returned. PECs can generally be distinguished by the actual value, large lines that are of interest
-have much large PEC values, this can allow 
-
+   #plot the density dependence of the chosen PEC at 10 eV
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(be.data['user']['dens_grid'], be.data['processed']['pecs'][pec_ind,met,te,:])
+   ax.set(xscale='log', xlabel='Density (cm$^{-3}$)', ylabel='PEC (ph cm$^3$ s$^{-1}$)',
+          title=f'{line} line, $T_e$ = {T:.0f} eV')
 
 .. figure:: images/be0_pec_temp.png
    :scale: 50 %
-   :alt: Be I temperature
-
-
+   :alt: Be I PEC versus temperature
 
 .. figure:: images/be0_pec_dens.png
    :scale: 50 %
-   :alt: Be I density
+   :alt: Be I PEC versus density
 
-
+If the wavelength of a line of interest is known, its index can be found from the wavelength
+array. All PECs whose wavelengths fall within the bounds of the ``where`` statement are returned.
+Lines close in wavelength can usually be told apart by their PEC values, since the lines of
+interest are generally much stronger.
 
 .. code-block:: python
    :linenos:
 
-   #want to find the index of Be I line at 351.55
-   pec_ind = np.where( (be.data['processed']['wave_air'] <352) &\
-		       (be.data['processed']['wave_air'] >351))
-   print('Wavelength from file ' + str(be.data['processed']['wave_air'][pec_ind[0]]))
-   #Wavelength from file [351.55028742]
-   print('PEC upper and lower levels '+ str(be.data['processed']['pec_levels'][pec_ind[0]]))
-   #PEC upper and lower levels [[25  2]]
-   
-
-Generalized radiative coefficients (GCRs)
------------------------------------------
-
-The generalized collsional radiative coefficients are calculated by ColRadPy as well.
-A description of these can be found in (Summers 2006), (Johnson 2019).
-GCR coefficients are often used as inputs to plasma transport codes.
-GCR coefficients are also used as inputs to ionization balance calculations which will be discussed
-later. This allows for different ionization stages to be linked.
-
-For example, the total ionization from one charge state to the other is defined as the SCD.
-The total recombination from a charge state to the charge state of interest is defined as the ACD.
-This gives the rate of population transfer from one ionization state to a lower ionization state.
-The situation for systems with metastable states requires that the effective ionization and
-recombination rates be metastable resolved.
-In addition, it requires metastable cross coupling coefficients known as QCD and XCD coefficients.
-
-Generally it is of interest to look at how the GCR coefficients change with some parameter such
-as temperature. Plots are shown below of the different GCRs.
+   #find the index of the Be I line at 351.55 nm
+   pec_ind = np.where( (be.data['processed']['wave_air'] < 352) &
+                       (be.data['processed']['wave_air'] > 351))[0]
+   print('Wavelength from file ' + str(be.data['processed']['wave_air'][pec_ind]))
+   #Wavelength from file [351.55028819]
+   print('PEC upper and lower levels ' + str(be.data['processed']['pec_levels'][pec_ind]))
+   #PEC upper and lower levels [[26  2]]
 
 
-A physical description of the GCRs can be helpful in interpreting the meaning behind
-them.
+Generalized collisional-radiative coefficients (GCRs)
+-----------------------------------------------------
+ColRadPy also calculates the generalized collisional-radiative coefficients, described in
+Summers et al. (2006) and Johnson et al. (2019). They are the effective rates between the retained
+populations (metastables and parents) once the excited levels are eliminated. They are inputs to
+plasma transport codes and to ionization balance calculations, discussed later, which link the
+charge states.
 
+The total ionization from one charge state to the next is the SCD, and the total recombination
+from the next charge state into the charge state of interest is the ACD. For ions with metastable
+levels these coefficients are resolved by metastable and parent, and two further coefficients,
+the QCD and the XCD, describe the transfer of population between metastables.
+All four are in cm3 s-1; multiplied by the electron density they are rates in s-1.
 
 Metastable Cross Coupling Coefficient (QCD)
 ---------------------------------------------
-The QCD coefficient represents the transfer of population from one metastable state to another within
-the ionization state of interest and includes both direct population transfer between
-metastable states as well as the transfer via an intermediate excited state.
+The QCD is the transfer of population from one metastable to another within the charge state of
+interest, both directly and through the excited levels.
 
 GCR Ionization Coefficient (SCD)
 -----------------------------------------
-The total ionization from one charge state to the other is defined as the SCD.
-
+The SCD is the ionization from a metastable to a parent, both directly and through the excited
+levels.
 
 GCR Recombination Coefficient (ACD)
 ----------------------------------------
-The total recombination from a charge state to the charge state of interest is defined as the ACD.
-
+The ACD is the recombination from a parent into a metastable of the charge state of interest,
+both directly and through the cascades of the excited levels.
 
 Metastable Parent Cross Coupling Coefficient (XCD)
 -------------------------------------------------------
-The XCD coefficient represents the transfer of population between metastable states from
-the ionization stage just above the stage of interest. Populations in the upper ionization
-stage can recombine into the ionization state of interest from one metastable, redistribute
-through all the states and then ionize back into a different metastable state of the upper
-ionization state.
-
+The XCD is the transfer of population between the metastables of the next charge state (the
+parents) through the charge state of interest: a parent recombines into an excited level, the
+population redistributes among the excited levels, and it ionizes to a different parent.
+With the `Projection of the high n-shells`_, the XCD also includes the recombination into the high
+n-shells that ionizes to another parent.
 
 GCR Examples
 ---------------
-For this example we will look at Be II this is soley because Be III has two metastable states.
-This means that the XCD will have non-zero values. Remeber the call from before for Be I.
+This example uses Be II, because the next charge state, Be III, has two metastables
+(1s2 1S and 1s2s 3S), so that the XCD is not zero. Level 1 of Be II (1s2 2p 2P) is retained here only
+to show the QCD between two retained levels: it is not metastable, and its QCD to the ground is
+dominated by its radiative decay divided by the density, A/ne. Remember the call from before for Be I.
+The coefficients are stored as ``qcd[from, to]``, ``scd[metastable, parent]``,
+``acd[metastable, parent]`` and ``xcd[from, to]`` (see the :ref:`dictionary <colradpy_dict>`).
 
 .. code-block:: python
    :linenos:
@@ -630,270 +432,198 @@ This means that the XCD will have non-zero values. Remeber the call from before 
    import numpy as np
 
    fil = 'examples/input/cpb03_ls#be1.dat' #adf04 file
-   temperature_arr = np.linspace(1,100,20) #eV
+   temperature_arr = np.linspace(1,100,50) #eV
    metastable_levels = np.array([0,1])   #ground and level 1 chosen to be metastable
-   density_arr =     np.array([1.e13,8.e13,4.e14]) # cm-3
+   density_arr = np.array([1.e13,8.e13,4.e14]) # cm-3
    beii = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-		 use_recombination_three_body = True,use_ionization=True,suppliment_with_ecip=True)
+                   use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True)
    beii.solve_cr()
 
 .. code-block:: python
    :linenos:
-      
+
    #plotting the QCD
    import matplotlib.pyplot as plt
-   plt.ion
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.125,right=0.965)
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['qcd'][0,1,:,0]*1e5,
-	    label = 'metastable cross coupling coefficient 1->2')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['qcd'][1,0,:,0]*1e5,
-	    label = 'metastable cross coupling coefficient 2->1')
-   ax1.legend()
-   ax1.set_title('QCD plot')
-   ax1.set_xlabel('Temperature (eV)')
-   ax1.set_ylabel('QCD * 10$^5$ (cm$^{-3}$ s$^{-1}$)')
-
+   T = beii.data['user']['temp_grid']
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(T, beii.data['processed']['qcd'][0,1,:,0], label='QCD 1 -> 2')
+   ax.plot(T, beii.data['processed']['qcd'][1,0,:,0], label='QCD 2 -> 1')
+   ax.set(yscale='log', xlabel='Temperature (eV)', ylabel='QCD (cm$^3$ s$^{-1}$)',
+          title='QCD of Be II, $n_e$ = 1e13 cm$^{-3}$')
+   ax.legend()
 
 .. figure:: images/be1_qcd.png
    :scale: 50 %
    :alt: Be II QCD
 
-	 
 .. code-block:: python
    :linenos:
-      
+
    #plotting the SCD
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.125,right=0.965)
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['scd'][0,0,:,0],
-	    label = 'metastable cross coupling coefficient 1->1+')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['scd'][0,1,:,0],
-	    label = 'metastable cross coupling coefficient 1->2+')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['scd'][1,0,:,0],
-	    label = 'metastable cross coupling coefficient 2->1+')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['scd'][1,1,:,0],
-	    label = 'metastable cross coupling coefficient 2->2+')
-
-   ax1.legend(fontsize='x-small',loc='best')
-   ax1.set_title('SCD plot')
-   ax1.set_xlabel('Temperature (eV)')
-   ax1.set_ylabel('SCD (ion cm$^{-3}$ s$^{-1}$)')
-
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for met in range(2):
+       for parent in range(2):
+           ax.plot(T, beii.data['processed']['scd'][met,parent,:,0], label=f'SCD {met+1} -> {parent+1}+')
+   #ionization to 1s2s 3S is negligible at the lowest temperatures
+   ax.set(yscale='log', ylim=(1e-20, 1e-7), xlabel='Temperature (eV)', ylabel='SCD (cm$^3$ s$^{-1}$)',
+          title='SCD of Be II, $n_e$ = 1e13 cm$^{-3}$')
+   ax.legend(fontsize='small')
 
 .. figure:: images/be1_scd.png
    :scale: 50 %
    :alt: Be II SCD
 
+   Ionization to the 1s2s 3S parent of Be III (2+) needs about 120 eV more than ionization to the
+   1s2 1S ground (1+). In this file only the Be II ground ionizes to 3S, so the SCD 2 -> 2+ is zero.
 
 .. code-block:: python
    :linenos:
 
    #plotting the ACD
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.075,right=0.965)
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['acd'][0,0,:,0],
-	    label = 'metastable cross coupling coefficient 1+->1')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['acd'][0,1,:,0],
-	    label = 'metastable cross coupling coefficient 2+->1')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['acd'][1,0,:,0],
-	    label = 'metastable cross coupling coefficient 1+->2')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['acd'][1,1,:,0],
-	    label = 'metastable cross coupling coefficient 2+->2')
-
-   ax1.legend(fontsize='x-small',loc='best')
-   ax1.set_title('ACD plot')
-   ax1.set_xlabel('Temperature (eV)')
-   ax1.set_ylabel('ACD (rec cm$^{-3}$ s$^{-1}$)')
-
-
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for met in range(2):
+       for parent in range(2):
+           ax.plot(T, beii.data['processed']['acd'][met,parent,:,0], label=f'ACD {parent+1}+ -> {met+1}')
+   ax.set(yscale='log', xlabel='Temperature (eV)', ylabel='ACD (cm$^3$ s$^{-1}$)',
+          title='ACD of Be II, $n_e$ = 1e13 cm$^{-3}$')
+   ax.legend(fontsize='small')
 
 .. figure:: images/be1_acd.png
    :scale: 50 %
    :alt: Be II ACD
 
-   
 .. code-block:: python
    :linenos:
 
    #plotting the XCD
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.12,right=0.965)
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['xcd'][0,1,:,0],
-	    label = 'metastable cross coupling coefficient 1+->2+')
-
-   ax1.plot(beii.data['user']['temp_grid'],
-	    beii.data['processed']['scd'][1,0,:,0],
-	    label = 'metastable cross coupling coefficient 2+->1+')
-   ax1.legend(fontsize='x-small',loc='best')
-   ax1.set_title('XCD plot')
-   ax1.set_xlabel('Temperature (eV)')
-   ax1.set_ylabel('XCD (cm$^{-3}$ s$^{-1}$)')
-
-
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(T, beii.data['processed']['xcd'][0,1,:,0], label='XCD 1+ -> 2+')
+   ax.plot(T, beii.data['processed']['xcd'][1,0,:,0], label='XCD 2+ -> 1+')
+   ax.set(yscale='log', xlabel='Temperature (eV)', ylabel='XCD (cm$^3$ s$^{-1}$)',
+          title='XCD of Be II, $n_e$ = 1e13 cm$^{-3}$')
+   ax.legend()
 
 .. figure:: images/be1_xcd.png
    :scale: 50 %
    :alt: Be II XCD
 
+   In this file only the Be II ground ionizes to the 1s2s 3S parent, so no path through the
+   excited levels leads from 1s2 1S to 3S and the XCD 1+ -> 2+ is zero (not drawn on the log
+   scale). Recombination from 3S into the excited levels that then ionize to 1S gives XCD 2+ -> 1+.
 
 
-
-	 
 Determining Populating Mechanisms
 ---------------------------------
-One feature unique to ColRadPy is the ability to determine the populating mechanism of levels.
-This allows one to see which levels in a calculation are important to modeling the spectral lines of interest.
-This allows those that generate the atomic data to know which transitions are required to accurately
-model spectral lines. With this new analysis technique, it is possible to identify transitions that are
-the most important and allow for complex systems such as high-Z near neutral systems to be simplified.
+ColRadPy can also determine the mechanisms that populate each level. This shows which levels and
+transitions of a calculation are important for modeling the spectral lines of interest, so that
+those who make the atomic data know which transitions must be accurate, and complex systems such
+as near-neutral high-Z ions can be simplified.
 
-
-
-ColRadPy also allows the user to determine which intermediate levels populate a level of interest withThis is don if the summation is not carried out from the calculation of the QCD.
-This allows one to see which levels in a calculation are important to modeling the spectral lines of interest. 
-
-
-
+``be.data['processed']['pop_lvl']`` keeps the terms of the quasistatic solution unsummed, with axes
+(excited level, injection level, driver, temperature, density). Its entry ``[i, j, ...]`` is the part
+of the population of excited level ``i`` that the driver injects into excited level ``j``; summed
+over ``j`` it gives the population of level ``i``. Both level axes count the excited levels only, so
+index 0 is level 1 (2s2p 3P), the first level above the ground. The first figure shows, for
+level 1, the fraction of its population injected into each excited level at three temperatures; the
+second shows how the fraction injected directly into level 1 by excitation from the ground changes
+with temperature.
 
 .. code-block:: python
    :linenos:
-      
-   #plotting the populating levels
-   plt.figure()
-   plt.figure();plt.plot(be.data['processed']['pop_lvl'][0,:,0,0,0]/\
-                         np.sum(be.data['processed']['pop_lvl'][0,:,0,0,0]))
 
-   plt.figure();plt.plot(be.data['processed']['pop_lvl'][0,:,0,10,0]/\
-                         np.sum(be.data['processed']['pop_lvl'][0,:,0,10,0]))
+   #fraction of the population of level 1 (excited index 0) injected into each excited level,
+   #from the ground (driver 0) at 1e13 cm-3
+   pop_lvl = be.data['processed']['pop_lvl']
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for te in (0, 10, -1):
+       contribution = pop_lvl[0,:,0,te,ne]
+       ax.plot(np.arange(1, len(contribution)+1), contribution/np.sum(contribution), 'o-', ms=3,
+               label=f"$T_e$ = {be.data['user']['temp_grid'][te]:.0f} eV")
+   ax.set(xlabel='Injection level (#)', ylabel='Populating fraction (-)',
+          title='Populating levels of level 1')
+   ax.legend()
 
-   plt.figure();plt.plot(be.data['processed']['pop_lvl'][0,:,0,-1,0]/\
-                         np.sum(be.data['processed']['pop_lvl'][0,:,0,-1,0]))
-   
-   plt.legend()
-   plt.xlabel('Level number (#)')
-   plt.ylabel('Populating fraction (-)')
-
-   #plotting the populating fraction from the ground versus temperature
-   plt.figure()
-   plt.plot(be.data['user']['temp_grid'],
-             be.data['processed']['pop_lvl'][10,0,0,:,0]/\
-	     np.sum(be.data['processed']['pop_lvl'][10,:,0,:,0],axis=0))
-	     
-   plt.xlabel('Temperature (eV)')
-   plt.ylabel('Populating fraction from ground (-)')
-
-
+   #fraction of the population of level 1 injected directly into it from the ground
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(be.data['user']['temp_grid'], pop_lvl[0,0,0,:,ne]/np.sum(pop_lvl[0,:,0,:,ne], axis=0))
+   ax.set(xlabel='Temperature (eV)', ylabel='Populating fraction from ground (-)',
+          title='Populating fraction from the ground to level 1')
 
 .. figure:: images/be0_pop_lvl.png
    :scale: 50 %
    :alt: Be I populating levels
 
-   This shows that as temperature increase other excited levels contributed more and more
-   to the first excited state
+   As the temperature increases, other excited levels contribute more to the population of
+   level 1.
 
-	 
 .. figure:: images/be0_ground_contribution.png
    :scale: 50 %
-   :alt: Be I ground contriubtion
+   :alt: Be I ground contribution
 
-   This shows that as the temperature increases the ground tributes less to the total population
-   of level 1.
-   
+   As the temperature increases, the direct excitation from the ground contributes less to the
+   population of level 1.
 
-   
 
 Advanced functionality
 =======================
 
 Time dependent CR modeling
 -----------------------------
+ColRadPy can also solve the full collisional-radiative matrix in time. This matters for systems
+with significant population in many excited levels or where very short time scales are of interest.
+Instead of the quasistatic approximation, in which the excited levels are assumed to have no
+population change, the populations evolve as the system of ordinary differential equations
+dN/dt = C N, with C the CR matrix. The method used to solve it was adapted from R. LeVeque.
 
+ColRadPy considers cases with and without a source term. The case without a source can describe a
+system like a linear machine viewed transverse to the motion of the particles. A source term can be
+used when the line of sight includes a source of particles, or to model the pumping of specific
+levels, as in laser-induced fluorescence (LIF).
 
-ColRadPy is also capable of solving the full collisional radiative matrix time-dependently.
-This can be important for systems where there is significant population in
-many excited states or where ultra fast timescales need to be considered.
-Instead of the quasi-static approximation used in Equation 4 where excited states are assumed to
-have no population change, the matrix is solved as a system of ordinary differential equations n (t) = An(t).
-This method used to solve the system of equations was adapted from R. LeVeque.
-
-Case in which with and without a source term can be considered in ColRadPy.
-The case without a source term can used in a system like a linear machine with views that are
-transverse to the direction of motion of the particles.
-
-A source term can be used when the line of sight includes a source of particles.
-The source term could also be used to model the pumping of specific levels with LIF.
-
+The initial populations ``td_n0`` have one entry for each level of the adf04 file followed by one for
+each parent: for Be I, 29 levels and the Be II ground.
 
 .. code-block:: python
    :linenos:
-      
+
    from colradpy import colradpy
    import numpy as np
    import matplotlib.pyplot as plt
 
    #Time dependent CR modeling
    td_t = np.geomspace(1.e-5,.1,1000)
-   td_n0 = np.zeros(30)
+   td_n0 = np.zeros(30)  #29 levels of Be I and the Be II ground
    td_n0[0] = 1.
 
    fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
    temperature_arr = np.array([10]) #eV
    metastable_levels = np.array([0])   #metastable level, just ground chosen here
-   density_arr =     np.array([1.e9]) # cm-3
+   density_arr = np.array([1.e9]) # cm-3
    be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-		 use_recombination_three_body = True,use_ionization=True,suppliment_with_ecip=True,
-		 td_t=td_t,td_n0=td_n0)
+                 use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True,
+                 td_t=td_t,td_n0=td_n0)
    be.solve_cr()
    be.solve_time_dependent()
 
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.1,right=0.965)
-   plt.plot(be.data['user']['td_t'],
-	    be.data['processed']['td']['td_pop'][0,:,0,0],
-	    label='Ground')
-   plt.plot(be.data['user']['td_t'],
-	    be.data['processed']['td']['td_pop'][1,:,0,0],
-	    label='level 1')
-   plt.plot(be.data['user']['td_t'],
-	    be.data['processed']['td']['td_pop'][-1,:,0,0],
-	    label='ion')
-   ax1.legend(fontsize='x-small',loc='best')
-   ax1.set_title('Time dependent solution of CR Be I no source term')
-   ax1.set_xlabel('Time (s)')
-   ax1.set_ylabel('Population (-)')
-
-
+   t = be.data['user']['td_t']
+   pop = be.data['processed']['td']['td_pop']
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(t, pop[0,:,0,0], label='Ground')
+   ax.plot(t, pop[1,:,0,0], label='level 1')
+   ax.plot(t, pop[-1,:,0,0], label='ion')
+   ax.set(xscale='log', xlabel='Time (s)', ylabel='Population (-)',
+          title='Time dependent solution of CR Be I, no source term')
+   ax.legend()
 
 .. figure:: images/be0_time_dep_no_source.png
    :scale: 50 %
    :alt: Be I time dependence no source
 
-   This time dependent collisional radiative model shows the time history for all Be I levels and
-   the ground sate of Be II. This is the non-quasistatic solution, for a light system like Be the
-   which only has one metastable the quasistatic approximation and non-quastatic solutions will
-   give similiar results it is only for heavy species such as Mo and W where the quasistatic
-   approximation starts to break down that this non-quasistatic solution is required.
-   
-
+   The time history of the Be I ground, its 2s2p 3P level (level 1) and the Be II ground, from an
+   initial population in the Be I ground. The 3P level is metastable and fills on a time scale
+   much longer than that of the other excited levels; where such populations matter, the
+   quasistatic solution should retain them as metastables. For heavy species such as Mo and W
+   the quasistatic approximation can break down, and the time-dependent solution is needed.
 
 .. code-block:: python
    :linenos:
@@ -902,118 +632,91 @@ The source term could also be used to model the pumping of specific levels with 
    td_n0 = np.zeros(30)
    td_n0[0] = 1.
    td_s = np.zeros(30)
-   td_s[0] = 1.
+   td_s[0] = 1.  #constant source into the ground, population per second
    fil = 'examples/input/cpb03_ls#be0.dat' #adf04 file
    temperature_arr = np.array([10]) #eV
    metastable_levels = np.array([0])   #metastable level, just ground chosen here
-   density_arr =     np.array([1.e8]) # cm-3
+   density_arr = np.array([1.e8]) # cm-3
    be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-		 use_recombination_three_body = True,use_ionization=True,suppliment_with_ecip=True,
-		 td_t=td_t,td_n0=td_n0,td_source=td_s)
+                 use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True,
+                 td_t=td_t,td_n0=td_n0,td_source=td_s)
 
    be.solve_cr()
    be.solve_time_dependent()
 
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.92,left=0.115,right=0.965)
-   plt.plot(be.data['user']['td_t'],
-	    be.data['processed']['td']['td_pop'][0,:,0,0],
-	    label='Ground')
-   plt.plot(be.data['user']['td_t'],
-	    be.data['processed']['td']['td_pop'][1,:,0,0],
-	    label='level 1')
-   plt.plot(be.data['user']['td_t'],
-	    be.data['processed']['td']['td_pop'][-1,:,0,0],
-	    label='ion')
-   ax1.legend(fontsize='x-small',loc='best')
-   ax1.set_title('Time dependent solution of CR Be I with source term')
-   ax1.set_xlabel('Time (s)')
-   ax1.set_ylabel('Population (-)')
-   
+   t = be.data['user']['td_t']
+   pop = be.data['processed']['td']['td_pop']
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.plot(t, pop[0,:,0,0], label='Ground')
+   ax.plot(t, pop[1,:,0,0], label='level 1')
+   ax.plot(t, pop[-1,:,0,0], label='ion')
+   ax.set(xscale='log', xlabel='Time (s)', ylabel='Population (-)',
+          title='Time dependent solution of CR Be I, with source term')
+   ax.legend()
 
 .. figure:: images/be0_time_dep_source.png
    :scale: 50 %
    :alt: Be I time dependence with source
 
-   Time dependent solution with a constant source term of particles in the ground state.
-   This could be used to model spectra where there is a constant erosion term from the
-   wall. This could also be use to model level pumping in LIF systems.
+   Time dependent solution with a constant source of particles in the ground state.
+   This could model spectra with a constant erosion source from the wall, or level pumping in LIF
+   systems.
 
 
-
-Split LS resolved data to LSJ 
+Split LS resolved data to LSJ
 ------------------------------
-
-ColRadPy is able to split PECs from term resolved (LS) into level resolved (LSJ) values.
-This currently does put PECs at the NIST wavelengths, a user must do this manually for now.
-In the future this will be done automatically using the NIST database.
-
-
+ColRadPy can split PECs from term resolved (LS) into level resolved (LSJ) values, with the
+statistical weights of LS coupling. ``shift_j_res_energy_to_nist`` first splits the terms into their
+J levels and moves the levels to the NIST energies bundled with ColRadPy, where NIST has them, so that
+the split lines are at the NIST wavelengths; ``split_pec_multiplet`` then splits the PECs. Spin
+changing lines and lines with ``|dL| > 1``, which these factors do not describe, are kept unsplit.
+The example below splits the He I 587.6 nm multiplet (1s2p 3P - 1s3d 3D).
 
 .. code-block:: python
    :linenos:
-
 
    from colradpy import colradpy
    import numpy as np
    import matplotlib.pyplot as plt
 
-   he = colradpy('./mom97_ls#he1.dat',[0],np.array([20]),np.array([1.e13]),use_recombination=False,
-                  use_recombination_three_body = False,use_ionization=True)
-
+   he = colradpy('examples/input/Open-ADAS/adas#2/mom97_ls#he0.dat',np.array([0]),np.array([20]),
+                 np.array([1.e13]),use_recombination=False,use_recombination_three_body=False,
+                 use_ionization=True,suppliment_with_ecip=True)
    he.solve_cr()
+   he.shift_j_res_energy_to_nist()
    he.split_pec_multiplet()
 
-   wave_8_3 = np.array([468.5376849,468.5757974,468.5704380])
-   ind_8_3 = np.where( (he.data['processed']['pec_levels'][:,0] == 8) & \
-                       (he.data['processed']['pec_levels'][:,1] == 3))[0]
+   split = he.data['processed']['split']
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   ax.vlines(he.data['processed']['wave_air'], 0, he.data['processed']['pecs'][:,0,0,0],
+             label='Term resolved')
+   ax.vlines(split['wave_air'], 0, split['pecs'][:,0,0,0], color='C3', label='Level resolved')
+   ax.set(xlim=(587.5, 587.65), ylim=(0, 1e-9), xlabel='Wavelength in air (nm)',
+          ylabel='PEC (ph cm$^3$ s$^{-1}$)', title='He I 587.6 nm, $T_e$ = 20 eV, $n_e$ = 1e13 cm$^{-3}$')
+   ax.legend()
 
-   wave_6_5 = np.array([468.5407225,468.5568006])
-   ind_6_5 = np.where( (he.data['processed']['pec_levels'][:,0] == 6) & \
-                      (he.data['processed']['pec_levels'][:,1] == 5))[0]
+.. figure:: images/he0_split_multiplet.png
+   :scale: 50 %
+   :alt: He I 587.6 nm multiplet split into its J components
 
-   wave_7_3 = np.array([468.5524404,468.5905553])
-   ind_7_3 = np.where( (he.data['processed']['pec_levels'][:,0] == 7) & \
-                       (he.data['processed']['pec_levels'][:,1] == 3))[0]
-
-   wave_9_4 = np.array([468.5703849, 468.5830890, 468.5804092])
-   ind_9_4 = np.where( (he.data['processed']['pec_levels'][:,0] == 9) & \
-                       (he.data['processed']['pec_levels'][:,1] == 4))[0]
-
-   wave_6_4 = np.array([ 468.5917884, 468.5757080, 468.5884123])
-   ind_6_4 = np.where( (he.data['processed']['pec_levels'][:,0] == 6) & \
-                       (he.data['processed']['pec_levels'][:,1] == 4))[0]
-
-
-   wave_468 = np.hstack((wave_8_3,wave_6_5,wave_7_3,wave_9_4,wave_6_4))
-   pecs_468 = np.vstack((he.data['processed']['split']['pecs'][ind_8_3[0]],
-			 he.data['processed']['split']['pecs'][ind_6_5[0]],
-			 he.data['processed']['split']['pecs'][ind_7_3[0]],
-			 he.data['processed']['split']['pecs'][ind_9_4[0]],
-			 he.data['processed']['split']['pecs'][ind_6_4[0]]))[np.argsort(wave_468)]
-   wave_468 = wave_468[np.argsort(wave_468)]
-
-
-
-   plt.figure()
-   plt.vlines(wave_468,np.zeros_like(wave_468),pecs_468[:,0,0,0])
-
+   The term resolved PEC of the 587.6 nm line at the wavelength of the adf04 terms (blue) and its
+   J components at the NIST wavelengths (red), which add up to it.
 
 
 Projection of the high n-shells
 ===============================
 The levels of an ADF04 file usually cover the lowest n-shells of the ion. Recombination into
 the higher n-shells, and the cascades and ionization through them, are then missing from the
-collisional-radiative model, and they are a large part of the recombination: for neon, the
-effective recombination (ACD) into Ne3+ to Ne5+ from the ADAS ``cop98#10`` ADF04 files alone is
-0.17 to 0.69 of the ADAS coefficients, which ADAS made from the same files with the high n-shells
-included. ADAS
-condenses the high n-shells with a bundle-nS calculation onto its lowest n-shells for each
-parent and spin system (ADF17 files, e.g. ``cbnm96#f_ne1ls.dat``), and an ADF18 expansion file of
-the ``a17_p208`` kind (e.g. ``exp96#f_ne1ls.dat``) maps those n-shells onto the levels of a given
-ADF04 file. With both files, ColRadPy adds the indirect couplings through the high n-shells to
+collisional-radiative model, and they can be a large part of the effective recombination and
+ionization. ADAS condenses the high n-shells with a bundle-nS calculation onto its lowest n-shells
+for each parent and spin system (ADF17 files, e.g. ``cbnm96#f_ne1ls.dat``), and an ADF18 expansion
+file of the ``a17_p208`` kind (e.g. ``exp96#f_ne1ls.dat``) maps those n-shells onto the levels of a
+given ADF04 file. With both files, ColRadPy adds the indirect couplings through the high n-shells to
 the CR matrix (the projection, described in the theory manual), so the populations, PECs and
-GCR coefficients include them:
+GCR coefficients include them. These files are not bundled with ColRadPy; they are available from
+OPEN-ADAS.
+
+.. tutorial: not run
 
 .. code-block:: python
 
@@ -1029,17 +732,15 @@ Boltzmann factors of their thresholds, and gives a warning.
 At their lowest one to three temperatures most ADF17 files give negative indirect recombination,
 which shows that the condensed data are not reliable there; the projection leaves those
 temperatures out, also with a warning.
-In an ionization balance, ``projection`` takes
-one ``(adf17, adf18)`` pair, or ``None``, for each ADF04 file:
+In an ionization balance, ``projection`` takes one ``(adf17, adf18)`` pair, or ``None``, for each
+ADF04 file:
+
+.. tutorial: not run
 
 .. code-block:: python
 
    ion = ionization_balance(fils, np.array([0, 1]), temperature_arr, density_arr,
                             projection=[(adf17_files[i], adf18_files[i]) for i in range(len(fils))])
-
-For neon the fractional abundances then agree with those of the ADAS ADF11 coefficients to
-within 0.06 at 1e12 cm-3, 0.07 at 1e13 cm-3 and 0.16 at 1e14 cm-3, where without the projection
-they differ by up to 0.83.
 
 
 Atomic data from the Flexible Atomic Code
@@ -1051,7 +752,9 @@ prefix: ``Ar01a.en`` (levels), ``Ar01a.tr`` (radiative rates), ``Ar01a.ce`` (exc
 ``Ar01a.rr`` (radiative recombination), ``Ar01a.ai`` (autoionization and dielectronic capture) and
 ``Ar01a.ci`` (ionization), the ASCII tables that FAC's ``PrintTable(binary, ascii, 1)`` writes with
 energies in eV. The levels are those with ``nele`` electrons; the levels of the next ion, which
-FAC must also compute, are the parents.
+FAC must also compute, are the parents. No FAC tables are bundled with ColRadPy.
+
+.. tutorial: not run
 
 .. code-block:: python
 
@@ -1083,32 +786,31 @@ autoionizing level (dielectronic capture, excitation and radiative cascades) is 
 fraction that stabilizes radiatively, and the excitation that autoionizes is ionization of the
 lower level (excitation-autoionization). The populations, satellite lines, dielectronic
 recombination and ionization are then those of a model with the autoionization in its CR matrix,
-as long as collisions from the autoionizing levels are slow beside their decays (below about
-1e20 cm-3 for highly charged ions). The capture that autoionizes to another parent, a process of
-the next ion, is left out. The autoionization rates and the stabilizing fractions are in
-``['input_file']``. The two-photon decays of the H-like 2s and He-like 1s2s 1S0 levels add to
-their A-values, so their PEC includes the two-photon continuum (``['rates']['two_photon']``).
-``colradpy.read_fac.fac_cross_sections`` gives the cross-sections ColRadPy integrates, for
-comparison with FAC's tables.
+as long as the collisional rates out of the autoionizing levels are small compared with their decay
+rates (below about 1e20 cm-3 for highly charged ions). The capture that autoionizes to another
+parent, a process of the next ion, is left out. The autoionization rates and the stabilizing
+fractions are in ``['input_file']``. The two-photon decays of the H-like 2s and He-like 1s2s 1S0
+levels add to their A-values, so their PEC includes the two-photon continuum
+(``['rates']['two_photon']``). ``colradpy.read_fac.fac_cross_sections`` gives the cross-sections
+ColRadPy integrates, for comparison with FAC's tables.
 
 
 Ionization Balance
 ====================
-An ionization balance can be used to get the relative abundances of charge states in a given species.
-The relative populations of charge states are solved using the GCR coefficient that are calculated
-from the CR set of equations. A matrix similiar to the CR matrix is assembled using the GCR rate coefficients.
-The QCD rates transfer population between metastable states in one ionization stage.
-SCD is the ionization from one charge stage to the next.
-ACD is the recombination from one charge stage to the previous stage and the XCD is population transfer between metastable
-states through the next charge state.
+An ionization balance gives the relative abundances of the charge states of an element.
+It is solved with the GCR coefficients calculated from the CR equations: a matrix similar to the
+CR matrix is assembled from them. SCD is the ionization from one charge state to the next, and ACD
+the recombination from one charge state to the previous one. QCD transfers population between the
+metastables of one charge state, and XCD between the metastables of a charge state through the
+charge state below it.
 
-ColRadPy is capable of preforming time dependent as well as time independent ionization balance calculations.
-The time independent (steady-state) abundances are the eigenvector of the ionization balance matrix whose
-eigenvalue is zero: the populations that no longer change. ColRadPy takes the eigenvector of the eigenvalue
-closest to zero and checks that it is a normalized, non-negative solution of the balance equations; otherwise
-it solves the balance equations with the normalization directly.
-
-
+ColRadPy can solve the ionization balance in time and for its steady state. The steady-state
+(time-independent) abundances are the populations that no longer change, the null vector of the
+ionization balance matrix. For a matrix that conserves particles, ColRadPy finds them by
+Grassmann-Taksar-Heyman elimination, which keeps small abundances accurate; otherwise it takes
+the eigenvector of the eigenvalue closest to zero and checks that it is a normalized, non-negative
+solution of the balance equations, and if it is not, it solves the balance equations with the
+normalization directly.
 
 For ADF04 input, ``metas`` accepts either one array of level indices for the
 first charge state or a list with one array per ADF04 file, which can be
@@ -1129,9 +831,7 @@ coefficients are calculated, including the final parent stage. An explicit
 The example below uses an uneven per-stage list for Be. To select only the
 first stage's metastables and infer the rest, use ``metas = np.array([0, 1])``.
 The time-dependent abundances are solid lines and their steady-state limits
-are dashed lines.
-
-
+are dotted lines.
 
 .. code-block:: python
    :linenos:
@@ -1145,12 +845,11 @@ are dashed lines.
    input_dir = Path('examples/input')
    fils = [str(input_dir / name) for name in
            ('cpb03_ls#be0.dat', 'cpb03_ls#be1.dat', 'be2_adf04', 'be3_adf04')]
-   temp = np.linspace(5,100,5) #temp grid
-   dens = np.array([1.e11,1.e14]) #density grid
-   metas = [np.array([0,1]),np.array([0]),np.array([0,1]),np.array([0])]#number of metastable
-			      #this should match the metastables at the top of the adf04 file
-			      #this information is used to calculate the QCD values
-			      #without it only the SCD, ACD and XCD for a species will be calculated
+   temp = np.linspace(5,100,5) #temperature grid (eV)
+   dens = np.array([1.e11,1.e14]) #density grid (cm-3)
+   #metastables of each stage: they should be the parents listed at the top of the adf04 file of
+   #the stage below; without them only the SCD, ACD and XCD of a stage are calculated, no QCD
+   metas = [np.array([0,1]),np.array([0]),np.array([0,1]),np.array([0])]
 
    time = np.linspace(0, .01, 1000)
 
@@ -1161,93 +860,36 @@ are dashed lines.
 
    ion.solve_time_independent()
 
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.99,left=0.11,right=0.99)
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][0,:,1,1],label='be0, met0',color='b')
-   ax1.hlines(ion.data['processed']['pops_ss'][0,1,1],0,10,color='b',linestyle=':')
+   labels = ['be0, met0','be0, met1','be1, met0','be2, met0','be2, met1','be3, met0','be4']
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for state, label in enumerate(labels):
+       line, = ax.plot(time*1e3, ion.data['processed']['pops_td'][state,:,1,1], label=label)
+       ax.axhline(ion.data['processed']['pops_ss'][state,1,1], color=line.get_color(), linestyle=':')
+   ax.set(xlabel='Time (ms)', ylabel='Fractional abundance (-)',
+          title=f'$T_e$ = {temp[1]:.2f} eV, $n_e$ = 1e14 ' + 'cm$^{-3}$')
+   ax.legend(fontsize='small')
 
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][1,:,1,1],label='be0, met1',color='g')
-   ax1.hlines(ion.data['processed']['pops_ss'][1,1,1],0,10,color='g',linestyle=':')
-
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][2,:,1,1],label='be1, met0',color='r')
-   ax1.hlines(ion.data['processed']['pops_ss'][2,1,1],0,10,color='r',linestyle=':')
-
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][3,:,1,1],label='be2, met0',color='c')
-   ax1.hlines(ion.data['processed']['pops_ss'][3,1,1],0,10,color='c',linestyle=':')
-
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][4,:,1,1],label='be2, met1',color='m')
-   ax1.hlines(ion.data['processed']['pops_ss'][4,1,1],0,10,color='m',linestyle=':')
-
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][5,:,1,1],label='be3, met0',color='y')
-   ax1.hlines(ion.data['processed']['pops_ss'][5,1,1],0,10,color='y',linestyle=':')
-
-   ax1.plot(time*1e3,ion.data['processed']['pops_td'][6,:,1,1],label='be4',color='k')
-   ax1.hlines(ion.data['processed']['pops_ss'][6,1,1],0,10,color='k',linestyle=':')
-
-   ax1.legend(fontsize='x-small')
-
-   ax1.set_xlabel('Time (ms)')
-   ax1.set_ylabel('Fractional Abundance (-)')
-
-
-
-
-
-.. figure:: images/be_ion_bal_time.png   
+.. figure:: images/be_ion_bal_time.png
    :scale: 50 %
    :alt: Be time dependent ionization balance
 
-
-
-
-
-The time independent solution as a function of electron temperature is shown below.
-
-
+The steady-state solution as a function of electron temperature is shown below.
 
 .. code-block:: python
    :linenos:
 
-   temp = np.linspace(2,100,200) #temp grid
-   ion = ionization_balance(fils, metas, temp, dens, keep_charge_state_data = False)
+   temp = np.linspace(2,100,200) #temperature grid (eV)
+   ion = ionization_balance(fils, metas, temp, dens, keep_charge_state_data=False)
    ion.populate_ion_matrix()
    ion.solve_time_independent()
 
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for state, label in enumerate(labels):
+       ax.plot(temp, ion.data['processed']['pops_ss'][state,:,1], label=label)
+   ax.set(xlabel='Temperature (eV)', ylabel='Fractional abundance (-)',
+          title='Steady state, $n_e$ = 1e14 cm$^{-3}$')
+   ax.legend(fontsize='small')
 
-   fig, ax1 = plt.subplots(1,1,figsize=(16/3.,9/3.),dpi=300)
-   fig.subplots_adjust(bottom=0.15,top=0.99,left=0.11,right=0.99)
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][0,:,1],label='be0, met0',color='b')
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][1,:,1],label='be0, met1',color='g')
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][2,:,1],label='be1, met0',color='r')
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][3,:,1],label='be2, met0',color='c')
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][4,:,1],label='be2, met1',color='m')
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][5,:,1],label='be3, met0',color='y')
-
-   ax1.plot(temp,ion.data['processed']['pops_ss'][6,:,1],label='be4',color='k')
-
-   ax1.legend(fontsize='x-small')
-
-   ax1.set_xlabel('Temperature (eV)')
-   ax1.set_ylabel('Fractional Abundance (-)')
-
-
-
-.. figure:: images/be_ion_bal_ind_time.png   
+.. figure:: images/be_ion_bal_ind_time.png
    :scale: 50 %
-   :alt: Be time dependent ionization balance
-
-
-	 
-
-	    
-   
-Error bar analysis from atomic data
------------------------------------
-
-   
+   :alt: Be steady-state ionization balance
