@@ -782,10 +782,12 @@ class ionization_balance():
     def solve_time_independent(self):
         """Solves the ionization balance matrix for the steady-state (time-independent) solution.
 
-           The steady state is the eigenvector of the ionization balance matrix whose eigenvalue
-           is zero. solve_matrix_exponential_steady_state takes the eigenvector of the eigenvalue
-           closest to zero and checks that it is finite, non-negative, normalized and balanced;
-           otherwise it solves the balance equations with the normalization directly.
+           The steady state is the null vector of the ionization balance matrix (its eigenvector
+           of eigenvalue zero). solve_matrix_exponential_steady_state finds it by GTH elimination
+           when the matrix conserves particles, which keeps small populations accurate; otherwise
+           it takes the eigenvector of the eigenvalue closest to zero and checks that it is
+           finite, non-negative, normalized and balanced, and if not it solves the balance
+           equations with the normalization directly.
 
            Populates ['processed']['pops_ss'], ['eigen_val'] and ['eigen_vec'].
         """
