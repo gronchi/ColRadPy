@@ -878,7 +878,7 @@ The steady-state solution as a function of electron temperature is shown below.
 .. code-block:: python
    :linenos:
 
-   temp = np.linspace(2,100,200) #temperature grid (eV)
+   temp = np.geomspace(0.3,100,200) #temperature grid (eV)
    ion = ionization_balance(fils, metas, temp, dens, keep_charge_state_data=False)
    ion.populate_ion_matrix()
    ion.solve_time_independent()
@@ -886,7 +886,7 @@ The steady-state solution as a function of electron temperature is shown below.
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
    for state, label in enumerate(labels):
        ax.plot(temp, ion.data['processed']['pops_ss'][state,:,1], label=label)
-   ax.set(xlabel='Temperature (eV)', ylabel='Fractional abundance (-)',
+   ax.set(xscale='log', xlabel='Temperature (eV)', ylabel='Fractional abundance (-)',
           title='Steady state, $n_e$ = 1e14 cm$^{-3}$')
    ax.legend(fontsize='small')
 
