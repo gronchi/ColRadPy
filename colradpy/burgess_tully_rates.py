@@ -1,6 +1,10 @@
 import functools
 
 import numpy as np
+from scipy import constants
+
+#K per eV (e / k_B), as in colradpy_class
+KELVIN_PER_EV = constants.e/constants.k
 
 
 def _ignore_log_of_zero(func):
@@ -369,12 +373,12 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
     burgtully_dict = {}
     burgtully_dict['burg_tully'] = {}
-    burgtully_dict['burg_tully']['interp_temp_inds'] = np.where( (user_temp_grid < np.max(calc_temp_grid)/11604.5) &
-                                                                 (user_temp_grid > np.min(calc_temp_grid)/11604.5))[0]#this was changed 12_02_20
-    burgtully_dict['burg_tully']['extrap_temp_inds_hi'] = np.where( user_temp_grid > np.max(calc_temp_grid)/11604.5)[0]
-    extrap_temp_inds_hi = np.where( user_temp_grid > np.max(calc_temp_grid)/11604.5)[0]
-    burgtully_dict['burg_tully']['extrap_temp_inds_low'] = np.where( user_temp_grid < np.min(calc_temp_grid)/11604.5)[0]
-    extrap_temp_inds_low =  np.where( user_temp_grid < np.min(calc_temp_grid)/11604.5)[0]
+    burgtully_dict['burg_tully']['interp_temp_inds'] = np.where( (user_temp_grid < np.max(calc_temp_grid)/KELVIN_PER_EV) &
+                                                                 (user_temp_grid > np.min(calc_temp_grid)/KELVIN_PER_EV))[0]#this was changed 12_02_20
+    burgtully_dict['burg_tully']['extrap_temp_inds_hi'] = np.where( user_temp_grid > np.max(calc_temp_grid)/KELVIN_PER_EV)[0]
+    extrap_temp_inds_hi = np.where( user_temp_grid > np.max(calc_temp_grid)/KELVIN_PER_EV)[0]
+    burgtully_dict['burg_tully']['extrap_temp_inds_low'] = np.where( user_temp_grid < np.min(calc_temp_grid)/KELVIN_PER_EV)[0]
+    extrap_temp_inds_low =  np.where( user_temp_grid < np.min(calc_temp_grid)/KELVIN_PER_EV)[0]
     FBIG = 0.01
     FZERO = 1E-4
     ELU = np.abs(energy[col_transitions[:,0]-1] - energy[col_transitions[:,1]-1])/109737.26
@@ -494,17 +498,17 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
 
         #type 1 stuff
-        burgtully_dict['burg_tully']['xval_extrap'].append(type1_xconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type1_energies,c))
+        burgtully_dict['burg_tully']['xval_extrap'].append(type1_xconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type1_energies,c))
         burgtully_dict['burg_tully']['yval_extrap'].append(np.transpose(np.exp(burgtully_dict['burg_tully']['coeffs_a'][0]+
                                                                                np.transpose(burgtully_dict['burg_tully']['xval_extrap'][0])*burgtully_dict['burg_tully']['coeffs_b'][0])))
 
-        burgtully_dict['burg_tully']['excit_extrap'].append(type1_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5, type1_energies, burgtully_dict['burg_tully']['yval_extrap'][0],direct='B'))
+        burgtully_dict['burg_tully']['excit_extrap'].append(type1_yconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV, type1_energies, burgtully_dict['burg_tully']['yval_extrap'][0],direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][0].size > 0):
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][0],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][0],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][0][burgtully_dict['burg_tully']['zero_inds'][0]]))
-            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type1_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5, type1_energies[:,burgtully_dict['burg_tully']['zero_inds'][0]], burgtully_dict['burg_tully']['yval_extrap_lin'][0],direct='B'))
+            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type1_yconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV, type1_energies[:,burgtully_dict['burg_tully']['zero_inds'][0]], burgtully_dict['burg_tully']['yval_extrap_lin'][0],direct='B'))
         else:
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))
             burgtully_dict['burg_tully']['excit_extrap_lin'].append(np.array([]))
@@ -540,7 +544,7 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
 
         #type 2 stuff
-        burgtully_dict['burg_tully']['xval_extrap'].append(type2_xconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type2_energies,c))
+        burgtully_dict['burg_tully']['xval_extrap'].append(type2_xconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type2_energies,c))
         burgtully_dict['burg_tully']['yval_extrap'].append(np.transpose(np.exp(burgtully_dict['burg_tully']['coeffs_a'][1]+
                                                                                np.transpose(burgtully_dict['burg_tully']['xval_extrap'][1])*burgtully_dict['burg_tully']['coeffs_b'][1])))
         
@@ -583,17 +587,17 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
 
         #type 3 stuff
-        burgtully_dict['burg_tully']['xval_extrap'].append(type3_xconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type3_energies,c))
+        burgtully_dict['burg_tully']['xval_extrap'].append(type3_xconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type3_energies,c))
         burgtully_dict['burg_tully']['yval_extrap'].append(np.transpose(np.exp(burgtully_dict['burg_tully']['coeffs_a'][2]+
                                                                                np.transpose(burgtully_dict['burg_tully']['xval_extrap'][2])*burgtully_dict['burg_tully']['coeffs_b'][2])))
         
-        burgtully_dict['burg_tully']['excit_extrap'].append(type3_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type3_energies,burgtully_dict['burg_tully']['yval_extrap'][2],direct='B'))
+        burgtully_dict['burg_tully']['excit_extrap'].append(type3_yconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type3_energies,burgtully_dict['burg_tully']['yval_extrap'][2],direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][2].size > 0):
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][2],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][2],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][2][burgtully_dict['burg_tully']['zero_inds'][2]]))
-            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type3_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type3_energies[:,burgtully_dict['burg_tully']['zero_inds'][2]], burgtully_dict['burg_tully']['yval_extrap_lin'][2],direct='B'))
+            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type3_yconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type3_energies[:,burgtully_dict['burg_tully']['zero_inds'][2]], burgtully_dict['burg_tully']['yval_extrap_lin'][2],direct='B'))
 
         else:
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(np.array([]))#np.append(np.array([-1]))
@@ -627,17 +631,17 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
 
 
         #type 4 stuff
-        burgtully_dict['burg_tully']['xval_extrap'].append(type4_xconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies,c))
+        burgtully_dict['burg_tully']['xval_extrap'].append(type4_xconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type4_energies,c))
         burgtully_dict['burg_tully']['yval_extrap'].append(np.transpose(np.exp(burgtully_dict['burg_tully']['coeffs_a'][3]+
                                                                                np.transpose(burgtully_dict['burg_tully']['xval_extrap'][3])*burgtully_dict['burg_tully']['coeffs_b'][3])))
         
-        burgtully_dict['burg_tully']['excit_extrap'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies,burgtully_dict['burg_tully']['yval_extrap'][3],c,direct='B'))
+        burgtully_dict['burg_tully']['excit_extrap'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type4_energies,burgtully_dict['burg_tully']['yval_extrap'][3],c,direct='B'))
 
         if(burgtully_dict['burg_tully']['zero_inds'][3].size > 0):
             burgtully_dict['burg_tully']['yval_extrap_lin'].append(lin_yconvert(burgtully_dict['burg_tully']['coeffs_lin_b'][3],
                                                                                 burgtully_dict['burg_tully']['coeffs_lin_m'][3],
                                                                                 burgtully_dict['burg_tully']['xval_extrap'][3][burgtully_dict['burg_tully']['zero_inds'][3]]))
-            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*11604.5,type4_energies[:,burgtully_dict['burg_tully']['zero_inds'][3]], burgtully_dict['burg_tully']['yval_extrap_lin'][3],c,direct='B'))
+            burgtully_dict['burg_tully']['excit_extrap_lin'].append(type4_yconvert(user_temp_grid[extrap_temp_inds_hi]*KELVIN_PER_EV,type4_energies[:,burgtully_dict['burg_tully']['zero_inds'][3]], burgtully_dict['burg_tully']['yval_extrap_lin'][3],c,direct='B'))
 
 
         else:
@@ -662,19 +666,19 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
         for j in range(0,4):
             if(j==0):
                 burgtully_dict['burg_tully']['xval_extrap_low'].append(
-                    type1_xconvert(user_temp_grid[extrap_temp_inds_low]*11604.5,
+                    type1_xconvert(user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV,
                                    type1_energies,c))
             if(j==1):
                 burgtully_dict['burg_tully']['xval_extrap_low'].append(
-                    type2_xconvert(user_temp_grid[extrap_temp_inds_low]*11604.5,
+                    type2_xconvert(user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV,
                                    type2_energies,c))
             if(j==2):
                 burgtully_dict['burg_tully']['xval_extrap_low'].append(
-                    type3_xconvert(user_temp_grid[extrap_temp_inds_low]*11604.5,
+                    type3_xconvert(user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV,
                                    type3_energies,c))
             if(j==3):
                 burgtully_dict['burg_tully']['xval_extrap_low'].append(
-                    type4_xconvert(user_temp_grid[extrap_temp_inds_low]*11604.5,
+                    type4_xconvert(user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV,
                                    type4_energies,c))
                 
             x = burgtully_dict['burg_tully']['xval_arrs'][j][:,lowest]
@@ -691,19 +695,19 @@ def burgess_tully_rates(user_temp_grid, calc_temp_grid, col_transitions,col_exci
             burgtully_dict['burg_tully']['yval_extrap_low'].append(t)
             if(j==0):
                 burgtully_dict['burg_tully']['excit_extrap_low_lin'].append(type1_yconvert(
-                    user_temp_grid[extrap_temp_inds_low]*11604.5, type1_energies,
+                    user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV, type1_energies,
                     t, direct = 'B'))
 
             if(j==1):
                 burgtully_dict['burg_tully']['excit_extrap_low_lin'].append(type2_yconvert(t,direct='B'))
             if(j==2):
                 burgtully_dict['burg_tully']['excit_extrap_low_lin'].append(type3_yconvert(
-                    user_temp_grid[extrap_temp_inds_low]*11604.5,
+                    user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV,
                     type3_energies, t, direct = 'B'))
 
             if(j==3):
                 burgtully_dict['burg_tully']['excit_extrap_low_lin'].append(type4_yconvert(
-                    user_temp_grid[extrap_temp_inds_low]*11604.5, type4_energies,
+                    user_temp_grid[extrap_temp_inds_low]*KELVIN_PER_EV, type4_energies,
                     t, c, direct= 'B'))
 
             burgtully_dict['burg_tully']['excit_extrap_low_lin'][j][constant] = \

@@ -16,7 +16,7 @@ import warnings
 import numpy as np
 
 from colradpy import colradpy, ionization_balance
-from colradpy.colradpy_class import EV_PER_WAVENUMBER
+from colradpy.colradpy_class import EV_PER_WAVENUMBER, KELVIN_PER_EV
 from colradpy.projection import _indirect, indirect_couplings, project
 from colradpy.read_adf17 import read_adf17
 from colradpy.read_adf18 import read_adf18
@@ -135,7 +135,7 @@ def bundle(seed, shells=SHELLS, indirect_gain=0., indirect_ion=0., indirect_reco
 
 
 def solve(projection=None, temps=None, dens=None, **kwargs):
-    temps = TEMPS_K / 11604.5 if temps is None else temps
+    temps = TEMPS_K / KELVIN_PER_EV if temps is None else temps
     dens = DENS if dens is None else dens
     with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -251,7 +251,7 @@ class ColradpyProjectionTests(unittest.TestCase):
 
     def test_pairs_and_balance(self):
         projection = self.files(bundle(12, indirect_recomb=1., indirect_ion=1.), bundle(13, indirect_recomb=1.))
-        temps = TEMPS_K / 11604.5
+        temps = TEMPS_K / KELVIN_PER_EV
         grid = solve(projection)
         pairs = solve(projection, temps=temps, dens=DENS, temp_dens_pair=True)
         for key in ("scd", "acd"):
@@ -267,7 +267,7 @@ class ColradpyProjectionTests(unittest.TestCase):
         # The time-dependent SCD sums the ionization of the CR matrix, with the projection's, over the
         # populations, on a grid and with temperature-density pairs.
         projection = self.files(bundle(30, indirect_ion=1.), bundle(31, indirect_ion=1.))
-        temps = TEMPS_K / 11604.5
+        temps = TEMPS_K / KELVIN_PER_EV
         times = np.array([1e-8, 1e-6, 1e-3])
         for pairs in (False, True):
             model = solve(projection, temps=temps, dens=DENS, temp_dens_pair=pairs)
@@ -296,7 +296,7 @@ class ColradpyProjectionTests(unittest.TestCase):
         triplet = bundle(18, indirect_recomb=1.)
         with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model = colradpy(path, np.array([0]), TEMPS_K / 11604.5, DENS,
+            model = colradpy(path, np.array([0]), TEMPS_K / KELVIN_PER_EV, DENS,
                              projection=self.files(bundle(19), triplet))
             model.make_projection()
         order = model.data["atomic"]["file_order"]
@@ -323,7 +323,7 @@ class ColradpyProjectionTests(unittest.TestCase):
                 model.make_projection()
             return model.data["rates"]["projection"], [str(w.message) for w in caught if "round-off" in str(w.message)]
 
-        rates, messages = project(TEMPS_K / 11604.5)
+        rates, messages = project(TEMPS_K / KELVIN_PER_EV)
         self.assertEqual(len(messages), 1)
         for text in ("parent 1 (2S) and spin system 1", "negative indirect recombination", "at 0.862 eV"):
             self.assertIn(text, messages[0])
@@ -333,7 +333,7 @@ class ColradpyProjectionTests(unittest.TestCase):
                                    0.25 * singlet["indirect"]["recombination"][0, 0, :], rtol=1e-6)
         np.testing.assert_allclose(rates["ionization"][0, 0, 0, :],
                                    singlet["indirect"]["ionization"][0, 0, :] / DENS, rtol=1e-6)
-        _, messages = project(TEMPS_K[1:] / 11604.5)
+        _, messages = project(TEMPS_K[1:] / KELVIN_PER_EV)
         self.assertEqual(messages, [])
 
     def test_below_the_adf17_temperatures(self):
@@ -343,7 +343,7 @@ class ColradpyProjectionTests(unittest.TestCase):
         singlet = bundle(22, indirect_gain=1., indirect_ion=1., indirect_recomb=1.)
         slope = -0.7                                                 #indirect recombination as T^-0.7
         singlet["rhs"] += singlet["indirect"]["recombination"] * ((TEMPS_K / TEMPS_K[0])**slope - 1)[None, :, None]
-        first, second, t = TEMPS_K[0] / 11604.5, TEMPS_K[1] / 11604.5, 0.5
+        first, second, t = TEMPS_K[0] / KELVIN_PER_EV, TEMPS_K[1] / KELVIN_PER_EV, 0.5
         with warnings.catch_warnings(), contextlib.redirect_stdout(io.StringIO()):
             warnings.simplefilter("ignore")
             model = colradpy(BE0, np.array([0]), np.array([t, first]), DENS, projection=self.files(singlet, bundle(23)))
@@ -372,7 +372,7 @@ class ColradpyProjectionTests(unittest.TestCase):
         # The projection was made once, so solving again on other temperatures used the couplings
         # of the first ones. The files are read once.
         projection = self.files(bundle(24, indirect_recomb=1., indirect_ion=1.), bundle(25, indirect_recomb=1.))
-        temps = TEMPS_K / 11604.5
+        temps = TEMPS_K / KELVIN_PER_EV
         with contextlib.redirect_stdout(io.StringIO()), np.errstate(all="ignore"), warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = colradpy(BE0, np.array([0]), temps, DENS, projection=projection)
@@ -396,7 +396,7 @@ class ColradpyProjectionTests(unittest.TestCase):
             atomic = colradpy(BE0, np.array([0]), np.array([10.]), np.array([1e10])).data["atomic"]
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            rates = project(adf17, adf18, atomic["energy"], atomic["ion_pot"], TEMPS_K / 11604.5, DENS)
+            rates = project(adf17, adf18, atomic["energy"], atomic["ion_pot"], TEMPS_K / KELVIN_PER_EV, DENS)
         messages = [str(w.message) for w in caught if "get no projection" in str(w.message)]
         self.assertEqual(len(messages), 1)
         self.assertIn("maps 2 levels (indices 0, 2)", messages[0])
@@ -416,7 +416,7 @@ class ColradpyProjectionTests(unittest.TestCase):
         Path(path).write_text(other)
         with warnings.catch_warnings(record=True) as caught, contextlib.redirect_stdout(io.StringIO()):
             warnings.simplefilter("always")
-            model = colradpy(BE0, np.array([0]), TEMPS_K / 11604.5, DENS,
+            model = colradpy(BE0, np.array([0]), TEMPS_K / KELVIN_PER_EV, DENS,
                              projection=(self.files(bundle(16), bundle(17))[0], path))
             model.make_projection()
         self.assertTrue(any("maps the levels of cpb03_ls#be1.dat" in str(w.message) for w in caught))

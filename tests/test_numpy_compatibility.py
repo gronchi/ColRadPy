@@ -10,6 +10,7 @@ import unittest
 
 import numpy as np
 
+from colradpy.colradpy_class import KELVIN_PER_EV
 from colradpy.energy_balance import energy_balance
 from colradpy.read_adf04_py3_class import read_adf04
 from colradpy.solve_matrix_exponential import (
@@ -46,7 +47,7 @@ class NumpyCompatibilityTests(unittest.TestCase):
         for name in EXAMPLES:
             path = INPUT / name
             raw = read_adf04(str(path))
-            temperatures = raw["input_file"]["temp_grid"][1:3] / 11604.5
+            temperatures = raw["input_file"]["temp_grid"][1:3] / KELVIN_PER_EV
             for paired in (False, True):
                 with self.subTest(file=name, paired=paired):
                     model = cr_module.colradpy(

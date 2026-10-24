@@ -13,6 +13,7 @@ import numpy as np
 from numpy.polynomial.laguerre import laggauss
 
 import colradpy
+from colradpy.colradpy_class import KELVIN_PER_EV
 from colradpy.ecip_rates import ecip_rates
 from colradpy.r8necip import r8necip
 from colradpy.r8yip import R8YIP, r8ecip
@@ -90,7 +91,7 @@ class EcipLevelSelectionTests(unittest.TestCase):
         np.testing.assert_array_equal(rates[2, 0], 0)  # above the first ionization potential
         np.testing.assert_array_equal(rates[0, 1], 0)  # not marked for the second parent
         np.testing.assert_allclose(rates[2, 1], r8ecip(1, 300000., energy[2:], np.array([1.]),
-                                                       np.array([5., 20.]) * 11604.5, True)[0], rtol=1e-12)
+                                                       np.array([5., 20.]) * KELVIN_PER_EV, True)[0], rtol=1e-12)
 
     def test_levels_above_the_first_ionization_potential(self):
         # Be II levels above 90000 cm-1 are put above a lowered first ionization potential and

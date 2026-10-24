@@ -17,6 +17,7 @@ import warnings
 import numpy as np
 
 from colradpy import colradpy
+from colradpy.colradpy_class import KELVIN_PER_EV
 from colradpy.colradpy_class import (RECOMBINATION_EXPONENTS, REDUCED_IONIZATION_EXPONENTS_ABOVE,
                                      STEEPEST_RECOMBINATION, STEEPEST_REDUCED_IONIZATION,
                                      low_temperature_artifacts)
@@ -45,7 +46,7 @@ def rates(path, temperatures, **kwargs):
 
 
 def file_temperatures():
-    return rates(FILE, [1.]).data["input_file"]["temp_grid"] / 11604.5
+    return rates(FILE, [1.]).data["input_file"]["temp_grid"] / KELVIN_PER_EV
 
 
 class RateInterpolationTests(unittest.TestCase):

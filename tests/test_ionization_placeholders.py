@@ -15,7 +15,7 @@ import warnings
 import numpy as np
 
 from colradpy import colradpy
-from colradpy.colradpy_class import MAX_RECOMBINATION, MAX_REDUCED_IONIZATION
+from colradpy.colradpy_class import KELVIN_PER_EV, MAX_RECOMBINATION, MAX_REDUCED_IONIZATION
 from colradpy.ionization_balance_class import ionization_balance
 
 
@@ -38,7 +38,7 @@ class PlaceholderTests(unittest.TestCase):
         with self.assertWarnsRegex(UserWarning, r"level 1 to parent 2 at 0\.172, 0\.431, 0\.862 eV"):
             model = rates(INPUT / "cpb03_ls#be1.dat", temperatures, metas=(0, 1))
         ioniz = model.data["rates"]["ioniz"]
-        file_temps = model.data["input_file"]["temp_grid"] / 11604.5
+        file_temps = model.data["input_file"]["temp_grid"] / KELVIN_PER_EV
         k = int(np.where((ioniz["ion_transitions"] == [1, 2]).all(axis=1))[0][0])
         values = ioniz["ion_excit"][k]
         kept = values <= MAX_REDUCED_IONIZATION
@@ -72,7 +72,7 @@ class PlaceholderTests(unittest.TestCase):
         with self.assertWarnsRegex(UserWarning, r"recombination rates above 1e-07 .* parent 1 to level 2 at 0\.0862 eV"):
             model = rates(path, temperatures)
         reference = rates(INPUT / "cpb03_ls#be0.dat", temperatures)
-        file_temps = model.data["input_file"]["temp_grid"] / 11604.5
+        file_temps = model.data["input_file"]["temp_grid"] / KELVIN_PER_EV
         recombination = model.data["rates"]["recomb"]["recombination"][1, 0]
         self.assertTrue((recombination <= MAX_RECOMBINATION).all())
         # at and above the second file temperature the rates are those of the original file

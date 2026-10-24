@@ -15,6 +15,7 @@ import warnings
 import numpy as np
 
 from colradpy import colradpy
+from colradpy.colradpy_class import KELVIN_PER_EV
 from colradpy.burgess_tully_rates import burgess_tully_rates, type2_xconvert
 
 
@@ -25,7 +26,7 @@ FILES = ("cpb03_ls#be0.dat", "cpb03_ls#be1.dat", "be2_adf04", "be3_adf04")
 def file_temperatures(name):
     model = colradpy(str(INPUT / name), metas=np.array([0]), temp_grid=np.array([1.]),
                      electron_den=np.array([1e13]))
-    return model.data["input_file"]["temp_grid"] / 11604.5
+    return model.data["input_file"]["temp_grid"] / KELVIN_PER_EV
 
 
 def solve(name, temperatures, rates_only=False):
@@ -73,7 +74,7 @@ class ExcitationExtrapolationTests(unittest.TestCase):
         transitions = rates["excit"]["col_transitions"][inds] - 1
         energy = model.data["atomic"]["energy"]
         energies = np.array([energy[transitions[:, 0]], energy[transitions[:, 1]]])
-        x = type2_xconvert(np.concatenate([low, calculated[:2]]) * 11604.5, energies)
+        x = type2_xconvert(np.concatenate([low, calculated[:2]]) * KELVIN_PER_EV, energies)
         log_y = np.log(upsilon[inds][:, :5])
         slope = (log_y[:, 4] - log_y[:, 3]) / (x[:, 4] - x[:, 3])
         np.testing.assert_allclose(log_y[:, :3], log_y[:, [3]] + slope[:, None] * (x[:, :3] - x[:, [3]]),

@@ -1,5 +1,9 @@
 import numpy as np
+from scipy import constants
 from colradpy.r8necip import *
+
+#K per eV (e / k_B), as in colradpy_class
+KELVIN_PER_EV = constants.e/constants.k
 ####################################################################################################
 def ecip_rates(energy,ion_pot,zpla,zpla1,charge_state,temp_grid,reduced=False):
     """This function gives energy levels to r8necip for ECIP ionization to be
@@ -42,5 +46,5 @@ grid provided.
 
         ecip[ion_inds,p,:] = r8ecip(charge_state, ion_pot[p],
                          energy[ion_inds],zpla[ion_inds,p],
-                          temp_grid*11604.5, reduced)
+                          temp_grid*KELVIN_PER_EV, reduced)
     return ecip

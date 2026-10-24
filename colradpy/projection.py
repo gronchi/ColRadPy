@@ -33,8 +33,8 @@ from scipy import constants
 from scipy.interpolate import RegularGridInterpolator
 
 
-#temperature of 1 eV in K
-KELVIN_PER_EV = 11604.5
+#temperature of 1 eV in K (e / k_B), as in colradpy_class
+KELVIN_PER_EV = constants.e/constants.k
 #energy of 1 cm-1 in eV, as in colradpy_class
 EV_PER_WAVENUMBER = constants.h*constants.c*100/constants.e
 #exponents of the power laws that the condensed couplings follow below the first temperature of their

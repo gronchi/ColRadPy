@@ -15,7 +15,7 @@ import numpy as np
 from scipy import constants
 
 from colradpy import colradpy
-from colradpy.colradpy_class import EV_PER_WAVENUMBER, L_LETTERS, parent_statistical_weight
+from colradpy.colradpy_class import EV_PER_WAVENUMBER, KELVIN_PER_EV, L_LETTERS, parent_statistical_weight
 from colradpy.read_adf04_py3_class import read_adf04
 from colradpy.r8yip import r8ecip
 
@@ -86,7 +86,7 @@ class ThreeBodyTests(unittest.TestCase):
                                        rtol=3e-4)
             # The reduced rate is exp(dE/kT) S, with the exponent of the file
             # reduced rates or, for the other levels, of r8ecip.
-            ev_per_wavenumber = np.full(len(atomic["energy"]), 9.11269E-06 * 157890.0 / 11604.5)
+            ev_per_wavenumber = np.full(len(atomic["energy"]), 9.11269E-06 * 157890.0 / KELVIN_PER_EV)
             ev_per_wavenumber[transitions[transitions[:, 1] == p + 1, 0] - 1] = EV_PER_WAVENUMBER
             x = ((atomic["ion_pot"][p] - atomic["energy"]) * ev_per_wavenumber)[:, None] / temps
             ionization = rates["ioniz"]["ionization"][:, p]
@@ -159,7 +159,7 @@ class ThreeBodyTests(unittest.TestCase):
         atomic = model.data["atomic"]
         level = np.where(made[:, 0, 0])[0][0]
         rates = r8ecip(atomic["charge_state"], atomic["ion_pot"][0], atomic["energy"][[level]],
-                       atomic["zpla"][[level], 0], model.data["user"]["temp_grid"] * 11604.5)
+                       atomic["zpla"][[level], 0], model.data["user"]["temp_grid"] * KELVIN_PER_EV)
         np.testing.assert_allclose(ioniz["ecip"][level, 0], rates[0], rtol=1e-12)
 
     def test_file_ionization_kept_below_its_grid(self):

@@ -21,6 +21,7 @@ from scipy import constants
 from scipy.special import exp1
 
 from colradpy import colradpy
+from colradpy.colradpy_class import KELVIN_PER_EV
 from colradpy.convolve_eedf import maxwellian, rate_coefficients, speed
 from colradpy.read_fac import (ALPHA, BOHR_AREA, HARTREE_EV, RYDBERG_EV, UPSILON_RATE, FacCrossSection, fac_cross_sections,
                                read_fac, read_fac_ce, read_fac_ci, read_fac_en, read_fac_rr, two_photon_rate)
@@ -238,8 +239,8 @@ class FilesTests(unittest.TestCase):
         np.testing.assert_allclose(atomic["ion_pot"] * constants.h * constants.c * 100 / constants.e, [50., 55.])
         np.testing.assert_array_equal(atomic["ion_w"], [0.5, 0.5])
         self.assertEqual((atomic["element"], atomic["charge_state"], atomic["iz0"], atomic["iz1"]), ("C", 4, 6, 5))
-        np.testing.assert_allclose(data["input_file"]["temp_grid"] / 11604.5, TEMPS, rtol=1e-15)
-        self.assertTrue(data["input_file"]["temp_grid"][-1] / 11604.5 >= TEMPS[-1])
+        np.testing.assert_allclose(data["input_file"]["temp_grid"] / KELVIN_PER_EV, TEMPS, rtol=1e-15)
+        self.assertTrue(data["input_file"]["temp_grid"][-1] / KELVIN_PER_EV >= TEMPS[-1])
         self.assertEqual(data["user"]["file_loc"], fil)
 
     def test_transitions(self):
@@ -418,7 +419,7 @@ class MaxwellRateTests(unittest.TestCase):
                     f.write(f"{t:11.4E} {2.:11.4E} {3e-2:11.4E}\n")
                 f.write("\n\n")
             data = read_fac(fil, 2, TEMPS, eedf="Maxwellian_mr")
-        np.testing.assert_allclose(data["input_file"]["temp_grid"] / 11604.5, temps)
+        np.testing.assert_allclose(data["input_file"]["temp_grid"] / KELVIN_PER_EV, temps)
         rates = data["rates"]
         pairs = [tuple(p) for p in rates["excit"]["col_transitions"]]
         np.testing.assert_allclose(rates["excit"]["col_excit"][pairs.index((4, 1))], [0.3, 0.4, 0.5])

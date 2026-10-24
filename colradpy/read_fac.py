@@ -69,8 +69,8 @@ PROCESSES = ('en', 'tr', 'ce', 'rr', 'ai', 'ci')
 #rates (populate_cr_matrix), so that the rates of the CR matrix are those integrated here
 UPSILON_RATE = 2.1716E-8
 RYDBERG_EV = 13.6058
-#K per eV of the temperatures of adf04 files
-KELVIN_PER_EV = 11604.5
+#K per eV of the temperatures of adf04 files (e / k_B), as in colradpy_class
+KELVIN_PER_EV = constants.e/constants.k
 #eV per cm-1, as in colradpy_class
 EV_PER_WAVENUMBER = constants.h*constants.c*100/constants.e
 
@@ -547,7 +547,7 @@ def two_photon_rate(z, nele):
 
 def _kelvin(temps):
     """Temperatures (eV) in K as in adf04 files, the first and last moved by an ulp if needed so that
-    dividing by 11604.5 (as ColRadPy does) does not leave them inside the temperatures they came from,
+    dividing by KELVIN_PER_EV (as ColRadPy does) does not leave them inside the temperatures they came from,
     which would extrapolate the rates."""
     kelvin = np.asarray(temps, dtype=float)*KELVIN_PER_EV
     while(kelvin[0]/KELVIN_PER_EV > temps[0]):

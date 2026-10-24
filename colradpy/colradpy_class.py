@@ -112,6 +112,9 @@ L_LETTERS = 'SPDFGHIKLMNOQRTUV'
 #Boltzmann factors of excitation, ionization and three-body recombination
 EV_PER_WAVENUMBER = constants.h*constants.c*100/constants.e
 
+#K per eV (e / k_B), converts the adf04 temperatures (K) to eV and back
+KELVIN_PER_EV = constants.e/constants.k
+
 #Photon energy in J of a transition of 1 cm-1 (h c)
 J_PER_WAVENUMBER = constants.h*constants.c*100
 
@@ -701,7 +704,7 @@ class colradpy():
         """
         return np.einsum('ij,k->ijk', self.data['atomic']['ion_pot'][None,:] -
                          self.data['atomic']['energy'][:,None],
-                         9.11269E-06*157890.0/(self.data['user']['temp_grid']*11604.5))
+                         9.11269E-06*157890.0/(self.data['user']['temp_grid']*KELVIN_PER_EV))
 
 
     def make_burgess_tully(self):
@@ -839,7 +842,7 @@ class colradpy():
         #at the lowest temperatures of OpenADAS cop98#10_ls#ne4 to ne8), and smaller artifacts at the
         #lowest temperatures that fall faster than any reduced rate, are left out, and the rates at
         #those temperatures come from the other points of the transition
-        file_temps = self.data['input_file']['temp_grid']/11604.5
+        file_temps = self.data['input_file']['temp_grid']/KELVIN_PER_EV
         order = np.argsort(file_temps)
         file_temps = file_temps[order]
         ion_excit = self.data['rates']['ioniz']['ion_excit'][:, order]
@@ -960,7 +963,7 @@ class colradpy():
 
 
         if(self.data['user']['log_rate_cx']):
-            cx_excit_interp = interp1d(np.log(self.data['input_file']['temp_grid']/11604.5),
+            cx_excit_interp = interp1d(np.log(self.data['input_file']['temp_grid']/KELVIN_PER_EV),
                                            self.data['rates']['cx']['cx_excit'],
                                            axis=1,
                                            kind = self.data['user']['interp_kind_cx'],
@@ -969,7 +972,7 @@ class colradpy():
             self.data['rates']['cx']['cx_excit_interp_grid'] =\
                                         cx_excit_interp(np.log(self.data['user']['htemp_grid']))
         else:
-            cx_excit_interp = interp1d(self.data['input_file']['temp_grid']/11604.5,
+            cx_excit_interp = interp1d(self.data['input_file']['temp_grid']/KELVIN_PER_EV,
                                            self.data['rates']['cx']['cx_excit'],
                                            axis=1,
                                            kind = self.data['user']['interp_kind_cx'],
@@ -1008,7 +1011,7 @@ class colradpy():
             #artifacts at the lowest temperatures that fall faster than any recombination rate, are
             #left out, and the rates at those temperatures come from the other points of the transition
             recomb_excit = self.data['rates']['recomb']['recomb_excit']
-            file_temps = self.data['input_file']['temp_grid']/11604.5
+            file_temps = self.data['input_file']['temp_grid']/KELVIN_PER_EV
             order = np.argsort(file_temps)
             file_temps, recomb_excit = file_temps[order], recomb_excit[:, order]
             placeholders, artifacts = self._rates_left_out(file_temps, recomb_excit, MAX_RECOMBINATION,
@@ -1047,11 +1050,11 @@ class colradpy():
                                    <1.e-30)[0],return_inverse=True,return_counts=True)
         if(c.any()):
             if(any(self.data['user']['temp_grid'] < \
-                   self.data['input_file']['temp_grid'][c.max()]/11604.5)):
+                   self.data['input_file']['temp_grid'][c.max()]/KELVIN_PER_EV)):
                 for v in range(0,len(a)):
                     tmp = np.where(self.data['user']['temp_grid'] <\
-                                   self.data['input_file']['temp_grid'][c.max()]/11604.5)[0]
-                    w = interp1d(self.data['input_file']['temp_grid'][0:c[v]+1]/11604.5,\
+                                   self.data['input_file']['temp_grid'][c.max()]/KELVIN_PER_EV)[0]
+                    w = interp1d(self.data['input_file']['temp_grid'][0:c[v]+1]/KELVIN_PER_EV,\
                                  self.data['rates']['recomb']['recomb_excit'][a[v],0:c[v]+1],\
                                  kind='slinear')
 
@@ -1125,12 +1128,12 @@ class colradpy():
            far above the transition threshold.
         """
         if(self.data['user']['log_rate_col']):
-            tmp = interp1d(np.log(self.data['input_file']['temp_grid']/11604.5),
+            tmp = interp1d(np.log(self.data['input_file']['temp_grid']/KELVIN_PER_EV),
                            self.data['rates']['excit']['col_excit'],axis=1,
                                            kind = self.data['user']['interp_kind_col'],
                                            fill_value =  'extrapolate')
         else:
-            tmp = interp1d(self.data['input_file']['temp_grid']/11604.5,
+            tmp = interp1d(self.data['input_file']['temp_grid']/KELVIN_PER_EV,
                            self.data['rates']['excit']['col_excit'],axis=1,
                                            kind = self.data['user']['interp_kind_col'],
                                            fill_value =  'extrapolate')
@@ -1146,8 +1149,8 @@ class colradpy():
             self.data['rates']['excit']['col_excit_interp'] = tmp(self.data['user']['temp_grid'])
 
 
-        extrap_hi = np.max(self.data['input_file']['temp_grid'])/11604.5 < np.max(self.data['user']['temp_grid'])
-        extrap_low = np.min(self.data['input_file']['temp_grid'])/11604.5 > np.min(self.data['user']['temp_grid'])
+        extrap_hi = np.max(self.data['input_file']['temp_grid'])/KELVIN_PER_EV < np.max(self.data['user']['temp_grid'])
+        extrap_low = np.min(self.data['input_file']['temp_grid'])/KELVIN_PER_EV > np.min(self.data['user']['temp_grid'])
         if(extrap_hi):
             print('Atleast one user temp point above last calculated temperature using extrapolation be carefull')
         if(extrap_low):
