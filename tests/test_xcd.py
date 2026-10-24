@@ -151,6 +151,32 @@ class XcdTests(unittest.TestCase):
                     self.assert_xcd_matches_reduction(model)
                     self.assertTrue(np.any(model.data["processed"]["xcd"] > 0))
 
+    def test_projected_parent_coupling_direction(self):
+        # The projection gives the recombination from a parent through the high n-shells that
+        # ionizes to another parent as [to, from]; it was added to XCD, which is [from, to], without
+        # transposing, so the O0 coupling from O+ 2D down to 4S went from 4S up to 2D. A coupling
+        # from parent 1 to parent 0 must change XCD[1, 0] only.
+        path = Path(__file__).resolve().parents[1] / "examples/input/cpb03_ls#be1.dat"
+        temps, dens = np.array([5.0, 20.0]), np.array([1e12, 1e14])
+        model = colradpy(str(path), np.array([0]), temps, dens)
+        model.solve_cr()
+        plain = model.data["processed"]["xcd"].copy()
+        levels, parents = len(model.data["atomic"]["energy"]), len(model.data["atomic"]["ion_pot"])
+        self.assertEqual(parents, 2)
+        grid = (len(temps), len(dens))
+        coupling = np.zeros((parents, parents) + grid)
+        coupling[0, 1] = 3e-9                                 # [to, from]: from parent 1 to parent 0
+        model.data["user"]["projection"] = ("adf17", "adf18")
+        model.data["rates"]["projection"] = {"couplings": np.zeros((levels, levels) + grid),
+                                             "ionization": np.zeros((levels, parents) + grid),
+                                             "recombination": np.zeros((levels, parents) + grid),
+                                             "parent_coupling": coupling}
+        model.populate_cr_matrix()
+        model.solve_quasi_static()
+        change = model.data["processed"]["xcd"] - plain
+        np.testing.assert_allclose(change[1, 0], 3e-9)
+        np.testing.assert_allclose(change[0, 1], 0, atol=1e-25)
+
 
 if __name__ == "__main__":
     unittest.main()

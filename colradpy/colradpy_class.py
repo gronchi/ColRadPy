@@ -1902,9 +1902,10 @@ class colradpy():
                                                                      0:len(self.data['atomic']['energy']),:],
                                 recomb_coeff[levels_to_keep][:,metasplus_to_keep,:]))
                 if(self.data['user']['use_recombination'] and self.data['user'].get('projection')):
-                    #recombination into the high n-shells that ionizes to another parent
+                    #recombination into the high n-shells that ionizes to another parent; the
+                    #projection gives it [to, from] and xcd is [from, to]
                     self.data['processed']['xcd'] = self.data['processed']['xcd'] + \
-                                                    self.data['rates']['projection']['parent_coupling']
+                        np.swapaxes(self.data['rates']['projection']['parent_coupling'], 0, 1)
 
         else:
         
@@ -2040,9 +2041,10 @@ class colradpy():
                                                                  0:len(self.data['atomic']['energy']),:,:],
                             recomb_coeff[levels_to_keep][:,metasplus_to_keep,:,:]))
                 if(self.data['user']['use_recombination'] and self.data['user'].get('projection')):
-                    #recombination into the high n-shells that ionizes to another parent
+                    #recombination into the high n-shells that ionizes to another parent; the
+                    #projection gives it [to, from] and xcd is [from, to]
                     self.data['processed']['xcd'] = self.data['processed']['xcd'] + \
-                                                    self.data['rates']['projection']['parent_coupling']
+                        np.swapaxes(self.data['rates']['projection']['parent_coupling'], 0, 1)
 
                     
     def solve_time_dependent(self):
