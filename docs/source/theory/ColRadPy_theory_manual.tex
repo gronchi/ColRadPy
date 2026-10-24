@@ -66,10 +66,11 @@
 {\large Collisional radiative kinetics and spectral emission\par}
 \vspace{2cm}
 \begin{tabular}{rl}
-Code version & 1.1 (\code{setup.py})\\
+Code version & 1.1 (\code{pyproject.toml})\\
 Source branch & \revision\\
 Source record & HEAD and file hashes in \code{provenance.json}\\
-Code author & C. A. Johnson\\
+Code authors & C. A. Johnson and contributors (original code)\\
+ & G. Ronchi (\revision{} branch)\\
 Reference & C. A. Johnson, S. D. Loch and D. A. Ennis (2019)\\
 Manual date & October 2026
 \end{tabular}
@@ -90,41 +91,57 @@ given in \code{docs/source/theory/figures/provenance.json}.
 \begingroup\footnotesize\setlength{\parskip}{0pt}\tableofcontents\endgroup
 \clearpage\pagenumbering{arabic}
 
-\section{Purpose and model scope}\label{sec:intro}
+\section{Physical framework and conventions}\label{sec:intro}
 
-ColRadPy converts level-resolved atomic data into populations, photon emission
-coefficients, and effective rates for charge-state evolution. The basic input
-is an ADAS ADF04 description of one ion: level energies, radiative probabilities,
-electron-impact collision strengths, and any supplied parent-resolved ionization,
-recombination, or charge-exchange data. ColRadPy implements the generalized
-collisional radiative (GCR) approach~\cite{johnson,summers2006}.
-Statements about the implementation refer to the source used to generate the
-figures and checks of this manual~\cite{source}.
+ColRadPy describes the populations and emission of atomic ions using a
+generalized collisional-radiative (GCR) model~\cite{johnson,summers2006}.
+Level-resolved atomic data determine the rates of excitation, decay,
+ionization and capture. The resulting kinetic equations yield both the
+populations of individual levels and effective coefficients for the
+evolution of charge states. An ADAS ADF04 file provides the usual atomic
+input, including level energies, radiative probabilities, effective
+collision strengths and any available parent-resolved ionization,
+recombination or charge-exchange data.
 
-The plasma parameters are prescribed. Electrons are Maxwellian at a specified
-temperature, atomic processes are represented by rate coefficients, and emitted
-photons escape. Ground and metastable populations can be retained as independent
-drivers. The principal calculation does not solve radiative transfer, a spatial
-transport equation, or the electron distribution function. Its rate coefficients
-can instead be passed to a transport or plasma model.
+The basic model assumes a prescribed Maxwellian electron bath and
+optically thin emission. Temperature and density are external parameters,
+and emitted photons escape without further interaction. Ground and
+metastable populations may remain independent dynamical variables, while
+shorter-lived excited populations can be represented by their response
+to these variables. This local kinetic description supplies coefficients
+to transport and plasma models; radiative transfer, spatial transport and
+the electron distribution function are outside its scope.
 
-The collisional radiative regime lies between two useful limits. At sufficiently
-low density, excitation is balanced mainly by radiative decay, giving the
-coronal limit. At high density, reversible collisions tend toward a Boltzmann
-distribution within a charge stage; ionization and three-body recombination
-also tend toward Saha balance when their inverse processes and statistical
-weights are consistent. These are limits to test, not assumptions that every
-fusion or astrophysical plasma automatically satisfies.
+The competition between radiative and collisional rates connects the
+coronal and high-density limits. At low density, spontaneous decay
+dominates the removal of ordinary excited populations. As density
+increases, reversible collisions can establish Boltzmann ratios within
+a charge stage. Ionization and three-body recombination approach Saha
+balance when the inverse rates and statistical weights are consistent.
+These limiting behaviors provide physical checks on a calculation.
+Implementation statements in this manual refer to the source recorded
+with the accompanying figures and numerical checks~\cite{source}.
 
-\subsection{Two calculations with different meanings}
+\subsection{Kinetic descriptions}
 
-The quasistatic calculation sets derivatives of selected excited populations
-to zero while retaining the ground and metastables as drivers. It produces
-linear response coefficients. The fully time-dependent calculation propagates
-the entire supplied rate matrix from an initial vector. A separate
-ionization-balance calculation joins effective coefficients from adjacent
-charge stages. Keeping these distinctions prevents an excited-state
-response per parent from being mistaken for a normalized ion fraction.
+The level equations admit a full time-dependent solution and a
+quasistatic reduction. The former follows every supplied population from
+an initial state. The latter assumes that selected excited levels relax
+rapidly and expresses their populations in terms of retained ground,
+metastable and parent populations. Eliminating the excited levels also
+produces effective rates, which couple adjacent ions in a charge-state
+evolution model. The interpretation of each result follows from its
+driving populations and normalization.
+
+The development below proceeds from atomic rates to level kinetics,
+quasistatic reduction, effective charge-state coefficients and emission.
+The two-level example introduces the role of density and population
+normalization before the general reduction. High-shell projection,
+atomic-data preparation and kinetic-energy evolution extend this
+framework in Sections~\ref{sec:projection}--\ref{sec:energy}.
+The final section addresses applicability and verification; the
+appendices document numerical algorithms, data conventions, the ADAS
+production chain and the source and evidence supporting the manual.
 
 \subsection{Calculation flow}
 
@@ -155,22 +172,24 @@ their interpretation must be specified.}
 \label{fig:flow}
 \end{figure}
 
-\section{Notation, indexing and units}\label{sec:units}
+\subsection{Notation, indexing and units}\label{sec:units}
 
-Let $N_i^{(z)}$ denote the number density of level $i$ in charge state $z$.
-Indices $i,j$ generally label bound levels; $\rho,\sigma$ label retained
-ground or metastable levels; $p,q$ label parents in charge state $z+1$.
-The subscripts $e$ and $r$ on matrix blocks denote eliminated excited and
-retained states, respectively. They do not denote electron density.
+Let $N_i^{(z)}$ denote the number density of level $i$ in charge state
+$z$. Bound levels are indexed by $i,j$, retained ground and metastable
+levels by $\rho,\sigma$, and parents in charge state $z+1$ by $p,q$.
+Matrix-block subscripts identify sets of states: $e$ denotes eliminated
+excited levels, $m$ retained bound levels, and $r$ all retained states,
+including the parents. Electron density is written explicitly as $\nelec$.
 
 The defining matrix convention is
 \begin{equation}\label{eq:matrix-convention}
  \frac{\dd N_i}{\dd t}=\sum_j C_{ij}N_j,
  \qquad C_{ij}:\ j\longrightarrow i.
 \end{equation}
-Thus a column is a source state and a row is a destination. Off-diagonal
-rates are nonnegative for a physical model. This convention differs from
-some stored coefficient arrays, as listed in Section~\ref{sec:arrays}.
+Each column therefore represents a source state and each row a
+destination. Physical transfer rates give nonnegative off-diagonal
+entries. Some stored coefficient arrays use a different index order,
+documented in Appendix~\ref{sec:arrays}.
 
 \begin{table}[htbp]\centering\small
 \begin{tabularx}{\textwidth}{lXl}
@@ -194,52 +213,70 @@ density. The energy-transfer helper functions use SI densities and masses.}
 
 The conversions needed repeatedly are
 \begin{align}
- \Delta E_{\rm eV}&=\frac{\Delta E_{\rm cm^{-1}}}{8065.54}, &
- T_{\rm K}&\simeq11604.5\,T_{\rm eV},\label{eq:conversion}\\
+ \Delta E_{\rm eV}&=\frac{100\,hc}{e}\,\Delta E_{\rm cm^{-1}}
+   \simeq\frac{\Delta E_{\rm cm^{-1}}}{8065.544}, &
+ T_{\rm K}&=\frac{e}{k_B}\,T_{\rm eV}\simeq11604.518\,T_{\rm eV},\label{eq:conversion}\\
  \lambda_{\rm vac,nm}&=\frac{10^7}{|E_u-E_\ell|_{\rm cm^{-1}}}, &
  n_{\rm m^{-3}}&=10^6n_{\rm cm^{-3}}.
 \end{align}
-The code uses several slightly different rounded energy-conversion constants.
-For reproducibility, the exact expressions in a routine take precedence over
-a claim that all those constants are identical.
+The energy and temperature conversions use the CODATA values supplied by
+\code{scipy.constants}; the factor 100 converts wavenumbers from
+cm$^{-1}$ to m$^{-1}$. Several ADAS-derived rate expressions retain
+their original rounded constants: 13.6058 eV and
+$2.1716\times10^{-8}$ in Eq.~\eqref{eq:qdown}, 157890 K per rydberg in
+ECIP, and $1.656742\times10^{-22}$ in Eq.~\eqref{eq:saha}. Numerical
+reproduction should follow the constants used by the relevant routine.
 
-ADF04 level and parent identifiers are one-based. Python level indices are
-zero-based; \code{metas=[0,2]} retains the first and third bound levels.
-The complement is then $[1,3,4,\ldots]$, not the contiguous interval beginning
-at the number of metastables. A parent identifier is also not interchangeable
-with the position at which that identifier was discovered in a file.
+Unless specified as tabulated wavenumbers, $\Delta E$, $\chi$ and FAC
+energies in rate expressions are in eV. Consequently, ratios such as
+$\Delta E/\Te$ are dimensionless. Expressions involving SI constants
+require energies in joules, with $k_BT_{\rm K}=e\Te$. Photon energies
+in power and electron-energy-loss coefficients are likewise in joules.
+The wavelength conversion uses the tabulated wavenumber differences.
 
-\section{Atomic data and rate coefficients}\label{sec:rates}
+ADF04 level and parent identifiers are one-based, whereas Python indices
+are zero-based. Thus \code{metas=[0,2]} retains the first and third bound
+levels, leaving $[1,3,4,\ldots]$ as the eliminated set. This explicit
+complement is needed when the retained levels are noncontiguous. Parent
+identifiers must also be distinguished from their discovery order in
+the input file.
+
+\section{Atomic processes and rate coefficients}\label{sec:rates}
 
 \subsection{Level structure and statistical weights}
 
-The ADF04 reader stores configurations, multiplicities, orbital labels,
-energies, and a weight-related field \code{atomic['w']}. The matrix builder
-uses $g_i=2w_i+1$. In an LS-resolved file the level weight is
-$(2S+1)(2L+1)$; in a resolved-$J$ description it is $2J+1$.
-The parent term must be interpreted consistently with that resolution.
-The header provides parent ionization thresholds, while level annotations
-describe parentage channels. They need not enumerate identical sets of
+Statistical weights reflect the resolution of the atomic model. An LS
+term has weight $(2S+1)(2L+1)$, while a resolved-$J$ level has weight
+$2J+1$. ColRadPy represents this through the ADF04 field
+\code{atomic['w']} and uses $g_i=2w_i+1$ in rate construction. Parent
+weights must follow the same resolution. Parent ionization thresholds
+are specified in the file header, while level annotations identify
+parentage channels; these two records need not enumerate the same
 observed pathways~\cite{adf04}.
 
 \begin{implnote}[Parent weights]
-\routine{parent_statistical_weight} parses LS and resolved-$J$ parent terms,
-including fractional $J$, and uses $g_p=(2S+1)(2L+1)$ or $g_p=2J+1$ as
-appropriate. Header parent counts and discovered pathway IDs still require
-care: an entry can have explicit ionization data even when its parentage
-annotations are incomplete.
+\routine{parent_statistical_weight} interprets LS and resolved-$J$
+parent labels, including fractional $J$, to obtain $(2S+1)(2L+1)$ or
+$2J+1$. Explicit ionization data may be present even when the associated
+parentage annotations are incomplete, so channel identifiers and header
+counts require consistent mapping.
 \end{implnote}
 
 \subsection{Maxwellian electron-impact excitation}
 
-For an electron-energy distribution $f_E(E)$ normalized to unity,
+Electron-impact coefficients are averages of the cross-section over the
+electron distribution. For a normalized energy probability density
+$f_E$ in eV$^{-1}$, a cross-section $\sigma$ in cm$^2$ and electron
+speed $v$ in cm/s, the excitation coefficient is
 \begin{equation}
  q_{\ell u}=\int_{\Delta E}^{\infty}\sigma_{\ell u}(E)
-       \sqrt{\frac{2E}{m_e}}\,f_E(E)\,\dd E .
+       v(E)\,f_E(E)\,\dd E .
 \end{equation}
-The tabulated effective collision strength $\Upsilon_{\ell u}(T)$ packages
-the Maxwellian average in a convenient dimensionless form. The implemented
-rate conversion for $u>\ell$ is
+Both the incident energy $E$ and threshold $\Delta E$ are in eV, giving
+$q$ in cm$^3$/s. ADF04 expresses the nonrelativistic Maxwellian average
+through the dimensionless effective collision strength
+$\Upsilon_{\ell u}(T)$. For $u>\ell$, the downward coefficient and its
+upward inverse are
 \begin{align}
  q_{u\ell}(\Te)&=\frac{2.1716\times10^{-8}}{g_u}
         \sqrt{\frac{13.6058}{\Te}}\,\Upsilon_{\ell u}(\Te),\label{eq:qdown}\\
@@ -247,82 +284,80 @@ rate conversion for $u>\ell$ is
        \exp\!\left(-\frac{\Delta E}{\Te}\right)q_{u\ell}(\Te).
        \label{eq:qup}
 \end{align}
-Here $\Delta E$ and $\Te$ have the same energy units. Both coefficients
-are in $\mathrm{cm}^3\,\mathrm{s}^{-1}$. Their ratio enforces collisional
-detailed balance: $N_u/N_\ell=(g_u/g_\ell)\exp(-\Delta E/\Te)$ when
-collisions dominate and no other mechanism fixes the ratio.
+The Boltzmann factor uses $\Delta E$ and $\Te$ in the same energy units.
+The ratio of these coefficients gives
+$N_u/N_\ell=(g_u/g_\ell)\exp(-\Delta E/\Te)$ when collisions control
+the level ratio. This detailed-balance relation is the basis of the
+within-stage Boltzmann limit. Section~\ref{sec:fac} describes the
+corresponding treatment of cross-section data from FAC.
 
 \begin{implnote}
-\routine{make_electron_excitation_rates} interpolates $\Upsilon$ onto the
-user grid. \routine{populate_cr_matrix} constructs the upward and downward
-rates and multiplies them by electron density. The excitation, ionization and
-three-body Boltzmann factors convert cm$^{-1}$ to eV with $hc/e$
-(1/8065.544), so excitation alone drives the populations to the Boltzmann
-distribution at high density; the ECIP exponent keeps the constants of
-\routine{r8ecip}.
+\routine{make_electron_excitation_rates} interpolates $\Upsilon$ to the
+requested temperatures. \routine{populate_cr_matrix} constructs the
+upward and downward coefficients and applies the electron-density
+factor. Boltzmann factors for excitation, ionization and three-body
+recombination use the wavenumber-to-eV conversion in
+Eq.~\eqref{eq:conversion}; ECIP retains the constants of \routine{r8ecip}.
 \end{implnote}
 
 \subsection{Spontaneous decay, ionization and recombination}
 
-For a radiative transition $u\to\ell$, the population-transfer rate is
-$A_{u\ell}N_u$, with no electron-density multiplier. The total radiative
-loss is $\Gamma_u=\sum_{\ell<u}A_{u\ell}$.
+Spontaneous decay transfers population from $u$ to $\ell$ at rate
+$A_{u\ell}N_u$, independently of electron density. Summation over the
+accessible lower levels gives the total radiative loss rate,
+$\Gamma_u=\sum_{\ell<u}A_{u\ell}$.
 
-Let $S_{ip}$ denote ionization from bound level $i$ to parent $p$. The
-reduced ionization quantity in the supported ADF04 convention is converted as
+Ionization connects a bound level $i$ to a parent $p$ of the next charge
+stage. In the supported ADF04 convention, the tabulated reduced
+coefficient $\widetilde S_{ip}$ is related to the physical coefficient by
 \begin{equation}\label{eq:reduced-ion}
  S_{ip}(\Te)=\widetilde S_{ip}(\Te)
-            \exp[-\chi_{ip}/\Te],\qquad \chi_{ip}=I_p-E_i.
+            \exp[-\chi_{ip}/\Te],\qquad
+ \chi_{ip}=\frac{100\,hc}{e}\,(I_p-E_i)\quad\text{(eV)}.
 \end{equation}
-An interpolated reduced coefficient is not itself the final ionization rate.
-The input parentage factor can be applied through \code{scale_file_ioniz},
-which multiplies the interpolated reduced coefficients whatever the
-interpolation; the ionization balance passes the option to each stage.
-Some files hold placeholders instead of rates at their lowest temperatures,
-where the rate underflowed when the file was made (reduced ionization rates of
-$10^{-2}$ to $10^{40}$\,cm$^3$\,s$^{-1}$ in OpenADAS neon files). Reduced
-ionization rates above $10^{-6}$\,cm$^3$\,s$^{-1}$ and recombination rates above
-$10^{-7}$\,cm$^3$\,s$^{-1}$, far above physical values, are left out with a
-warning, and those temperatures take the rates from the other points of the
-transition. Used literally, they reach three-body recombination through
-detailed balance. Smaller artifacts stay below these bounds: values at the
-lowest temperatures that fall towards the next ones faster than any rate of the
-kind, such as a recombination coefficient of $2.6\times10^{-8}$ followed by
-$10^{-30}$\,cm$^3$\,s$^{-1}$ in OpenADAS \texttt{cop98\#10\_ls\#ne1}. Recombination
-falls at most as $T^{-3/2}$ (radiative recombination into levels bound by less
-than $kT$, dielectronic recombination above its resonances), and reduced
-ionization rises as $T^{1/2}$ near threshold and falls as about $T^{-1/2}$ far
-above it. Points at the lowest temperatures that fall faster than $T^{-2}$
-(recombination) or $T^{-1}$ (reduced ionization) towards a later point are
-left out with a warning, from the lowest up to the first that does not.
+The threshold factor is applied after interpolation of
+$\widetilde S_{ip}$. The option \code{scale_file_ioniz} additionally
+applies the input parentage factor to the interpolated reduced
+coefficients, independently of the interpolation method, and is passed
+to each stage by the ionization-balance calculation. Suspected
+low-temperature placeholders are filtered before interpolation because
+they would otherwise propagate into the inverse three-body rates.
+Section~\ref{sec:interpolation} specifies these heuristic filters and
+the warnings that identify affected channels and temperatures.
 
-Radiative and dielectronic recombination supplied by a file are collected in
-$\alpha_{ip}^{\rm RR+DR}$. The effective recombination coefficient used at a
-particular density is
+The file's radiative and dielectronic capture contributions are denoted
+by $\alpha_{ip}^{\rm RR+DR}$. Including three-body recombination gives
+the density-dependent coefficient
 \begin{equation}\label{eq:recomb}
  R_{ip}(\Te,\nelec)=\alpha_{ip}^{\rm RR+DR}(\Te)
                        +\nelec\alpha_{ip}^{(3)}(\Te).
 \end{equation}
-Its contribution to a matrix element is $\nelec R_{ip}$, so the three-body
-term enters with two factors of electron density. Zero or missing file data
-must be distinguished from a reliable physical assertion that a process is absent.
+The population-transfer rate is $\nelec R_{ip}N_p$. Radiative and
+dielectronic capture therefore enter linearly in electron density,
+whereas three-body capture enters quadratically. A zero or missing file
+entry alone does not establish that the corresponding physical process
+is absent.
 
-ECIP is an optional approximate completion of missing ionization channels.
-\routine{ecip_rates} prepares the allowed parent channels, the levels marked
-$\{p\}$ in the level list that lie below the ionization potential of parent $p$
-(also above the first ionization potential), and passes Kelvin
-temperatures to \routine{r8ecip}. \routine{suppliment_with_ecip} chooses
-channels using parent annotations and zero entries in the assembled
-ionization array. This is an approximation to missing atomic data, not a
-substitute for a convergence study or a higher-quality calculated rate.
+Missing ionization channels may be supplemented with the approximate
+ECIP model. For each parent $p$, \routine{ecip_rates} selects levels
+annotated $\{p\}$ below that parent's threshold and passes temperatures
+in kelvin to \routine{r8ecip}. Levels above the first ionization
+threshold may thus contribute to higher-parent channels.
+\routine{suppliment_with_ecip} uses parent annotations and zero entries
+in the assembled ionization array to select the supplemented channels.
+The resulting rates provide an approximate completion whose effect
+should be included in atomic-model convergence studies.
 
 \subsection{Three-body recombination and Saha detailed balance}\label{sec:saha}
 
-Equilibrium of $i+e\rightleftharpoons p+e+e$ requires
+Three-body recombination is related to ionization by equilibrium of
+$i+e\rightleftharpoons p+e+e$. Equality of the forward and inverse
+population-transfer rates requires
 \begin{equation}
  N_i^*\nelec S_{ip}=N_p^*\nelec^2\alpha_{ip}^{(3)}.
 \end{equation}
-Using the electron translational partition factor gives
+For nondegenerate, nonrelativistic electrons, the translational
+partition factor then gives
 \begin{align}
  \frac{\alpha_{ip}^{(3)}}{S_{ip}}
  &=\frac{g_i}{g_p}\frac{h^3}{2(2\pi m_e k_BT_{\rm K})^{3/2}}
@@ -331,16 +366,19 @@ Using the electron translational partition factor gives
                    \exp\!\left(\frac{\chi_{ip}}{\Te}\right)
                    \units{cm^3}.\label{eq:saha}
 \end{align}
-The last numerical form takes $\Te$ in eV and includes the free-electron
-spin factor of two. The implementation uses the close approximation
-$1.656742\times10^{-22}$.
+The numerical form uses $\Te$ in eV, gives a volume in cm$^3$, and
+includes the free-electron spin factor of two. The implementation uses
+the nearby value $1.656742\times10^{-22}$. Evaluation of the first
+form with SI constants instead gives m$^3$, requiring a factor $10^6$
+for comparison. Its nonrelativistic basis is relevant when FAC forward
+rates use relativistic thermal averages (Section~\ref{sec:fac}).
 
 \begin{implnote}[Stable low-temperature evaluation]
-Three-body recombination uses the reduced ionization coefficient directly,
-avoiding a product of an underflowed ionization rate and an overflowing
-inverse exponential. This gives a finite positive result at a fixed positive
-temperature when the reduced coefficient is finite and positive; it does not
-establish a universal $T\to0$ limit.
+The inverse rate is evaluated directly from reduced ionization data,
+avoiding multiplication of an underflowed ionization coefficient by an
+overflowing inverse exponential. For finite positive reduced data this
+produces a finite positive value at fixed positive temperature; the
+construction makes no assertion about a universal $T\to0$ limit.
 \end{implnote}
 
 \begin{implnote}[Standalone LTE helpers]
@@ -353,187 +391,21 @@ cm$^{-1}$, temperature in eV, and electron density in cm$^{-3}$.
 
 \subsection{Thermal charge exchange}
 
-A donor species at temperature $T_h$ and density $\nh$ can capture an
-electron into bound level $i$ from parent $p$. Writing its coefficient
-$K_{ip}(T_h)$, the gain is $\nh K_{ip}N_p^{\rm CX}$. The density multiplier
-is the donor density, not automatically the electron density. The routine
-\routine{make_cx_rates_from_file} interpolates the donor-temperature grid.
-The user-supplied donor and electron grids must be compatible with the selected
-grid or paired layout.
+Thermal charge exchange introduces a second bath: a donor species at
+temperature $T_h$ and density $\nh$. Capture from parent $p$ into level
+$i$ contributes $\nh K_{ip}(T_h)N_p^{\rm CX}$ to the bound-level balance.
+The rate is controlled by donor density. \routine{make_cx_rates_from_file}
+interpolates the donor-temperature data; its grid must be compatible
+with the chosen electron-temperature/density grid or paired layout.
 
-\section{Interpolation and asymptotic continuation}\label{sec:interpolation}
+\section{Level-population equations and their solutions}\label{sec:matrix}
 
-The interpolation option parser separates a leading \code{log} or
-\code{loglog} flag from the SciPy interpolation kind. The \code{log} flag
-selects \emph{logarithmic temperature coordinates}; it does not take the
-logarithm of the rate coefficient. For example,
-\begin{equation}
- \widehat r(\Te)=\mathcal I\!\left[\ln T_k,r_k\right](\ln\Te)
-\end{equation}
-still interpolates the ordinates $r_k$ directly. Log-temperature
-interpolation alone therefore does not guarantee positive extrapolated rates:
-the extrapolation is clipped at zero, which the Be\,I recombination and
-ionization coefficients reached a few times above the file temperatures.
-
-By default (\code{loglog_slinear}), recombination and reduced ionization
-coefficients are interpolated as
-\begin{equation}
- \widehat r(\Te)=\exp\mathcal I\!\left[\ln T_k,\ln r_k\right](\ln\Te),
-\end{equation}
-over the positive values of each transition. Between two temperatures this
-gives the geometric mean of their values where linear interpolation of $r_k$
-gives the arithmetic mean, which is never smaller and overestimates
-coefficients that change by orders of magnitude between neighbouring
-temperatures (by up to 45 times for OpenADAS Ne$^{7+}$ and 236 times for Be\,I
-recombination). Outside the file temperatures the coefficients follow a power
-law through the two nearest values, $\widehat r\propto T^{\,s}$, with the
-exponent limited to physical values: $-3/2\le s\le0$ for recombination, so it
-neither grows nor falls faster than radiative and dielectronic recombination;
-for reduced ionization $-1\le s\le1/2$ above the file temperatures and
-$s\ge0$ below them, where a falling coefficient is held constant. The options
-without \code{loglog} keep the interpolation of the coefficients themselves;
-excitation and charge exchange use them, and excitation is continued outside the
-file temperatures as described below.
-
-The Burgess--Tully helpers compress an unbounded temperature coordinate into
-$0\le x<1$. With $\theta=k_BT/\Delta E$ and a positive scaling parameter
-$c$ (default 1.5), the four implemented transforms are
-\begin{table}[htbp]\centering
-\begin{tabular}{cll}\toprule Type & $x(\theta)$ & Transformed ordinate $y$\\\midrule
-1 & $1-\ln c/\ln(\theta+c)$ & $\Upsilon/\ln(\theta+\ee)$\\
-2 & $\theta/(\theta+c)$ & $\Upsilon$\\
-3 & $\theta/(\theta+c)$ & $(1+\theta)\Upsilon$\\
-4 & $1-\ln c/\ln(\theta+c)$ & $\Upsilon/\ln(\theta+c)$\\\bottomrule
-\end{tabular}
-\caption{Coordinate and ordinate definitions in \code{burgess_tully_rates.py}.
-The original routines use Kelvin and wavenumbers to form $\theta$.}
-\end{table}
-An available infinite-energy point constrains the transformed high-temperature
-continuation. Otherwise the code fits the final calculated points in
-transformed space. The inverse transform is necessary to recover $\Upsilon$.
-The end of a calculation is a limit of the dataset, not of ColRadPy: the Mo\,I
-collision data end near 17\,eV and are continued above it with the
-Burgess--Tully transforms~\cite{johnson}. The
-infinite-energy information constrains a continuation but does not validate
-an extrapolation far from the calculated range.
-
-\begin{implnote}[Continuation]
-The caller applies all four high-temperature categories and uses one aligned
-fallback slot per category. Below the file grid it applies a nonnegative
-transformed continuation or retains the first collision strength for
-transitions whose data start far above threshold. This numerical policy
-prevents negative rates but does not establish atomic-data accuracy outside
-the calculated range.
-\end{implnote}
-
-\section{Atomic data from the Flexible Atomic Code}\label{sec:fac}
-
-The Flexible Atomic Code (FAC)~\cite{fac} computes level energies, radiative
-rates and cross-sections of electron collisions in a $jj$-coupled basis.
-\routine{read_fac} reads the ASCII tables that its \code{PrintTable} writes
-with energies in eV into the ADF04 dictionary of Section~\ref{sec:rates}, so
-the matrix of Section~\ref{sec:matrix} is built as for an ADF04 file and the
-solver is unchanged. The levels of the ion are sorted by energy; those of the
-next ion are the parents, with $I_p$ measured from the ion's ground. FAC levels
-have an exact $J$ but no LS term: their $L$ and $S$ are $-1$, and the parent
-weights of Eq.~\eqref{eq:saha} are $2J_p+1$.
-
-\subsection{Maxwellian averages from each threshold}
-
-A process with threshold $E_0$ has the rate coefficient
-\begin{equation}\label{eq:fac-rate}
- q(T)=\int_{E_0}^{\infty}\sigma(E)\,v(E)\,f(E,T)\,\dd E
-     =e^{-E_0/T}\,T\int_0^\infty\sigma(E)\,v(E)\,\tilde f(E,T)\,e^{-u}\,\dd u,
- \qquad E=E_0+uT,
-\end{equation}
-with $\tilde f=f\,e^{E/T}$. The distribution is Maxwell--J\"uttner,
-\begin{equation}
- f(E,T)=\frac{\gamma^2\beta\,e^{-\gamma/\theta}}{\theta K_2(1/\theta)\,mc^2},
- \qquad \gamma=1+\frac{E}{mc^2},\quad \theta=\frac{T}{mc^2},\quad v=c\beta,
-\end{equation}
-which is $2\sqrt{E/\pi}\,T^{-3/2}e^{-E/T}$ for $T\ll mc^2$. The last integral
-of Eq.~\eqref{eq:fac-rate} is taken with 64 Gauss--Laguerre nodes, so the
-nodes start at the threshold and follow the Boltzmann factor whatever $E_0/T$,
-and $\tilde f$ uses the exponentially scaled Bessel function, so nothing
-underflows. The reduced coefficient $q\,e^{E_0/T}$ gives the effective
-collision strength $\Upsilon=q\,e^{\Delta E/T}g_\ell\sqrt{T/13.6058}/
-2.1716\times10^{-8}$, with the constants of Eq.~\eqref{eq:qdown} so that the
-matrix holds the integrated rate, and the reduced ionization rate of
-Eq.~\eqref{eq:reduced-ion}. The cross-sections follow from FAC's tables as FAC
-defines them, with $k^2=2E(1+\alpha^2E/2)$ and $E$ in hartree:
-$\sigma=\pi a_0^2\Omega/(g_\ell k^2)$ for excitation, $a_0^2\Omega/(g k^2)$ for
-ionization, and, from the bound-free oscillator strength density $S$,
-$\sigma_{\rm RR}=2\pi\alpha S a_0^2(\alpha E_\gamma)^2/
-[2\varepsilon(1+\alpha^2\varepsilon/2)g_p]$ for radiative recombination of a
-free electron of energy $\varepsilon$ with a photon $E_\gamma$.
-
-Between the tabulated energies $\Omega$ and $S$ are interpolated log-log.
-Below the first one $\Omega$ of excitation and $S$ are held, as they are finite
-at threshold, and $\Omega$ of ionization follows FAC's fit. Above the last,
-excitation joins FAC's Bethe--Born limit $\Omega=b\ln(E/E_0)+c$ at the energy
-FAC computed it for (FAC's manual advises against its direct values at hundreds
-of thresholds), and a transition without a Born limit (exchange) follows the
-power law of its last two values, at least as steep as $E^{-1}$, as FAC does;
-ionization follows FAC's fit
-$\Omega=p_0\ln x+p_1y^2+p_2y/x+p_3y/x^2$ ($x=E/I$, $y=1-1/x$), and
-recombination FAC's fit of $S$, valid at high energies, with the angular
-momentum of the captured electron, both scaled to the last tabulated value.
-
-\subsection{Autoionization and dielectronic recombination}
-
-Dielectronic capture into an autoionizing level $d$ from parent $p$ has the
-strength $S_{\rm DC}$ (cm$^2$\,eV) at the resonance energy $E_r=E_d-I_p$, so
-$\alpha_{\rm DC}=S_{\rm DC}\,v(E_r)\,f(E_r,T)$, which for a Maxwellian is the
-detailed balance of the autoionization rate $A^a_{dp}$,
-$\alpha_{\rm DC}=\frac{g_d}{2g_p}\bigl(h^2/2\pi mT\bigr)^{3/2}A^a_{dp}e^{-E_r/T}$.
-ADF04 data have no autoionization channel, so \routine{_fold_autoionization}
-folds it into the other rates. With $R_{d\ell}$ the radiative rates of $d$,
-$R_d=\sum_\ell R_{d\ell}$ and $A^a_d=\sum_pA^a_{dp}$, from the lowest
-autoionizing level up,
-\begin{equation}
- b_d=\frac{\sum_\ell R_{d\ell}\,b_\ell}{R_d+A^a_d},\qquad
- P_{dp}=\frac{A^a_{dp}+\sum_\ell R_{d\ell}P_{\ell p}}{R_d+A^a_d},
-\end{equation}
-with $b=1$ and $P=0$ for levels that do not autoionize: $b_d$ is the fraction
-of the population of $d$ that ends in stable levels and $P_{dp}$ the fraction
-that reaches parent $p$. Every flow into $d$ (capture, excitation and cascades,
-$R_{d'd}\to b_dR_{d'd}$) is multiplied by $b_d$, and the excitation of a stable
-level $\ell$ into $d$ that autoionizes becomes its ionization
-(excitation-autoionization),
-\begin{equation}
- \widetilde S_{\ell p}\mathrel{+}=\tilde q_{\ell d}\,P_{dp}\,
- e^{-(E_d-I_p)/T},
-\end{equation}
-with $\tilde q_{\ell d}$ the reduced excitation rate. The population of $d$
-is then the inflow over $R_d+A^a_d$, as with the autoionization in the matrix,
-while collisions from $d$ are slow beside its decays (below about
-$10^{20}$\,cm$^{-3}$ for highly charged ions), and so are its lines, the
-dielectronic recombination and the ionization. Left out are the capture that
-autoionizes to another parent, a process of the next ion; the emission of
-lines between two autoionizing levels beyond $b$ of the lower; and
-autoionizing levels without radiative decays, which never stabilize. The
-two-photon decays of H-like $2s$ and He-like $1s2s\,{}^1S_0$~\cite{drake}
-add to their A-values.
-
-\begin{implnote}[Checks]
-The tests write FAC tables for a toy ion and check: a constant $\Omega$ gives
-$\Upsilon=\Omega$; $\Omega=b\ln x+c$ gives $c+b\,e^yE_1(y)$ with $y=E_0/T$;
-a constant $S$ gives the closed-form radiative recombination; capture follows
-the detailed balance above; and the folded rates give the populations, SCD and
-ACD of the model with the autoionization in its matrix to $10^{-14}$. On FAC's
-own reference tables the cross-sections made from $\Omega$ and $S$ are those
-FAC prints to $8\times10^{-5}$. The average of Mewe's Gaunt-factor
-cross-section~\cite{mewe} for Ar$^{17+}$ $1s$--$2p_{1/2}$ matches its closed form to
-$5\times10^{-5}$ from 10\,eV to 85\,keV, and the relativistic average is lower
-by 2\% at 10\,keV and 17\% at 85\,keV.
-\end{implnote}
-
-The averages assume a thermal distribution: ColRadPy derives de-excitation and
-three-body recombination by detailed balance, which holds for no other.
-Magnetic-sublevel tables are not read, and FAC parents have no LS term to
-link the stages of an ionization balance.
-
-\section{The collisional radiative matrix}\label{sec:matrix}
+The level populations evolve under a rate matrix assembled from the
+atomic coefficients and the appropriate bath densities. In the
+source-column convention of Eq.~\eqref{eq:matrix-convention}, a transfer
+contributes a positive destination-row entry and an equal loss on the
+source diagonal. This construction connects the individual processes
+to particle conservation and to the stationary and transient solutions.
 
 For bound levels $i\ne j$, define $q_{j\to i}$ as the corresponding
 electron-impact coefficient. Then
@@ -542,19 +414,21 @@ electron-impact coefficient. Then
  C_{ii}&=-\sum_{j\ne i}(A_{i\to j}+\nelec q_{i\to j})
                   -\nelec\sum_pS_{ip}.\label{eq:bound-diag}
 \end{align}
-Here forbidden or upward spontaneous transitions have $A=0$.
-For adjacent-charge parents,
+Radiative entries vanish for upward or forbidden transitions. Ionization
+and recombination couple the bound levels to adjacent-charge parents
+through
 \begin{equation}
  C_{p i}=\nelec S_{ip},\qquad C_{i p}=\nelec R_{ip}.
 \end{equation}
-The corresponding parent diagonal loses recombination into the lower stage.
-A closed collection of states satisfies
+The parent diagonal contains the corresponding recombination loss into
+the lower stage. When all destinations belong to the modeled system,
+the gain and loss terms cancel in each source column:
 \begin{equation}\label{eq:conservation}
  \sum_i C_{ij}=0\quad\hbox{for every source column }j,
  \qquad \frac{\dd}{\dd t}\sum_i N_i=0.
 \end{equation}
-Column sums need not vanish in a deliberately open subsystem; the missing
-population must then be accounted for as an external source or sink.
+An open subsystem may have nonzero column sums, provided its external
+sources and sinks account for the population that crosses the boundary.
 
 \begin{implnote}
 \routine{populate_cr_matrix} stores the main generator in
@@ -565,158 +439,134 @@ The separate \code{cr_loss} array holds only the level-loss diagonal of
 that generator.
 \end{implnote}
 
-The CX driving columns used by the quasistatic solution have no matching
-losses: they attribute emission to CX from a given parent population.
-\routine{solve_time_dependent} instead moves the CX gains to the
-recombining-parent columns and subtracts them from the parent diagonal, so
-CX depletes the evolving parent and the transient generator satisfies
-Eq.~\eqref{eq:conservation}. The CX columns are then empty; their initial
-populations and sources must be zero.
+The quasistatic CX columns represent forcing by prescribed parent
+populations and therefore contain gains without matching losses.
+For full evolution, \routine{solve_time_dependent} assigns those gains
+to the recombining-parent columns and includes the parent depletion on
+the diagonal. The resulting generator obeys Eq.~\eqref{eq:conservation}.
+The additional CX bookkeeping columns are then empty and require zero
+initial populations and zero sources.
 
-The off-diagonal sign, column sums, and inverse-channel density powers are
-useful checks before any matrix is solved. A linear algebra routine can solve
-a matrix with negative or incorrectly scaled atomic rates without identifying
-the underlying physical error.
+Nonnegative off-diagonal entries, the expected column sums and the
+correct density powers are necessary checks on the kinetic model.
+They test the physical assembly independently of the ability of a
+linear solver to return a numerical solution.
 
-\section{Projection of the high \texorpdfstring{$n$}{n}-shells}\label{sec:projection}
+\subsection{Time-dependent evolution and matrix exponentials}\label{sec:time}
 
-The levels of an ADF04 file usually cover the lowest principal shells,
-$n\le n_1$. The levels of higher shells, up to the series limits of the
-parents, are missing from the matrix of Section~\ref{sec:matrix}, yet most
-recombination passes through them: radiative capture into high $n$,
-dielectronic capture into Rydberg states, and the cascades that follow. At
-high density they also open stepwise ionization. For neon, the effective
-recombination into Ne$^{3+}$, Ne$^{4+}$ and Ne$^{5+}$ from the ADAS
-\texttt{cop98\#10} ADF04 files alone is 0.17--0.69 of the ADAS coefficients made
-from the same files with the high shells included (5--100\,eV), and the SCD of
-Ne$^{2+}$ at 1\,eV and $10^{14}$\,cm$^{-3}$ is 0.007 of the ADAS one.
-
-\subsection{Condensed bundle-\texorpdfstring{$nS$}{nS} couplings}
-
-A bundle-$nS$ calculation (ADAS204) groups the levels built on a parent
-$\rho$ of the next ion with spin system $S$ into $n$-shell populations
-$x_n$, from the lowest shell to the series limit, and eliminates all but its
-lowest shells. The condensed couplings are given for each parent and spin
-system on a temperature--density grid (ADF17 files), in the convention of
-losses positive:
-\begin{equation}\label{eq:bundle}
- \sum_m P_{nm}\,x_m=\nelec N_\rho\, r_n ,
+For fixed plasma conditions and an optional constant source $s$,
+\begin{equation}\label{eq:ode}
+ \dot N=CN+s,\qquad
+ N(t)=\ee^{Ct}N(0)+\int_0^t\ee^{C(t-u)}s\,\dd u.
 \end{equation}
-where $P_{nm}$ (s$^{-1}$) is the coupling from shell $m$ to shell $n$
-($P_{nn}$ the total loss of shell $n$), $r_n$ (cm$^3$\,s$^{-1}$) the
-recombination into shell $n$ by all routes, $I_{n\rho'}$ (s$^{-1}$) the
-ionization of shell $n$ to parent $\rho'$, and $Q_{\rho'}$
-(cm$^3$\,s$^{-1}$) the recombination from $\rho$ that ionizes to another
-parent $\rho'$ without reaching the lowest shells. The same files give the
-direct parts: the shell couplings $D_{nm}$, direct ionization $D^{\rm I}_{n\rho'}$
-and direct radiative, dielectronic, three-body and charge-exchange
-recombination $d_n$.
+The exponential propagates the initial populations, while the integral
+accumulates injection from the source throughout the interval. For
+absolute populations, $s$ has units of density per unit time. This
+solution is exact for fixed $C$ and constant $s$; numerical evaluation
+is discussed in Appendix~\ref{app:numerical-methods}.
 
-Shells $u$ above the highest shell of the ADF04 levels are eliminated from
-Eq.~\eqref{eq:bundle} onto the kept shells $l$ (a Schur complement):
-\begin{align}
- P'&=P_{ll}-P_{lu}P_{uu}^{-1}P_{ul}, &
- r'&=r_l-P_{lu}P_{uu}^{-1}r_u,\\
- I'&=I_l-\bigl(P_{uu}^{-1}P_{ul}\bigr)^{\mathsf T} I_u, &
- Q'&=Q+I_u^{\mathsf T}P_{uu}^{-1}r_u ,
-\end{align}
-and the direct transfers from kept to eliminated shells become indirect. The
-ADF04 file already has the direct couplings between its levels, so they are
-subtracted. The indirect couplings through the high shells are then
+All requested times refer to the initial state at $t=0$. The choice of
+that state encodes the physical preparation of the species. In the
+surface-release example~\cite{johnson}, an initially ground-state
+population develops metastable populations and time-dependent emission.
+Relating this evolution to distance from the surface additionally
+requires particle velocities and a transport geometry.
+
+\subsection{Stationary solutions}
+
+A normalized stationary population of a closed model satisfies
 \begin{equation}
- K=P'-D'-\mathrm{diag}\Bigl(\sum_{\rho'}D^{\rm I}\Bigr),\quad
- I^{\rm ind}=I'-D^{\rm I},\quad
- r^{\rm ind}=r'-d,\quad Q^{\rm ind}=Q'.
+ C\pi=0,\qquad \vb1^{\mathsf T}\pi=1,\qquad \pi_i\ge0.
 \end{equation}
-Negative values up to $10^{-3}$ of the projected and direct values they are
-the difference of are round-off (the ADF17 files have 11 digits) and are set
-to zero. Larger ones show condensed data that are not reliable, as at the
-lowest temperatures of most ADF17 files; those temperatures are left out of
-that coupling of the parent and spin system.
+For a unique stationary state, normalization replaces one redundant
+balance equation. Rescaling the balance equations can help preserve
+constraints associated with weak rates. If several disconnected closed
+classes are present, normalization alone leaves their relative weights
+undetermined; those weights depend on the initial condition.
 
-\subsection{Expansion over the levels}
+Multiplication of $\pi$ by the conserved population recovers absolute
+densities in a source-free closed system. With a prescribed source,
+stationarity instead requires $CN+s=0$ and compatible population losses
+or boundary conditions. A stationary collisional-radiative state may
+remain far from LTE because it balances radiative escape as well as
+collisions. The numerical stationary algorithms are described in
+Appendix~\ref{app:numerical-methods}.
 
-An ADF18 expansion file (\code{a17_p208} kind) assigns each ADF04 level $i$
-to a parent, spin system and shell $n(i)$, with a weight $w_i$ normalised
-over the levels of that shell (statistical weights). Level populations add
-up to shell populations, so a rate per unit shell population applies to each
-of its levels, while a flow into a shell is shared by its levels with their
-weights:
-\begin{align}
- R^{\rm ind}_{i\rho}&=w_i\,r^{\rm ind}_{n(i)}, &
- S^{\rm ind}_{i\rho}&=I^{\rm ind}_{n(i)\rho}/\nelec,\\
- G_{ij}&=-w_i\,K_{n(i)n(j)}\quad(n(i)\ne n(j)), &
- X^{\rm ind}_{\rho'\rho}&=\sum_S Q^{\rm ind}_{\rho'} .
-\end{align}
-Transfers within a shell are not described by shell populations and are
-omitted. These terms are added to the matrix of Section~\ref{sec:matrix}:
-$G_{ij}$ to $C_{ij}$, $\nelec S^{\rm ind}_{i\rho}$ to $C_{\rho i}$ and
-$\nelec R^{\rm ind}_{i\rho}$ to $C_{i\rho}$, each with its loss on the
-diagonal of the source, so Eq.~\eqref{eq:conservation} still holds. The
-indirect parent coupling $X^{\rm ind}$ is added to XCD
-(Section~\ref{sec:xcd}). Populations, PECs, SCD, ACD, QCD and XCD then
-include the high shells.
+\subsection{A two-level density scan}
 
-Below the first temperature $T_0$ of a coupling $c$ on the ADF17 grid (without
-the temperatures left out), it continues with the Boltzmann factor of its
-threshold $\Delta E$:
-\begin{equation}\label{eq:projection-below}
- c(T)=c(T_0)\Bigl(\frac{T}{T_0}\Bigr)^{a}
-      \exp\Bigl[-\Delta E\Bigl(\frac{1}{kT}-\frac{1}{kT_0}\Bigr)\Bigr],
+For a two-level ion with upward and downward coefficients $q_{01},q_{10}$
+and radiative rate $A$, the excited population obeys
+\begin{equation}
+ \dot N_1=\nelec q_{01}N_0-(A+\nelec q_{10})N_1,
+ \qquad N_0+N_1=N_{\rm ion}.
 \end{equation}
-with $a$ the slope of $\ln\bigl(c\,e^{\Delta E/kT}\bigr)$ against $\ln T$
-between its two lowest temperatures, limited as for the ADF04 rates
-(Section~\ref{sec:interpolation}): between $-1.5$ and 0 for recombination and
-the parent coupling, at least 0 for the reduced ionization and transfers.
-Every indirect path out of a level starts with its excitation into the high
-shells, so the threshold of $S^{\rm ind}_{i\rho}$ is the ionization energy
-$\chi_i$ of level $i$; that of $G_{ij}$ is $\chi_j-\bar\chi_{n_1}n_1^2/(n_1+1)^2$,
-the energy to reach the shell above the highest kept one, $n_1$, whose levels
-have the mean ionization energy $\bar\chi_{n_1}$; that of $X^{\rm ind}_{\rho'\rho}$
-is the energy between the parents when $\rho'$ lies above $\rho$; and
-recombination has none. Above the grid the values at its edge are kept.
+At stationarity, excitation is balanced by radiative and collisional
+return, giving $N_1/N_0=\nelec q_{01}/(A+\nelec q_{10})$.
+Normalization to the conserved ion population yields
+\begin{equation}
+ f_1=\frac{\nelec q_{01}}{A+\nelec(q_{01}+q_{10})},\qquad
+ \mathrm{PEC}_{10}=\frac{Aq_{01}}{A+\nelec(q_{01}+q_{10})}.
+\end{equation}
+The photon emissivity is $AN_1=\nelec N_{\rm ion}\mathrm{PEC}_{10}$.
+Thus the PEC in this example is defined per ion total; a coefficient
+per ground population would instead be $Aq_{01}/(A+\nelec q_{10})$.
+At low density, the total-normalized PEC approaches $q_{01}$ and the
+excited fraction grows linearly with density. At high density,
+$f_1\to q_{01}/(q_{01}+q_{10})$ and the PEC decreases as $1/\nelec$.
+The photon rate per ion nevertheless approaches the finite value
+$Af_1$. The decrease of a density-normalized coefficient therefore
+does not imply a vanishing photon yield.
 
-\begin{implnote}[Choices of the implementation]
-Ionization through the shells of one parent to another parent is the
-autoionization of core-excited Rydberg states, part of
-excitation-autoionization, which the ionization rates of the ADF04 files
-(ADF07 data) already include. It is left out. ADAS208 also credits only the
-group's own parent but keeps that loss on the diagonal; ColRadPy omits both,
-so the matrix conserves particles. The diagonal follows from the expanded
-gains and ionization rather than from $K_{nn}$; the two agree when the
-condensed data conserve particles. The condensed data are interpolated
-linearly in $\ln\Te$, $\ln\nelec$ and the logarithm of each coupling, without
-the temperatures where it is not reliable, and continued below the ADF17 grid
-by Eq.~\eqref{eq:projection-below}, whose threshold for the transfers scales
-the binding energy of the highest kept shell hydrogenically; both give a
-warning when the user temperatures need them. The fractional-parentage
-corrections of the lowest shell (switches \code{IEFPRE}, \code{IEFPRS}, set
-only by the superseded \code{cbnm93} files) are not implemented, and
-indirect charge-exchange recombination is not represented.
-\end{implnote}
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/two_level.pdf}
+\caption{An analytic illustration with $A=10^7\,\mathrm{s}^{-1}$,
+$q_{01}=10^{-8}$ and $q_{10}=3\times10^{-8}$ cm$^3$/s. The dashed line is
+the high-density fraction $1/4$. These are illustrative coefficients, not
+a fit to a specific atom or an execution of the ColRadPy atomic-data path.}
+\end{figure}
 
-\begin{implnote}[Routines and data]
-\routine{read_adf17} reads the condensed matrices and \routine{read_adf18}
-the expansion files; \routine{projection.project} forms and expands the
-indirect couplings. \code{colradpy(..., projection=(adf17, adf18))} stores
-them in \code{rates['projection']} (\routine{make_projection}, called by
-\routine{solve_cr} for each solve on its temperatures and densities, with the
-files read once) and \routine{populate_cr_matrix} adds them to the
-generator. In an ionization balance, \code{projection} takes one pair, or
-\code{None}, per ADF04 file. The ADF18 file names the ADF04 and ADF17 files
-it maps; its level numbers follow the order of the ADF04 file, before any
-sorting by energy. Levels it maps to spin systems or shells that the ADF17
-file does not have get no projection, with a warning. The recombination
-rates of the ADF04 file are zero-density data; the density dependence of
-dielectronic recombination through the high shells (the collisional
-redistribution of doubly excited states, Eq.~45 of Summers et
-al.~\cite{summers2006}) reaches ColRadPy only through the ADF17 data.
-\end{implnote}
+\subsection{A conservative chain and a slow mode}
 
-\section{Quasistatic elimination of excited levels}\label{sec:quasistatic}
+Consider three states connected by irreversible unit-rate transfers,
+$0\to1\to2$. With time measured in seconds and rates in s$^{-1}$,
+\begin{equation}\label{eq:chain}
+ C=\begin{pmatrix}-1&0&0\\1&-1&0\\0&1&0\end{pmatrix},\quad
+ N(0)=\begin{pmatrix}1\\0\\0\end{pmatrix},\quad
+ N(t)=\begin{pmatrix}\ee^{-t}\\t\ee^{-t}\\1-(1+t)\ee^{-t}\end{pmatrix}.
+\end{equation}
+State 1 initially accumulates population and subsequently empties into
+state 2, while the total population remains constant. Both the ColRadPy
+solver and an independent SciPy exponential recover the analytic
+solution. The $t e^{-t}$ contribution also tests the treatment of a
+defective eigenbasis, discussed in Appendix~\ref{app:numerical-methods}.
 
-Partition the population vector into retained states $N_r$ and excited states
-$N_e$. The full system is
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/chain.pdf}
+\caption{Equal-rate chain: solid curves are analytic populations; dashed
+curves are ColRadPy results. The right panel tests the conserved sum.
+Agreement includes the $t\ee^{-t}$ contribution from the defective basis.}
+\end{figure}
+
+A complementary check concerns a very slow transition. For
+$C=[[-r,0],[r,0]]$ with $r=10^{-12}$ s$^{-1}$ and $N(0)=(1,0)$,
+the remaining initial-state population at $10^{12}$ s is $e^{-1}$.
+The source solver with zero source reproduces this evolution and
+agrees with the source-free calculation, confirming that the slow mode
+is retained over the relevant observation time.
+
+\section{Quasistatic reduction and population normalization}\label{sec:quasistatic}
+
+The full kinetic system often contains excited levels that relax much
+faster than the retained ground, metastable and parent populations.
+Quasistatic elimination exploits this separation by replacing the fast
+evolution equations with instantaneous balance. The excited populations
+then follow the retained populations through a linear response, and
+the remaining dynamics can be expressed with effective rates.
+
+Partition the population vector into retained states $N_r$ and eliminated
+excited states $N_e$. For a closed reduction, the retained set includes
+both the selected bound levels and the adjacent-charge parents. In this
+partition the full equations take the block form
 \begin{equation}\label{eq:blocks}
  \frac{\dd}{\dd t}\begin{pmatrix}N_r\\N_e\end{pmatrix}
  =\begin{pmatrix}C_{rr}&C_{re}\\C_{er}&C_{ee}\end{pmatrix}
@@ -727,45 +577,47 @@ When excited-state relaxation is fast compared with evolution of the drivers,
  0=C_{ee}N_e+C_{er}N_r,
  \qquad N_e=-C_{ee}^{-1}C_{er}N_r.
 \end{equation}
-This requires an invertible, relaxing excited block. Including a long-lived
-state in the eliminated set can invalidate the approximation even if the
-numerical inverse exists. Time-scale separation should be assessed from the
-excited-block decay rates and the time scale of the retained dynamics.
+The matrix $-C_{ee}^{-1}C_{er}$ specifies the response to each retained
+population. Its existence requires an invertible excited block, while
+its physical use requires that the block relax on a sufficiently short
+timescale. A slowly decaying eliminated mode can invalidate the
+approximation even when the inverse is well defined. The relevant
+time-scale and emission-convergence criteria are developed below.
 
 Substitution into the retained equations gives the Schur complement
 \begin{equation}\label{eq:schur}
  C_{\rm eff}=C_{rr}-C_{re}C_{ee}^{-1}C_{er}.
 \end{equation}
-This formula is the common origin of the effective coefficients below. For a
-closed model, correctly eliminating excited states preserves column-sum
-conservation in the retained equations.
+The retained block contains the direct processes and losses, while the
+second term accounts for excursions through the eliminated excited
+manifold. Together they define the effective coefficients of
+Section~\ref{sec:gcr}. Column-sum conservation is preserved for a closed
+model, although the sum of the retained variables must still be
+distinguished from a total that includes reconstructed excited
+populations (Section~\ref{sec:ion-fractions}). The inverse notation is
+convenient for the derivation; numerically the same response can be
+obtained by solving $C_{ee}Y=-C_{er}$.
 
 \subsection{Choosing retained levels and testing time-scale separation}\label{sec:metastables}
 
-Summers et al.~\cite{summers2006} order the intrinsic lifetimes of an ion of
-charge $z$ as $\tau_a\ll\tau_o\ll\tau_m$: auto-ionizing levels
-($\tau_a\sim10^{-13}$\,s), ordinary excited levels
-($\tau_o\sim10^{-8}/z^4$\,s) and metastables ($\tau_m\sim10/z^8$\,s, radiative
-decay). For most fusion and astrophysical plasmas
-$\tau_{\rm plasma}\sim\tau_g\sim\tau_m\gg\tau_o\gg\tau_{e\mbox{-}e}$, with
-$\tau_g$ the relaxation time of the ground populations by ionization and
-recombination and $\tau_{e\mbox{-}e}$ the thermalization time of the free
-electrons. This ordering underlies the quasistatic picture: the ground and
-metastable populations evolve with the plasma and are retained, while the
-excited populations and the free electrons (a Maxwellian distribution) relax
-to them. Redistribution of the excited populations by collisions, on a time
-$\tau_{\rm red}$, defines critical densities, $\tau_{\rm red}\sim\tau_o$ and
-$\tau_{\rm red}\sim\tau_a$, which separate low levels, high singly excited
-levels and doubly excited levels; the projection of
-Section~\ref{sec:projection} treats the high levels.
+The GCR hierarchy distinguishes rapidly decaying autoionizing states,
+ordinary excited levels and more slowly evolving ground and metastable
+populations~\cite{summers2006}. At finite density, collisional
+redistribution competes with radiative decay and autoionization, so
+the relevant relaxation times belong to the coupled kinetic system.
+The reduction is appropriate where these times are short compared with
+the timescales on which the retained populations and plasma conditions
+change. High-shell
+projection applies the same reasoning to an auxiliary excited manifold
+(Section~\ref{sec:projection}).
 
-A spectroscopically metastable level and a level that must be retained
-dynamically are not the same thing~\cite{johnson}.
-A weak spontaneous decay can produce a large population, but collisions and
-ionization can shorten its actual relaxation time. Conversely, a collection
-of ordinary excited levels can participate in a slow, strongly coupled mode.
-The retained set is therefore a modeling choice for the density, temperature,
-initial condition and diagnostic being considered.
+Spectroscopic metastability is consequently an initial guide to the
+retained set, rather than a sufficient dynamical criterion~\cite{johnson}.
+A weak radiative decay can permit substantial population accumulation,
+while collisions and ionization shorten the effective relaxation time.
+Conversely, strongly coupled ordinary excited levels may support a slow
+collective mode. The retained manifold therefore depends on the plasma
+conditions, initial state and observable under investigation.
 
 For constant matrix blocks, write the instantaneous quasistatic response as
 $N_e^{\rm qs}(t)=-C_{ee}^{-1}C_{er}N_r(t)$ and let
@@ -776,30 +628,29 @@ $\delta=N_e-N_e^{\rm qs}$. The exact lag equation is
        -\int_0^t\ee^{C_{ee}(t-u)}\dot N_e^{\rm qs}(u)\,\dd u.
        \label{eq:qs-lag}
 \end{align}
-There are two distinct errors: an initial excited-state relaxation transient
-and the lag behind a changing driver. After the first decays, a small ratio
-of excited relaxation time to driver-evolution time supports the
-approximation. The decaying eigenvalues and eigenvectors of $C_{ee}$ help
-assess this, although a nonnormal matrix can amplify transients and a gap in
-eigenvalues alone is not a complete error bound. Changing plasma conditions
-also changes the response matrix itself and contributes to
-$\dot N_e^{\rm qs}$.
+The first term describes relaxation of the initial excited-state
+departure from quasistatic balance; the integral describes the lag
+induced by evolving drivers. After the initial transient has decayed,
+accuracy depends on the ratio of excited relaxation time to driver
+evolution time. Eigenvalues and eigenvectors of $C_{ee}$ characterize
+this relaxation, subject to possible transient amplification in a
+nonnormal system. A spectral gap alone is therefore insufficient as
+an error bound. When plasma conditions vary, the response matrix also
+changes and contributes to $\dot N_e^{\rm qs}$.
 
-A useful practical test is to start full and reduced models from consistent
-retained populations, vary the retained set, and compare the predicted line
-emission over the required observation times. A ground-only quasistatic
-model eliminates every other bound state, including levels that might need
-their own evolving populations. A large excited population identifies a
-candidate for examination, but a small population can still be an important
-feeder of a diagnostic line. Eigenmodes are combinations of levels; each
-eigenvalue should not be labeled as the lifetime of one level without
-examining its eigenvector.
+The adequacy of a retained manifold can be assessed by comparing full
+and reduced solutions initialized with consistent retained populations,
+then enlarging the manifold until the predicted emission converges over
+the observation interval. Population magnitude alone is insufficient:
+a weakly populated level may be an important feeder of a diagnostic
+line. Relaxation modes are combinations of levels, so associating a
+mode's decay rate with a single level requires inspection of its
+eigenvector.
 
-Comparing the full time-dependent model, which evolves every level, with
-reductions that retain selected ground and metastable populations and
-eliminate the other levels quasistatically shows that the adequacy of a
-retained set depends on the species and conditions
-(Table~\ref{tab:manifolds})~\cite{johnson}:
+Published comparisons for Be I and Mo I illustrate this dependence on
+species and conditions~\cite{johnson}. Table~\ref{tab:manifolds}
+summarizes the effect of retaining metastables on the time-dependent
+line emission relative to full level evolution.
 
 \begin{table}[htbp]\centering\small
 \begin{tabularx}{\textwidth}{l l X}
@@ -817,37 +668,45 @@ model~\cite{johnson}, not rerun for this manual. They do not set a universal
 number of retained levels for either species.}\label{tab:manifolds}
 \end{table}
 
-The Be example exhibits a separation between slowly relaxing modes and the
-faster excited manifold. The Mo example has a more gradual spectrum of
-relaxation rates, making a small retained set less successful, which is what
-the lag and emission-convergence tests above detect. A ground-only reduction
-also loses the ability to represent an independently evolving metastable
-fraction.
+The clearer separation between slow and fast modes in Be permits an
+effective reduction with a small retained manifold. The more gradual
+relaxation spectrum in Mo makes that reduction less successful.
+These examples motivate convergence tests for the chosen observable
+and conditions, rather than a fixed number of retained levels for
+either species. A ground-only reduction also removes the independent
+evolution of metastable fractions.
 
 \subsection{Separate excitation, recombination and CX drivers}\label{sec:cxdrivers}
 
-The excited-state forcing can be separated as
+The retained populations drive excited levels through distinct physical
+channels. Separating bound-level forcing, electron recombination and
+charge exchange gives
 \begin{equation}
  0=C_{ee}N_e+C_{e m}N_m+\nelec R_{e p}N_p
                                 +\nh K_{e p}N_p^{\rm CX}.
 \end{equation}
-Define the dimensionless response matrices
+The corresponding dimensionless responses are
 \begin{align}
  F&=-C_{ee}^{-1}C_{em}, &
  G&=-C_{ee}^{-1}\nelec R_{ep}, &
  H&=-C_{ee}^{-1}\nh K_{ep},\label{eq:responses}\\
  N_e&=FN_m+GN_p+HN_p^{\rm CX}.\nonumber
 \end{align}
-Each column states a response to one independently prescribed driving
-population. These are not probabilities whose sums must all be one.
+Each column describes the population response of the eliminated manifold
+to one prescribed driver. Multiplication by the actual driver populations
+and summation recover the physical excited populations. A response
+column has no probability normalization of its own.
 
 \begin{implnote}
-\routine{solve_quasi_static} constructs
-\code{beta}$=-C_{er}$ and computes \code{pops}$=C_{ee}^{-1}\code{beta}$.
-The excitation columns come first, followed by recombination and then CX
-columns when enabled. \code{processed['F']} denotes an excitation response
-without the additional $1/\nelec$ used in some ADAS definitions. Matching
-symbols without matching their density convention produces unit errors.
+\routine{solve_quasi_static} stores the forcing as
+\code{beta}$=-C_{er}$ and evaluates
+\code{pops}$=C_{ee}^{-1}\code{beta}$. Columns are ordered as
+excitation, recombination and CX when enabled.
+\code{processed['F']} omits the additional inverse-density factor
+of some ADAS conventions and follows the selected excitation
+normalization. It equals the unnormalized $F$ in
+Eq.~\eqref{eq:responses} when normalization is disabled; the mapping
+to other stored conventions is given in Section~\ref{sec:normalization}.
 \end{implnote}
 
 \begin{implnote}[CX-only construction]
@@ -858,90 +717,141 @@ generator keeps whether or not recombination is used.
 
 \subsection{Normalization is a choice of driving population}\label{sec:normalization}
 
-For a single ground driver, an excitation response $F_i=N_i/N_0$ can be
-converted to a fraction relative to the ion total:
+Normalization specifies the population to which a response or emission
+coefficient refers. Absolute level densities are recovered by weighting
+the independent response columns in Eq.~\eqref{eq:responses}; level
+fractions additionally require a defined population total. The
+conventions most frequently used below are summarized in the table.
+
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{lXX}
+\toprule Quantity & Denominator & Interpretation\\\midrule
+$N_i$ & None & Absolute level density, cm$^{-3}$\\
+$F_{i\rho}$ & Retained bound driver $N_\rho$ & Excited response of that driver's column\\
+$G_{ip},\ H_{ip}$ & Parent driver $N_p$ or $N_p^{\rm CX}$ & Capture-driven response in another charge stage\\
+$N_i/N_{\rm stage}$ & Total population in the stage & Level fraction after all contributions are assembled\\
+\bottomrule
+\end{tabularx}
+\caption{Population conventions. Responses are dimensionless but their
+column sums need not be one.}
+\end{table}
+
+For a single ground driver and no capture contribution,
+$N_i=F_{i0}N_0$ and $N_{\rm ion}=N_0+\sum_iN_i$. Therefore
 \begin{equation}
  \frac{N_0}{N_{\rm ion}}=\frac{1}{1+\sum_iF_i},\qquad
  \frac{N_i}{N_{\rm ion}}=\frac{F_i}{1+\sum_jF_j}.
 \end{equation}
-This transformation changes the denominator of an excitation coefficient.
-It is not applicable without modification to $G_i=N_i/N_p$, whose parent
-belongs to another charge state. The independent drivers are explicitly
-distinguished in GCR emissivity definitions~\cite{adasreport}.
+Here $F_i=F_{i0}$. The rescaling converts an excitation response per
+ground population into a level fraction per ion total. Recombination
+responses retain a parent population from the next charge stage as
+their denominator. For example, parent-driven injection
+$\nelec\alpha=2$ s$^{-1}$ into a level with loss rate $A=1$ s$^{-1}$
+gives $N_i/N_p=2$. Such a value is consistent with a linear response
+and illustrates the importance of preserving the separate GCR
+drivers~\cite{adasreport}.
 
-\begin{implnote}[Default normalization]
-With one retained metastable, excitation columns are normalized by default;
-recombination and CX columns remain relative to their independent parents.
-With more than one retained metastable, excitation normalization defaults
-off. The \code{default_pop_norm} option controls this choice. For example,
-an excited level with $A=1\,\mathrm{s}^{-1}$ and parent-driven injection
-$\nelec\alpha=2\,\mathrm{s}^{-1}$ retains the required response $N_e/N_p=2$.
+For an excitation driver $\rho$, define
+\begin{equation}\label{eq:stored-normalization}
+ d_\rho=\begin{cases}
+ (1+\sum_{i\in e}F_{i\rho})^{-1},&\text{excitation normalization on},\\
+ 1,&\text{excitation normalization off}.
+ \end{cases}
+\end{equation}
+In this definition $F$ is the unnormalized response of
+Eq.~\eqref{eq:responses}. The normalization applied to stored
+excitation quantities is consequently
+\begin{align}
+ F^{\rm stored}_{i\rho}&=d_\rho F_{i\rho}, &
+ \mathrm{PEC}^{\rm stored,exc}_{u\ell,\rho}
+   &=d_\rho\mathrm{PEC}^{\rm exc}_{u\ell,\rho},\nonumber\\
+ \mathcal S^{\rm stored}_{\rho p}
+   &=d_\rho S_{\rho p}+\sum_iS_{ip}F^{\rm stored}_{i\rho}
+    =d_\rho\mathcal S_{\rho p}.\label{eq:stored-scd}
+\end{align}
+Both the direct and excited-mediated ionization terms carry the same
+factor $d_\rho$. Using a normalized \code{processed['F']} with an
+unscaled direct term would therefore mix population conventions.
+The original response columns are available in
+\code{processed['pops_no_norm']}, with excitation columns first.
+Recombination and CX responses $G,H$ are unaffected by this excitation
+normalization.
+
+For a single ground driver without capture, $d_0=N_0/N_{\rm ion}$,
+and the normalized excitation coefficient multiplies $N_{\rm ion}$.
+With several retained levels, separate normalization of each column
+describes its driver and associated excited response in isolation.
+A physical mixture is instead assembled from unnormalized responses
+and the actual retained populations.
+
+\begin{implnote}[Selecting the stored convention]
+Excitation normalization defaults on for one retained metastable and
+off for several; parent-driven recombination and CX columns keep
+their independent denominators. \code{default_pop_norm=False}
+reverses this selection. The actual convention is recorded in
+\code{processed['driving_populations_norm']}. Effective-coefficient
+derivations use unnormalized responses, with the stored SCD mapping
+specified by Eq.~\eqref{eq:stored-scd}.
 \end{implnote}
 
-\subsection{Unsummed contributions and dominant feeding mechanisms}\label{sec:feeding}
+\subsection{Retained fractions and total ion fractions}\label{sec:ion-fractions}
 
-The individual terms of the excited-state solution identify the important
-populating channels~\cite{johnson}. Let $a$ label an
-excitation, recombination or CX driver, and write
-$\beta_{ja}=-C_{ja}$ for the negative of its driving-block entry into
-eliminated level $j$. Define
-\begin{equation}\label{eq:unsummed}
- U_{ija}=(C_{ee}^{-1})_{ij}\beta_{ja}
- \quad\hbox{(no sum over $j$)},\qquad
- N_i=\sum_a\sum_j U_{ija}N_a.
+Normalization of retained populations across all modeled charge stages
+gives $f_a^{(r)}=N_a/\sum_{b\in r}N_b$. Converting these retained
+fractions to fractions of the full modeled population requires the
+excited-state contribution. For one charge stage the reconstructed
+bound-level total is
+\begin{equation}\label{eq:stage-total}
+ N_{\rm stage}=\sum_\rho N_\rho+
+  \sum_{i\in e}\left(\sum_\rho F_{i\rho}N_\rho+
+                 \sum_p G_{ip}N_p+\sum_p H_{ip}N_p^{\rm CX}\right).
 \end{equation}
-The sum over $j$ gives the response of level $i$ to driver $a$; leaving it
-unsummed assigns that response to the level where the driver injects
-population into the eliminated manifold. For a fixed driver with a
-nonzero total response, the fractions
-\begin{equation}
- f_{j\mid i,a}=\frac{U_{ija}}{\sum_k U_{ika}}
-\end{equation}
-identify the injection channels carrying the largest contribution. This
-interpretation requires physical nonnegative rates and a relaxing excited
-block. A common normalization applied to one driver's response cancels in
-these fractions, but different drivers must be weighted by their actual
-populations before they are combined.
+All terms in this reconstruction use unnormalized responses and a
+common absolute scale for the driving populations. The sum includes
+the explicit bound levels; populations in the projected high shells
+remain eliminated and are not counted separately.
 
-\begin{implnote}[The stored contribution tensor]
-The implementation stores $U$ in \code{processed['pop_lvl']} with axes
-\emph{destination excited level, injection excited level, driver,
-temperature, density}. Both excited-level indices refer to the reduced
-level map, not to physical bound-level numbers. Summing the second axis
-reconstructs \code{processed['pops']} under the same normalization.
-Paired mode replaces the last two axes by one pair index.
-\end{implnote}
+When the omitted excited population is small, retained and total
+fractions are close. Otherwise, total ion fractions and power per ion
+of the element require reconstruction of each stage and normalization
+by the sum of those stage totals. Excitation-normalized single-ground
+coefficients account for the excited population associated with that
+driver, while capture-driven excited populations remain parent-driven
+responses (Section~\ref{sec:stage}). Equation~\eqref{eq:stage-total}
+makes both contributions explicit.
 
-An entry with $j=i$ represents direct injection into the observed upper
-level, followed by its full response through $C_{ee}^{-1}$. An entry with
-$j\ne i$ represents injection elsewhere followed by redistribution or a
-cascade. These are algebraic injection-channel contributions, not exclusive
-microscopic paths or counts of the last collision: the inverse already
-contains repeated transfers. For the Mo\,I lines near 379.8 and 550.6\,nm,
-these terms, with population-weighted metastable contributions, separate strong
-direct ground injection from feeding through other populated
-levels~\cite{johnson}. An unweighted PEC column alone gives
-neither line's contribution to the measured intensity, which needs the
-weighting of Eq.~\eqref{eq:emissivity}.
+This distinction also affects transients. The Schur complement
+conserves the retained sum, whereas the reconstructed total may vary
+because the eliminated population derivatives were neglected in the
+reduced equations. Appreciable transient storage in excited levels
+therefore calls for a larger retained manifold or full level evolution;
+renormalization alone does not supply the missing dynamics.
 
-The same accounting can resolve effective rates. For example, level $i$
-contributes $S_{ip}F_{i\rho}$ to indirect ionization, and contributes
-$C_{\rho i}G_{ip}/\nelec$ to capture feeding retained level $\rho$. Keeping
-these terms unsummed can guide a reduced atomic model, provided its emission
-and effective-rate errors are checked afterward. Bundling levels is another
-way to reduce the dynamical size of heavy-species models~\cite{johnson};
-choosing a short list of retained metastables is not by itself a
-population-preserving bundling, and ColRadPy provides no automatic bundled
-model.
+\section{Effective coefficients and charge-state evolution}\label{sec:gcr}
 
-\section{Generalized collisional radiative coefficients}\label{sec:gcr}
+The Schur complement converts the response of the eliminated levels
+into effective transfers between retained states. Its bound-to-parent,
+parent-to-bound and within-manifold blocks define the GCR coefficients
+summarized below. Division by the appropriate bath density expresses
+these rates in cm$^3$/s. Throughout the derivation, the responses of
+Eq.~\eqref{eq:responses} are unnormalized and the retained populations
+are prescribed explicitly. Stored array orientations are documented
+in Appendix~\ref{sec:arrays}.
 
-Effective coefficients combine direct processes with paths through eliminated
-excited states. Their definition is a reduction of the generator, not simply
-a sum of raw atomic rates. All formulas in this section assume the
-unnormalized responses of Eq.~\eqref{eq:responses} and explicitly prescribed
-retained populations. The stored arrays and their index order are listed in
-Section~\ref{sec:arrays}.
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{lllX}
+\toprule Coefficient & Source & Destination & Included pathways\\\midrule
+SCD & Bound $\rho$ & Parent $p$ & Direct ionization and ionization after bound excitation\\
+ACD & Parent $p$ & Bound $\rho$ & Electron capture and stabilization through excited levels\\
+CCD & CX parent $p$ & Bound $\rho$ & Donor-driven capture and subsequent stabilization\\
+QCD & Bound $\sigma$ & Bound $\rho$ & Direct mixing and redistribution through excited levels\\
+XCD & Parent $p$ & Parent $q$ & Capture and re-ionization through the lower ion\\
+\bottomrule
+\end{tabularx}
+\caption{Physical meaning of the effective transfers. SCD, ACD, QCD and
+XCD multiply $\nelec$; CCD multiplies $\nh$. Projection can add the
+high-shell pathways described in Section~\ref{sec:projection}.}
+\end{table}
 
 \subsection{SCD: effective ionization}
 
@@ -949,9 +859,10 @@ For a retained bound level $\rho$ and destination parent $p$,
 \begin{equation}
  \mathcal S_{\rho p}=S_{\rho p}+\sum_iS_{ip}F_{i\rho}.
 \end{equation}
-The second term describes excitation or redistribution followed by ionization.
-Both terms have coefficient units. Its matrix contribution from $\rho$ to
-$p$ is $\nelec\mathcal S_{\rho p}$.
+The first term is direct ionization of the retained level; the second
+accounts for population transferred through excited levels before
+ionization. The effective contribution to $C_{\rm eff}$ from $\rho$
+to $p$ is $\nelec\mathcal S_{\rho p}$.
 
 \subsection{ACD and CCD: effective capture}
 
@@ -960,11 +871,12 @@ The capture coefficient from parent $p$ into retained level $\rho$ is
  \mathcal A_{\rho p}=R_{\rho p}
               -\sum_{ij}C_{\rho i}(C_{ee}^{-1})_{ij}R_{jp}.
 \end{equation}
-The second term incorporates capture into excited levels followed by their
-collisional redistribution and radiative cascades. Replacing $R$ by $K$
-defines $\mathcal C_{\rho p}$, the CCD coefficient. The rate multipliers are
-$\nelec$ and $\nh$, respectively. In an ionization matrix expressed per
-electron density, the CCD entry carries $\nh/\nelec$.
+The indirect term describes capture into the excited manifold followed
+by redistribution and radiative stabilization into $\rho$. Replacing
+$R$ by $K$ gives the charge-exchange coefficient $\mathcal C_{\rho p}$
+(CCD). ACD multiplies electron density and CCD multiplies donor density;
+an ionization matrix expressed per electron density therefore contains
+$(\nh/\nelec)\mathcal C$ for charge exchange.
 
 \subsection{QCD: redistribution within a retained bound manifold}
 
@@ -974,9 +886,10 @@ For two different retained bound levels,
  =\frac{C_{\rho\sigma}+\sum_iC_{\rho i}F_{i\sigma}}{\nelec},
  \qquad \rho\ne\sigma.
 \end{equation}
-This includes direct mixing and indirect paths through the excited manifold.
-The diagonal is kept zero in the stored QCD array; its population loss is
-inserted separately when the charge-state matrix is assembled.
+QCD includes both direct retained-level mixing and redistribution
+through the excited manifold. Its stored diagonal is zero; the
+corresponding source losses are included when the charge-state
+generator is assembled.
 
 \subsection{XCD: redistribution between parent metastables}\label{sec:xcd}
 
@@ -986,17 +899,21 @@ ionize into a different parent $q$. The coefficient for this path is
  \mathcal X_{p\to q}=-\sum_{ij}C_{qi}(C_{ee}^{-1})_{ij}R_{jp}
        =-\nelec\sum_{ij}S_{iq}(C_{ee}^{-1})_{ij}R_{jp},\qquad p\ne q.
 \end{equation}
-The factor $\nelec$ in the second form is essential. Dimensional analysis gives
+The factor $\nelec$ arises because ionization out of the excited
+manifold is a density-weighted rate. The resulting units are
 \begin{equation}
  [\nelec S][C_{ee}^{-1}][R]
   =(\mathrm{s}^{-1})(\mathrm s)(\mathrm{cm}^3\,\mathrm{s}^{-1})
   =\mathrm{cm}^3\,\mathrm{s}^{-1}.
 \end{equation}
-This is equivalent to dividing the parent-to-parent off-diagonal block of
-the Schur complement by electron density. The recombination rows must use
-the same excited-level ordering as $C_{ee}$.
-The same factor is in the definition of XCD of Summers et al.\ (their
-Eq.~17)~\cite{summers2006}.
+Equivalently, XCD is the off-diagonal parent block of the Schur
+complement divided by electron density. Its contraction requires a
+common eliminated-level ordering for the recombination rows and
+$C_{ee}$. The density factor agrees with Eq.~17 of Summers et
+al.~\cite{summers2006}. High-shell projection adds the parent transfer
+$X^{\rm ind}_{qp}$ defined in Eq.~\eqref{eq:expansion}. This correction
+is stored with destination first and is transposed on addition to the
+source-first XCD array (Appendix~\ref{sec:arrays}).
 
 \begin{implnote}[XCD contraction]
 The contraction uses $\nelec S$ and selects recombination rows by the actual
@@ -1005,20 +922,184 @@ $[0,2]$. The resulting coefficient has units cm$^3$/s and agrees with the
 parent block of the direct Schur complement divided by electron density.
 \end{implnote}
 
-\section{Derived emission and power coefficients}\label{sec:emission}
+\subsection{XCD checked by direct elimination}
 
-Spectrum-line and radiated-power coefficients follow from the quasistatic
-responses of Eq.~\eqref{eq:responses}, as in Section~1.2.2 of Summers
-et al.~\cite{summers2006}. Their responses
+The bundled Be II file is solved with metastables $[0,1]$, temperatures
+$[5,20]$ eV and densities $[10^{12},10^{14}]$ cm$^{-3}$, with both
+recombination mechanisms and ionization enabled. At the first grid point,
+the off-diagonal parent block of Eq.~\eqref{eq:schur}, formed with a linear
+solve rather than the stored inverse and divided by $\nelec$, agrees with the
+stored XCD$[1,0]$ (Table~\ref{tab:checks}); both are in cm$^3$/s. A separate
+test with the noncontiguous metastables $[0,2]$ covers the row selection.
+
+\subsection{Ionization balance across charge stages}\label{sec:ionbalance}
+
+Effective coefficients from successive ions form a coupled
+charge-state model. Collecting their retained populations into $x$
+gives, at fixed plasma conditions,
+\begin{equation}
+ \dot x=Mx+s,\qquad M=\nelec B.
+\end{equation}
+The coefficient matrix $B$ has units cm$^3$/s. SCD and ACD couple
+adjacent stages, while QCD redistributes retained populations within
+the ion from which it was calculated. XCD adds redistribution within
+the parent stage through excursions into the lower ion. A given stage
+can therefore receive its own QCD contribution and the XCD contribution
+calculated from the preceding stage.
+
+\subsubsection{Matrix assembly and density factors}
+
+Each off-diagonal coefficient is accompanied by an equal source-diagonal
+loss, giving $\vb1^{\mathsf T}B=0$ for a closed model. Charge-exchange
+entries contain $(\nh/\nelec)\mathcal C$, so multiplication of $B$ by
+$\nelec$ restores the donor-density rate $\nh\mathcal C$.
+
+\begin{implnote}
+\routine{populate_ion_matrix} stores $B$ in \code{ion_matrix}, despite that
+name suggesting a density-weighted rate. \routine{solve_no_source} and
+\routine{solve_source} multiply by the electron-density grid before invoking
+the matrix-exponential solvers. Do not apply the density multiplier a second
+time when interpreting their populations.
+\end{implnote}
+
+\subsubsection{Ionization age}
+
+For constant electron density, the ionization age is $\tau=\nelec t$.
+At fixed temperature, density-independent $B$ gives
+$x(\tau)=\exp(B\tau)x(0)$. In a GCR model, collisional quenching and
+three-body capture can introduce an explicit density dependence into
+$B$. Equal ionization age then need not produce equal charge-state
+fractions at different densities.
+
+\begin{implnote}[Ionization-age grids]
+The wrapper constructs times as $t=\tau/\nelec$ with axes
+\emph{density, time} when there are multiple densities; one density uses a
+one-dimensional time array. This agrees with the matrix-exponential solver's
+grid convention, including singleton axes.
+\end{implnote}
+
+\subsection{Stage-to-stage coefficients}\label{sec:stage}
+
+Charge-state kinetics can retain separate metastable populations or
+reduce each stage to one population. Two reductions are ground
+condensation and contraction with prescribed metastable fractions.
+Each requires a prescription for the populations within the stage, and
+their treatment of excitation-fed and capture-fed
+populations determines the meaning of the resulting stage
+coefficients~\cite{summers2006}.
+
+\subsubsection{Resolved metastables and ground condensation}
+
+In the resolved description, each selected ground or metastable level
+has an independent population. QCD and XCD determine redistribution,
+and SCD, ACD and CCD connect adjacent stages. The within-stage
+fractions consequently follow from the coupled kinetics.
+
+Ground condensation eliminates all bound levels except the ground of
+each stage. Under the single-driver normalization of
+Section~\ref{sec:normalization}, the stage variable includes the
+excited population driven by ground excitation. Capture-driven excited
+populations remain responses to the next stage, and ACD measures the
+capture flow reaching the retained ground. This conventional CR
+reduction therefore uses the stage-population convention described in
+Section~\ref{sec:ion-fractions}.
+
+\subsubsection{Contraction with metastable fractions}
+
+A second construction contracts resolved coefficients with prescribed
+metastable fractions. Writing the ground-relative ratios as
+$\eta_\rho=N_\rho/N_g$ with $\eta_g=1$ gives
+$f_\rho=\eta_\rho/\sum_\sigma\eta_\sigma$. If $f_p^+$ denotes the
+corresponding fractions in the recombining stage, the contracted
+coefficients are
+\begin{equation}\label{eq:unresolved}
+ \mathcal S_{\rm stage}=\sum_\rho f_\rho\sum_p\mathcal S_{\rho p},\qquad
+ \mathrm{PLT}_{\rm stage}=\sum_\rho f_\rho\,\mathrm{PLT}_\rho,\qquad
+ \mathcal A_{\rm stage}=\sum_p f_p^+\sum_\rho\mathcal A_{\rho p}.
+\end{equation}
+SCD and PLT are weighted by the fractions of the ionizing or emitting
+stage. ACD is weighted by the recombining-parent fractions and summed
+over bound destinations; CCD uses the same construction. The parent
+fractions also weight PRB and PRC. The resulting model has one
+population per stage, with no separate QCD or XCD entries, although
+redistribution can influence the fractions used in the contraction.
+
+The ADAS GCR-project contraction uses MET ratios obtained from a
+within-stage model with a prescribed ground driver and no capture
+feeding from the next stage (Appendix~\ref{sec:adf11adas}). For one
+metastable $\mu$, its quasistatic balance gives
+\begin{equation}\label{eq:met}
+ \eta_\mu=\frac{\mathcal Q_{g\to\mu}}
+             {\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p}}.
+\end{equation}
+With several metastables, their responses to the ground driver are
+obtained from a linear system. These excitation-only ratios describe
+the specified within-stage balance and can differ from the fractions
+established by capture and ionization in a coupled plasma.
+
+\subsubsection{When capture feeding changes the fractions}
+
+The effect of capture feeding can be seen directly in the same
+ground--metastable system. Including capture from the next stage,
+while neglecting CX and other feeding channels in this illustration,
+gives the stationary metastable balance
+\begin{equation}\label{eq:met-balance}
+ 0=\mathcal Q_{g\to\mu}N_g
+   -\left(\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p}\right)N_\mu
+   +\sum_p\mathcal A_{\mu p}N_p^+,
+\end{equation}
+after dividing the rate equation by $\nelec$. It follows that
+\begin{equation}\label{eq:met-plasma}
+ \frac{N_\mu}{N_g}=\eta_\mu+
+ \frac{\sum_p\mathcal A_{\mu p}N_p^+}
+      {(\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p})N_g}.
+\end{equation}
+The additional term is negligible when capture feeding is small
+relative to $\mathcal Q_{g\to\mu}N_g$. The parent abundance alone is
+therefore insufficient to assess the excitation-only approximation.
+Substantial capture changes the metastable population available for
+re-ionization, whereas ground condensation assigns that population
+through a different retained variable. The accuracy of either
+reduction depends on the ion and conditions. In the resolved system,
+XCD from the preceding stage also contributes to redistribution of
+these populations~\cite{summers2006}.
+
+\begin{implnote}[Stage contraction]
+For ADF04 inputs, \code{use_met=True} in \routine{ionization_balance}
+contracts resolved coefficients using fractions from
+\routine{metastable_fractions}, calculated from each stage's QCD and
+SCD. The default \code{use_met=False} preserves the supplied retained
+manifolds. Matching unresolved ADAS coefficients additionally requires
+consistent MET data, interpolation and atomic inputs.
+\end{implnote}
+
+Retaining the metastables allows these fractions to evolve within the
+coupled model. Its accuracy remains subject to the atomic data,
+time-scale separation and population conventions specified above.
+
+\section{Emission, power and spectroscopic diagnostics}\label{sec:emission}
+
+Spectroscopic observables follow directly from the level populations.
+A one-photon transition produces photons at rate $A_{u\ell}N_u$ per
+unit volume, and each photon carries energy $\Delta E_{u\ell}$.
+Substitution of the quasistatic responses separates the emissivity
+into excitation, recombination and charge-exchange contributions.
+Their coefficients inherit the driving-population convention of
+Section~\ref{sec:normalization}.
+
+To compare notation, the response functions used in Section~1.2.2 of
+Summers et al.~\cite{summers2006} are
 $\mathcal F^{\rm (exc)}_{u\rho}=F_{u\rho}/\nelec$ and
-$\mathcal F^{\rm (rec)}_{up}=G_{up}/\nelec$ include the electron density that
-the $F$ and $G$ of ColRadPy leave out (Section~\ref{sec:cxdrivers}).
+$\mathcal F^{\rm (rec)}_{up}=G_{up}/\nelec$. They include an additional
+inverse electron-density factor relative to the dimensionless
+responses defined here. Stored excitation quantities may also carry
+the normalization of Eq.~\eqref{eq:stored-normalization}.
 
 \subsection{Photon emissivity coefficients}
 
-For an optically thin line $u\to\ell$, the angle-integrated photon
-emissivity divides by driving population, a metastable $\rho$ of the ion or a
-metastable $p$ of the next ion (the parent):
+For optically thin emission, the angle-integrated photon emissivity
+of a one-photon line $u\to\ell$ is $A_{u\ell}N_u$. Resolving the
+upper-level population by driver gives
 \begin{equation}\label{eq:emissivity}
  \epsilon_{u\ell}=A_{u\ell}N_u
  =\nelec\sum_\rho N_\rho\mathrm{PEC}^{\rm exc}_{u\ell,\rho}
@@ -1026,32 +1107,32 @@ metastable $p$ of the next ion (the parent):
   +\nh\sum_pN_p^{\rm CX}\mathrm{PEC}^{\rm CX}_{u\ell,p}
  \quad[\mathrm{photons}\,\mathrm{cm}^{-3}\,\mathrm{s}^{-1}].
 \end{equation}
-This defines the excitation, recombination and charge-exchange photon
-emissivity coefficients (cm$^3$\,s$^{-1}$),
+Factoring out the bath density and driving population defines the
+photon emissivity coefficients, in cm$^3$/s:
 \begin{align}
  \mathrm{PEC}^{\rm exc}_{u\ell,\rho}&=A_{u\ell}F_{u\rho}/\nelec,\label{eq:pec-exc}\\
  \mathrm{PEC}^{\rm rec}_{u\ell,p}&=A_{u\ell}G_{up}/\nelec,\label{eq:pec-rec}\\
  \mathrm{PEC}^{\rm CX}_{u\ell,p}&=A_{u\ell}H_{up}/\nh.\label{eq:pec-cx}
 \end{align}
-The upper level can also be a retained metastable $\sigma$. Its population
-relative to the driver $\rho$ is $\delta_{\sigma\rho}$, so the lines it emits
-to the levels below it, the forbidden transitions between metastables of
-Summers et al.\ (their Eq.~26), have
+For a retained upper level $\sigma$, the population is already an
+independent variable. Its response to a retained bound driver $\rho$
+is $\delta_{\sigma\rho}$, so its radiative transitions have
 \begin{equation}\label{eq:pec-meta}
  \mathrm{PEC}^{\rm exc}_{\sigma\ell,\rho}=\delta_{\sigma\rho}A_{\sigma\ell}/\nelec,
  \qquad
  \mathrm{PEC}^{\rm rec}_{\sigma\ell,p}=\mathrm{PEC}^{\rm CX}_{\sigma\ell,p}=0.
 \end{equation}
-With the populations normalized to the whole ion
-(Section~\ref{sec:normalization}) an excitation PEC is multiplied by
-$N_\rho/N_{\rm ion}$. This is the coefficient for a stage-to-stage
-ionization balance, where a metastable treated as an ordinary level can have
-a quasistatic population comparable to that of the ground~\cite{summers2006}.
-For an isotropic emitter, a line-of-sight photon radiance is
-$\int\epsilon_{u\ell}\,\dd s/(4\pi)$. The $4\pi$ factor is an observation
-convention and is not already part of $A_{u\ell}N_u$. The ionizations per
-emitted photon, S/XB, are defined from the excitation PECs in
-Section~\ref{sec:sxb}.
+The same emissivity can be expressed per ion total by changing the
+coefficient's denominator. For a single ground driver without capture,
+the corresponding excitation PEC is $d_0\mathrm{PEC}^{\rm exc}$,
+where $d_0=N_0/N_{\rm ion}$. For a prescribed mixture it is
+$\sum_\rho(N_\rho/N_{\rm ion})\mathrm{PEC}^{\rm exc}_{u\ell,\rho}$.
+The factor is applied once, consistently with the population that
+multiplies the coefficient. Capture and CX retain their own parent
+drivers. For an isotropic emitter, the line-of-sight photon radiance
+is $\int\epsilon_{u\ell}\,\dd s/(4\pi)$; angular dilution is therefore
+introduced at the observation stage. Section~\ref{sec:sxb} relates the
+excitation component to ionizations per emitted photon.
 
 \begin{implnote}[CX PEC convention]
 The implementation divides \emph{all} computed driving columns by $\nelec$ when forming
@@ -1061,41 +1142,84 @@ Use electron density with that stored response, or explicitly convert to a
 donor-normalized coefficient before using Eq.~\eqref{eq:emissivity}.
 \end{implnote}
 
+\subsection{Two-photon decay and the limits of line outputs}\label{sec:two-photon}
+
+Two-photon decay requires a spectral distribution as well as a total
+transition rate. A decay rate $A^{2\gamma}_{u\ell}$ removes population
+at $A^{2\gamma}_{u\ell}N_u$, produces photons at twice that rate and
+radiates total power $\Delta E_{u\ell}A^{2\gamma}_{u\ell}N_u$.
+The two photon energies sum to the level separation. If $p(\nu)$ is
+the normalized distribution of individual photon frequencies,
+$\int p\,\dd\nu=1$ and
+$\int h\nu p\,\dd\nu=\Delta E_{u\ell}/2$, the spectral emissivity is
+\begin{equation}
+ \epsilon^{2\gamma}_\nu=2A^{2\gamma}_{u\ell}N_u\,p(\nu).
+\end{equation}
+The distribution $p$ contains atomic information beyond the integrated
+decay rate~\cite{drake}. A total A-value therefore determines the
+population loss and integrated power but not the continuum shape.
+
+\begin{caveat}[FAC two-photon output]
+FAC import includes the two-photon contribution in the pair's A-value
+and records \code{two_photon} metadata. Generic PEC, wavelength,
+profile and ADF15 outputs treat that entry as a one-photon transition.
+For its two-photon component, $AN_u$ therefore counts decay events:
+the assigned wavelength $hc/\Delta E$ is not a continuum spectrum
+and is unsuitable for a line S/XB diagnostic. Energy weighting still
+recovers the integrated power $\Delta E AN_u$. A photon spectrum
+requires separation of this contribution using the metadata, an
+appropriate continuum distribution and a separate export.
+\end{caveat}
+
 \subsection{Radiated power coefficients}
 
-Each PEC carries the line power $\Delta E_{u\ell}\,\mathrm{PEC}$, in
-W\,cm$^3$ with the photon energy $\Delta E_{u\ell}=hc/\lambda_{\rm vac}$ in J
-($\times10^{-6}$ for W\,m$^3$). Summed over the lines they give, for each
-driver, the low-level line power coefficient and the recombination power
-coefficient (Summers et al., their Eqs.~24--25):
+Multiplying a PEC by the photon energy
+$\Delta E_{u\ell}=hc/\lambda_{\rm vac}$ in joules gives a line-power
+coefficient in W\,cm$^3$; conversion to W\,m$^3$ introduces a factor
+$10^{-6}$. Summation over transitions yields the excitation and
+recombination power coefficients (Summers et al., Eqs.~24--25):
 \begin{align}
  \mathrm{PLT}_\rho&=\sum_{u\ell}\Delta E_{u\ell}\,\mathrm{PEC}^{\rm exc}_{u\ell,\rho}
    =\sum_{u\in e}\sum_{\ell<u}\frac{\Delta E_{u\ell}A_{u\ell}F_{u\rho}}{\nelec}
     +\sum_{\ell<\rho}\frac{\Delta E_{\rho\ell}A_{\rho\ell}}{\nelec},\label{eq:plt}\\
  \mathrm{PRB}_p&=\sum_{u\ell}\Delta E_{u\ell}\,\mathrm{PEC}^{\rm rec}_{u\ell,p}
-   =\sum_{u\in e}\sum_{\ell<u}\frac{\Delta E_{u\ell}A_{u\ell}G_{up}}{\nelec},\label{eq:prb}
+   =\sum_{u\in e}\sum_{\ell<u}\frac{\Delta E_{u\ell}A_{u\ell}G_{up}}{\nelec}.\label{eq:prb}
 \end{align}
-with $u\in e$ the eliminated levels, and the charge-exchange power PRC$_p$ in
-the same way from PEC$^{\rm CX}$. The last term of Eq.~\eqref{eq:plt} is the
-radiation of the metastable $\rho$ itself, Eq.~\eqref{eq:pec-meta}. Summers
-et al.\ write it as a separate term, ADAS includes it in PLT, and it dominates
-for a metastable with a fast decay: for the Ne$^0$ 2p$^5$3s\,$^3$P term
-($A=1.6\times10^7$\,s$^{-1}$) ColRadPy without it gave 0.02 of the ADAS PLT
-(\code{plt96r}) at $10^{12}$\,cm$^{-3}$, and with it 1.00. Summers et al.\
-include bremsstrahlung in PRB, and the ADAS PRB adds the recombination
-continuum and the radiation among the high $n$-shells (Section~\ref{sec:adf11adas});
-the \code{prb} of ColRadPy is Eq.~\eqref{eq:prb} only, the line power of the
-levels of the ADF04 file after capture.
+Here $u\in e$ denotes the eliminated upper levels. The CX power
+coefficient PRC$_p$ is obtained analogously from PEC$^{\rm CX}$.
+The final term in PLT represents radiation from the retained driver
+$\rho$ itself, as given by Eq.~\eqref{eq:pec-meta}. Summers et al.
+treat it separately and describe it as usually small in fusion plasmas;
+ADAS includes it in PLT. Its magnitude depends on the retained level
+and can be substantial.
+
+For example, a calculation for the Ne$^0$ 2p$^5$3s $^3$P term uses
+retained levels $[0,1]$ and three OPEN-ADAS files, which are not
+distributed with ColRadPy: the ADF04 file \texttt{cop98\#10\_ls\#ne0.dat},
+the projection mapping \texttt{exp96\#ne\_ne0ls.dat} and its ADF17 file
+\texttt{cbnm96\#ne\_ne0ls.dat}. At $\Te=10$ eV, radiation with $^3$P
+as the upper term accounts for 98\,\% of that driver's PLT at
+$\nelec=10^{12}$ cm$^{-3}$ and 44\,\% at $10^{14}$ cm$^{-3}$.
+These fractions are the sum of \code{pls} over the relevant lines
+divided by \code{plt} for that driver.
+
+The definition of recombination power also depends on the included
+radiation channels. Summers et al. include bremsstrahlung in PRB,
+and ADAS additionally includes the recombination continuum and
+high-shell radiation (Appendix~\ref{sec:adf11adas}). ColRadPy's
+\code{prb} is restricted to Eq.~\eqref{eq:prb}: radiation from the
+explicit ADF04 levels following capture.
 
 \begin{implnote}[Power outputs]
-\code{processed['pls']} holds $\Delta E_{u\ell}\,\mathrm{PEC}$ for every
-line and driver, and \code{plt}, \code{prb} and \code{prc} its sums over the
-excitation, recombination and CX columns, in W\,cm$^3$, with the photon
-energy from the level-energy difference. Every pair of levels is a line, by
-lower and then upper level as in \code{pec_levels}, the lines of the retained
-metastables included. The time-dependent \code{['td']['pecs']}, \code{pls}
-and \code{plt} use the same lines with the time-dependent populations of all
-levels, metastables included.
+\code{processed['pls']} contains the energy-weighted PEC for each
+line and driver. Summation over lines, separately for each excitation,
+recombination or CX driver, gives \code{plt}, \code{prb} and \code{prc}
+in W\,cm$^3$.
+Photon energies follow from level-energy differences. Level pairs are
+ordered by lower then upper level in \code{pec_levels}, including
+retained upper levels; zero radiative rates contribute zero emission.
+The time-dependent \code{['td']['pecs']}, \code{pls} and \code{plt}
+use the same transitions with the evolving level populations.
 \end{implnote}
 
 \subsection{S/XB: ionizations per emitted photon}\label{sec:sxb}
@@ -1108,36 +1232,37 @@ $\mathcal S_\rho=\sum_p\mathcal S_{\rho p}$. For line $u\to\ell$,
  (S/XB)_{u\ell,\rho}
     =\frac{\mathcal S_\rho}{\mathrm{PEC}^{\rm exc}_{u\ell,\rho}}.
 \end{equation}
-This is Eq.~23 of Summers et al.~\cite{summers2006}, the SCD of the driver
-summed over the parents over its excitation PEC. Both coefficients use the
-same electron-density and driving-population convention, so the ratio is
-dimensionless: ionizations per excitation photon.
-The numerator can instead be restricted to a specified destination parent,
-provided that restricted meaning is stated.
+The numerator sums the driver's SCD over destination parents, as in
+Eq.~23 of Summers et al.~\cite{summers2006}. With the same density and
+population convention in numerator and denominator, the ratio is
+dimensionless and measures ionizations per excitation photon. A
+parent-restricted numerator defines the corresponding restricted
+ratio and should be identified explicitly.
 
-For multiple retained populations, form the rate ratio before interpreting
-it as a diagnostic:
+For several retained populations, the observable rate ratio becomes
 \begin{equation}
  (S/XB)_{u\ell}[N_m]
  =\frac{\sum_\rho N_\rho\mathcal S_\rho}
         {\sum_\rho N_\rho\mathrm{PEC}^{\rm exc}_{u\ell,\rho}}.
 \end{equation}
-This is not an unweighted average of the individual metastable ratios.
-Different metastable fractions can produce different ionization-to-photon
-ratios at the same temperature and density.
+The weights involve the actual retained populations and each driver's
+emissivity. Consequently, different metastable mixtures can give
+different ionization-to-photon ratios at identical temperature and
+density.
 
-If excitation dominates the observed line and S/XB is approximately constant
-through the emitting column, its photon radiance $I_{u\ell}$ gives
+When excitation dominates the observed line and S/XB is approximately
+uniform along the emitting column, its photon radiance $I_{u\ell}$
+determines the integrated ionization rate through
 \begin{equation}
  \int\dot n_{\rm ion}\,\dd s=(S/XB)_{u\ell}\,4\pi I_{u\ell}.
 \end{equation}
-If the ratio varies spatially, the local ionization rate must instead be
-integrated with the corresponding emissivity. Interpreting that column
-ionization rate as a surface erosion or influx rate additionally requires a
-geometry and transport model: escape without ionization, repeated
-recombination and ionization, and recombination/CX photons can invalidate a
-simple one-ionization-per-entering-particle interpretation. A zero excitation
-PEC does not define a finite ratio.
+For a spatially varying ratio, the ionization rate is obtained by
+integrating the local product of S/XB and emissivity. Conversion of
+this column rate into surface erosion or particle influx additionally
+depends on transport and geometry. Escape before ionization, repeated
+recombination/ionization and capture-driven photons can all change
+the connection between entering particles and emitted photons. The
+ratio is undefined where the excitation PEC vanishes.
 
 \begin{implnote}[S/XB output]
 S/XB is a ratio of stored results and is not stored itself:
@@ -1151,14 +1276,70 @@ need ionization in the calculation. A per-driver photon rate in
 s$^{-1}$ must not be mixed with an ionization coefficient in cm$^3$/s.
 \end{implnote}
 
-\section{Wavelengths, fine structure and line profiles}\label{sec:spectra}
+\subsection{Unsummed contributions and dominant feeding mechanisms}\label{sec:feeding}
 
-\subsection{Wavelengths and NIST energy matching}
+The response can be decomposed further to identify the channels that
+feed a particular level~\cite{johnson}. Let $a$ identify an excitation,
+recombination or CX driver, and let $\beta_{ja}=-C_{ja}$ describe its
+injection into eliminated level $j$. Retaining the injection index
+in the matrix product gives
+\begin{equation}\label{eq:unsummed}
+ U_{ija}=(C_{ee}^{-1})_{ij}\beta_{ja}
+ \quad\hbox{(no sum over $j$)},\qquad
+ N_i=\sum_a\sum_j U_{ija}N_a.
+\end{equation}
+Summation over $j$ recovers the response to driver $a$. Individual
+terms assign its contribution to the level at which population enters
+the eliminated manifold. For a driver with nonzero response, the
+relative contributions are
+\begin{equation}
+ f_{j\mid i,a}=\frac{U_{ija}}{\sum_k U_{ika}}
+\end{equation}
+and identify the dominant injection channels. Their interpretation
+requires nonnegative physical rates and a relaxing excited block.
+A common normalization of a single driver cancels in these fractions,
+whereas combination of several drivers requires their population
+weights.
 
-Vacuum wavelength follows Eq.~\eqref{eq:conversion}. For a chosen air
-convention, $\lambda_{\rm air}=\lambda_{\rm vac}/n(\lambda_{\rm vac})$.
-The air-wavelength helper uses a pressure- and temperature-adjusted
-dispersion expression:
+\begin{implnote}[The stored contribution tensor]
+The implementation stores $U$ in \code{processed['pop_lvl']} with axes
+\emph{destination excited level, injection excited level, driver,
+temperature, density}. Both excited-level indices refer to the reduced
+level map, not to physical bound-level numbers. Summing the second axis
+reconstructs \code{processed['pops']} under the same normalization.
+Paired mode replaces the last two axes by one pair index.
+\end{implnote}
+
+The diagonal term $j=i$ represents injection directly into the observed
+upper level, followed by its complete response through $C_{ee}^{-1}$.
+Terms with $j\ne i$ describe injection elsewhere and subsequent
+redistribution or cascading. Since the inverse includes repeated
+transfers, these are algebraic injection-channel contributions rather
+than exclusive microscopic paths. In the Mo I examples near 379.8 and
+550.6 nm, the decomposition distinguishes direct ground injection from
+feeding through other populated levels~\cite{johnson}. Comparison with
+measured intensities requires the population weighting in
+Eq.~\eqref{eq:emissivity}.
+
+The same accounting can resolve effective rates. For example, level $i$
+contributes $S_{ip}F_{i\rho}$ to indirect ionization, and contributes
+$C_{\rho i}G_{ip}/\nelec$ to capture feeding retained level $\rho$. Keeping
+these terms unsummed can guide a reduced atomic model, provided its emission
+and effective-rate errors are checked afterward. Bundling levels is another
+way to reduce the dynamical size of heavy-species models~\cite{johnson};
+choosing a short list of retained metastables is not by itself a
+population-preserving bundling, and ColRadPy provides no automatic bundled
+model.
+
+\subsection{Wavelengths, fine structure and line profiles}\label{sec:spectra}
+
+\subsubsection{Wavelengths and NIST energy matching}
+
+Level-energy differences determine vacuum wavelengths through
+Eq.~\eqref{eq:conversion}. Conversion to an air convention uses
+$\lambda_{\rm air}=\lambda_{\rm vac}/n(\lambda_{\rm vac})$, where
+the refractive index is evaluated with the pressure- and
+temperature-dependent dispersion expression
 \begin{align}
  D(\xi)&=8342.54+\frac{2406147}{130-\xi^2}
                        +\frac{15998}{38.9-\xi^2},\quad
@@ -1167,40 +1348,39 @@ dispersion expression:
  \frac{1+10^{-8}(0.601-0.00972T_C)P}{1+0.0036610T_C}
  -P_w(0.037345-0.000401\xi^2)\right].
 \end{align}
-Here $P$ and water-vapor pressure $P_w$ are in Pa and $T_C$ is in Celsius;
-the defaults are 101325 Pa, 0 Pa and 15\,$^\circ$C.
-This empirical expression is not a wavelength-independent physical law.
-It has mathematical poles near 87.706 and 160.334 nm. ColRadPy keeps
-vacuum wavelengths below 200 nm and applies an air conversion only above
-that threshold. An optical air convention is thus separate from the vacuum
-convention used for UV emission.
+Pressure $P$ and water-vapor pressure $P_w$ are in Pa, and $T_C$ is
+in degrees Celsius. The defaults are 101325 Pa, zero water-vapor
+pressure and $15\,^{\circ}$C. The empirical dispersion formula has
+poles near 87.706 and 160.334 nm and is unsuitable for unrestricted
+UV extrapolation. ColRadPy accordingly retains vacuum wavelengths
+below 200 nm and applies the air conversion above this threshold.
 
-NIST matching changes line positions by replacing matched level energies.
-It does not recompute collision strengths or establish that LS splitting
-reproduces a resolved collisional radiative calculation. Configurations,
-term labels, $J$ values, and ambiguous repeated labels must be matched
-consistently. The split structure is constructed when needed before the
-levels are shifted.
+Matched NIST energies refine the line positions while leaving the
+collision strengths unchanged. Reliable matching requires consistent
+configurations, term labels and $J$ values, with explicit treatment
+of repeated or ambiguous labels. Where needed, the split structure
+is constructed before the energy shifts are applied. Refining these
+positions does not itself supply resolved-$J$ collisional dynamics.
 
-\subsection{Statistical splitting of LS multiplets}
+\subsubsection{Statistical splitting of LS multiplets}
 
-For a spin-allowed electric-dipole LS transition, relative component
-strengths can be expressed through an angular factor
+In LS coupling, the relative strengths of a spin-allowed electric-dipole
+multiplet follow the angular factor
 \begin{equation}
  W_{J_uJ_\ell}\ \propto\ (2J_u+1)(2J_\ell+1)
  \begin{Bmatrix}L_u&J_u&S\\J_\ell&L_\ell&1\end{Bmatrix}^{\!2}.
 \end{equation}
-Normalize the allowed factors over the multiplet and distribute the term
-PEC by $\mathrm{PEC}_{J_uJ_\ell}=\mathrm{PEC}_{\rm LS}W/\sum W$.
-This describes relative LS angular strengths with the associated statistical
-population assumption. It does not add resolved-$J$ collisional dynamics or
-configuration mixing. \routine{split_pec_multiplet} evaluates equivalent
-Condon--Shortley factors and renormalizes them for spin-conserving
-dipole multiplets ($|\Delta L|\le1$). Intercombination lines and lines with
-$|\Delta L|>1$, which these factors do not describe, are kept unsplit at the
-wavelength between the statistically weighted term centres.
+Normalization over the allowed components gives
+$\mathrm{PEC}_{J_uJ_\ell}=\mathrm{PEC}_{\rm LS}W/\sum W$.
+This redistribution assumes LS angular strengths and statistical
+sublevel populations. \routine{split_pec_multiplet} evaluates the
+equivalent Condon--Shortley factors for spin-conserving dipole
+multiplets with $|\Delta L|\le1$. Intercombination and
+$|\Delta L|>1$ lines remain unsplit at the wavelength between
+statistically weighted term centers. Configuration mixing and
+resolved-$J$ population kinetics require additional atomic information.
 
-\subsection{Doppler and natural profiles}
+\subsubsection{Doppler and natural profiles}
 
 For an emitter of mass $m$ at temperature $T_i$,
 \begin{equation}
@@ -1221,13 +1401,14 @@ For lifetime broadening of an upper and lower state,
 The Lorentzian FWHM is $\Delta\nu_L$. Density-dependent pressure broadening
 requires additional physics; it is not supplied merely by this lifetime width.
 
-For a profile tabulated per wavelength rather than per frequency, preserve
-area with $\phi_\lambda=\phi_\nu|\dd\nu/\dd\lambda|$ and consistent length
-units. The code evaluates a frequency-shaped kernel on a wavelength grid and
-renormalizes its finite-grid area numerically. That construction is a useful
-narrow-line profile but should not be assumed identical to an exact
-Jacobian-transformed wide profile. Grid width and resolution control omitted
-wings and numerical normalization.
+A change from frequency to wavelength coordinates preserves integrated
+emissivity through $\phi_\lambda=\phi_\nu|\dd\nu/\dd\lambda|$,
+with consistent length units. The implemented profiles evaluate a
+frequency-shaped kernel on a wavelength grid and normalize its area
+over that finite grid. This provides a narrow-line representation;
+an exact transformation of a broad profile would also require the
+Jacobian. Grid extent and resolution determine the treatment of wings
+and the numerical normalization.
 
 \begin{implnote}[Profile grid resolution]
 Natural profiles are evaluated on offsets $\Delta\lambda$ from the line
@@ -1236,303 +1417,527 @@ $\Delta\nu=-c\,\Delta\lambda/[\lambda_0(\lambda_0+\Delta\lambda)]$. A natural
 width can be far below the float64 resolution of the wavelength itself
 ($5\times10^{-15}$\,nm for the Be\,I line at 454.8\,nm, where float64 resolves
 $6\times10^{-14}$\,nm), and frequencies near $10^{15}$\,Hz are resolved only to
-0.1\,Hz, so neither absolute grid can carry such profiles. The absolute
-wavelengths \code{wave_arr} of these lines coincide.
+0.1\,Hz, so neither absolute grid can carry such profiles. For these lines
+the absolute wavelengths \code{wave_arr}, centre plus offset, all round to the
+same value; their profiles must be read against \code{dwave_arr}.
 \end{implnote}
-
-\section{Time-dependent evolution and matrix exponentials}\label{sec:time}
-
-For fixed plasma conditions and an optional constant source $s$,
-\begin{equation}\label{eq:ode}
- \dot N=CN+s,\qquad
- N(t)=\ee^{Ct}N(0)+\int_0^t\ee^{C(t-u)}s\,\dd u.
-\end{equation}
-If $C=V\Lambda V^{-1}$ has a complete eigenbasis, the source-free result is
-$V\ee^{\Lambda t}V^{-1}N(0)$. Each source-driven mode obeys
-\begin{equation}
- v_k(t)=v_k(0)\ee^{\lambda_kt}+c_k\phi(\lambda_k,t),\quad
- c=V^{-1}s,\quad
- \phi(\lambda,t)=\begin{cases}
-  (\ee^{\lambda t}-1)/\lambda,&\lambda\ne0,\\t,&\lambda=0.
- \end{cases}\label{eq:source-mode}
-\end{equation}
-For small $|\lambda t|$, evaluating the numerator with \code{expm1} avoids
-subtracting nearly equal floating-point numbers. Small $|\lambda|$ by itself
-does not make a mode negligible: its decay is governed by $|\lambda t|$.
-An alternative formulation is the augmented exponential
-\begin{equation}\label{eq:augmented}
- \begin{pmatrix}N(t)\\1\end{pmatrix}
- =\exp\!\left[t\begin{pmatrix}C&s\\0&0\end{pmatrix}\right]
-                 \begin{pmatrix}N(0)\\1\end{pmatrix}.
-\end{equation}
-For constant $C$, these formulas propagate the initial state at $t=0$;
-the first requested output time is not a new integration origin. The initial
-vector is a physical assumption about the species: atoms leaving a surface
-start in the ground state, and their emission evolves as metastable populations
-build up~\cite{johnson}. The
-rate equations accept any initial vector, and the time to form metastables
-corresponds to a distance from the surface only with a model of the particle
-motion and geometry.
-
-\subsection{Complex modes and real populations}
-
-A real, nonsymmetric rate matrix can have complex conjugate eigenvalues.
-For example, a conservative three-state cycle has
-\begin{equation}
- C=\begin{pmatrix}-1&0&1\\1&-1&0\\0&1&-1\end{pmatrix},\qquad
- \lambda=0,\ -\tfrac32\pm\tfrac{\sqrt3}{2}\,\mathrm i.
-\end{equation}
-The complex modes are legitimate and must be retained in the reconstruction.
-For real initial data and a real source, their imaginary contributions cancel
-in the exact populations. Taking the real part of eigenvectors or eigenvalues
-changes the dynamics. Taking the real part of a reconstructed population is
-justified only after a numerical assessment of its imaginary residual.
-Real-arithmetic matrix-exponential methods avoid those complex intermediates.
-
-\subsection{Defective and ill-conditioned eigenbases}
-
-Not every valid generator is diagonalizable. An equal-rate chain is a useful
-counterexample:
-\begin{equation}\label{eq:chain}
- C=\begin{pmatrix}-1&0&0\\1&-1&0\\0&1&0\end{pmatrix},\quad
- N(0)=\begin{pmatrix}1\\0\\0\end{pmatrix},\quad
- N(t)=\begin{pmatrix}\ee^{-t}\\t\ee^{-t}\\1-(1+t)\ee^{-t}\end{pmatrix}.
-\end{equation}
-The $t\ee^{-t}$ term comes from a Jordan block. A nominal inverse of numerical
-eigenvectors can return plausible values that omit this term. Near a defective
-matrix, eigenvector conditioning matters more than the visual separation of
-eigenvalues alone. A robust algorithm should assess that conditioning and use
-a matrix-exponential or equivalent stable method when needed.
-
-\begin{implnote}[Transient algorithms]
-The transient solvers check eigenvector conditioning and compare selected
-populations against a matrix exponential. Untrusted points are recomputed
-with \routine{scipy.linalg.expm}; a constant source uses an augmented matrix.
-Real populations are returned, and slow physical modes are retained according
-to their evolution over the requested times rather than an absolute rate
-cutoff. The cached evaluator needs the original rate matrix to perform the
-same exponential fallback.
-\end{implnote}
-
-\subsection{Stationary solutions}
-
-A normalized stationary population of a closed model satisfies
-\begin{equation}
- C\pi=0,\qquad \vb1^{\mathsf T}\pi=1,\qquad \pi_i\ge0.
-\end{equation}
-For a unique equilibrium, one redundant balance equation can be replaced by
-the normalization equation. Rescaling balance equations helps avoid loss of
-weak-rate constraints. If multiple disconnected closed classes exist, their
-relative weights depend on the initial condition; normalization alone does
-not determine a unique distribution.
-
-A rate matrix that conserves particles (non-negative off-diagonal rates and
-columns that sum to zero) is solved by Grassmann--Taksar--Heyman elimination,
-which uses only the off-diagonal rates and has no subtractions, so every
-population keeps the relative accuracy of the rates however small it is.
-Solutions through the eigenvectors or a linear solve are accurate only relative
-to the largest population: for a resolved carbon balance at 10\,eV they gave
-C$^{5+}$ $2\times10^{-5}$ where the exact value is $3\times10^{-16}$. For other
-matrices the stationary solver tries the smallest-magnitude eigenmode and
-checks its residual and normalization; an unreliable projection is replaced by
-a normalized stationary solve. The ionization-balance wrapper calls this
-routine directly.
-
-\section{Ionization balance across charge stages}\label{sec:ionbalance}
-
-Collect all retained metastables across the modeled stages into a vector $x$.
-At fixed plasma parameters,
-\begin{equation}
- \dot x=Mx+s,\qquad M=\nelec B.
-\end{equation}
-Here $B$ is a coefficient matrix with units cm$^3$/s. Its adjacent-stage
-blocks contain SCD upward and ACD downward. QCD connects retained levels
-within the lower stage, and XCD contributes connections within the parent
-stage through the lower stage. A given stage can therefore receive both its
-own QCD and XCD contributions computed from the preceding charge state.
-
-For each off-diagonal transition, the same coefficient is subtracted from
-the source diagonal. Consequently $\vb1^{\mathsf T}B=0$ in a closed
-calculation. The CX downward blocks use
-$(\nh/\nelec)\mathcal C$ inside $B$, so the final multiplication by electron
-density recovers the physical multiplier $\nh$.
-
-\begin{implnote}
-\routine{populate_ion_matrix} stores $B$ in \code{ion_matrix}, despite that
-name suggesting a density-weighted rate. \routine{solve_no_source} and
-\routine{solve_source} multiply by the electron-density grid before invoking
-the matrix-exponential solvers. Do not apply the density multiplier a second
-time when interpreting their populations.
-\end{implnote}
-
-\subsection{Ionization age}
-
-For constant electron density, define $\tau=\nelec t$. If
-$B$ has no density dependence, a solution at fixed temperature can be written
-as $x(\tau)=\exp(B\tau)x(0)$. In a full GCR model, quenching and three-body
-terms can make $B$ density-dependent, so equal ionization age does not
-necessarily imply equal charge-state fractions at different densities.
-
-\begin{implnote}[Ionization-age grids]
-The wrapper constructs times as $t=\tau/\nelec$ with axes
-\emph{density, time} when there are multiple densities; one density uses a
-one-dimensional time array. This agrees with the matrix-exponential solver's
-grid convention, including singleton axes.
-\end{implnote}
-
-\subsection{Input routes and retained manifolds}\label{sec:inputroutes}
-
-\routine{ionization_balance} can build coefficients from ADF04 models or read
-precomputed ADF11/HDF5 data. The number of retained metastables is a
-stage-dependent quantity. A ragged collection such as $[\,[0,1],\,[0,1,2],]$
-must not be forced into a rectangular numeric array. The order of input files
-also carries charge-stage information and should be explicit in a calculation
-record. The current readers and constructors impose additional restrictions
-listed in Section~\ref{sec:limitations}.
-
-\begin{implnote}[Constructor defaults]
-For ADF04, a flat metastable array selects levels in the first stage; later
-selections use the preceding SCD parent count. A per-stage list may have
-unequal lengths. Default initial abundances are sized after the GCR stages
-are loaded, including the final parent stage, and place all population in
-the first state. ADF11 and HDF5 source solves use the same default-abundance
-helper after their ionization matrix is constructed.
-\end{implnote}
-
-\subsection{Stage-to-stage coefficients}\label{sec:stage}
-
-A stage-to-stage balance follows one population per charge stage, with the
-coefficients of conventional collisional-radiative models: SCD, ACD, CCD, PLT,
-PRB and PRC for each stage, and no QCD or XCD, which move population between
-the metastables of one stage or between parents~\cite{summers2006}. They can
-be made from the GCR picture in two ways.
-
-Retaining only the ground condenses the metastables onto the ground, which
-restores the ground-state collisional-radiative picture of Bates et
-al.~\cite{summers2006}. Each metastable becomes an excited level whose
-excitation-driven population enters the stage normalization
-(Section~\ref{sec:normalization}) and the SCD, while its capture-driven
-population is not counted in the stage, and the ACD counts only captures that
-reach the ground.
-
-Alternatively, the resolved coefficients are contracted with the metastable
-fractions $f_\rho=m_\rho/\sum_\sigma m_\sigma$ of the ionizing stage, and
-$f^+_p$ of the recombining stage, as ADAS404 makes its unresolved ADF11 files
-(Section~\ref{sec:adf11adas}):
-\begin{equation}\label{eq:unresolved}
- \mathcal S_{\rm stage}=\sum_\rho f_\rho\sum_p\mathcal S_{\rho p},\qquad
- \mathrm{PLT}_{\rm stage}=\sum_\rho f_\rho\,\mathrm{PLT}_\rho,\qquad
- \mathcal A_{\rm stage}=\sum_p f^+_p\sum_\rho\mathcal A_{\rho p}.
-\end{equation}
-The fractions tell how the population of a stage is shared among its
-metastables, which a single population per stage cannot track. The ratios
-$m_\rho$ to the ground ($m_g=1$), the MET data of ADAS, are the steady state
-of the retained metastables of the stage alone: excitation, de-excitation and
-their ionization loss, without capture from the next stage. For a ground $g$
-and one metastable $\mu$,
-\begin{equation}\label{eq:met}
- m_\mu=\frac{\mathcal Q_{g\to\mu}}
-            {\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p}},
-\end{equation}
-and a linear system for more metastables. In a plasma the metastable is also
-fed by capture, and in steady state
-\begin{equation}\label{eq:met-plasma}
- \frac{N_\mu}{N_g}=m_\mu
-   +\frac{\sum_p\mathcal A_{\mu p}N^+_p}
-         {(\mathcal Q_{\mu\to g}+\sum_p\mathcal S_{\mu p})\,N_g}.
-\end{equation}
-The contraction neglects the second term, which holds in an ionizing plasma,
-where the next stage is scarce. Where the next stage dominates, most
-metastable atoms come from capture and are ionized again before they reach
-the ground. Equation~\eqref{eq:unresolved} then weights the ionization with
-too small a metastable share; metastables ionize more readily than the
-ground, so the stage-to-stage SCD is too small and the population of the
-stage too large. The condensation onto the ground errs the other way: it
-leaves the capture-fed metastable atoms out of the stage, whose population
-from ACD/SCD is then too small. Retaining the metastables avoids both
-assumptions. Summers et al.\ also note that XCD is needed to build a
-meaningful stage-to-stage ionization coefficient from the GCR
-ones~\cite{summers2006}: it moves population between the metastables of the
-next stage through this one, and the contraction leaves it out of the
-fractions of that stage, where it would add to its QCD.
-
-\routine{ionization_balance} makes the contraction from ADF04 inputs with
-\code{use_met=True} (default \code{False}): each stage is solved with its
-metastables, \routine{metastable_fractions} gives their fractions from its QCD
-and SCD, Eq.~\eqref{eq:unresolved} gives one SCD, ACD, CCD and PLT per stage,
-and the balance is solved stage to stage. It reproduces ADAS's unresolved data
-where ADAS's own data are consistent, but it is not more accurate than the
-condensation onto the ground. MET only counts metastable atoms made by excitation from
-the ground. In He$^0$, most recombinations land on the triplets, and the
-1s2s\,$^3$S metastable is easily ionized, so most of those atoms go straight
-back to He$^+$. The collapse counts them as recombined but never as
-re-ionized, so He$^0$ comes out too abundant. Be$^0$'s $^3$P holds more atoms
-than the ground, so there the condensation's error dominates instead:
-it drops the recombination-fed $^3$P atoms from the stage entirely. Against
-the equilibrium $N(\mathrm X^0)/N(\mathrm X^+)$ of the resolved balance
-(1--100\,eV, $10^{10}$--$10^{14}$\,cm$^{-3}$, ADAS's ADF04, ADF17 and ADF18
-files: \texttt{cpb03\_ls\#be0.dat} and \texttt{mom97\_ls\#he0.dat} with their
-\texttt{cbnm96} and \texttt{exp96} projection), the collapse gives
-1.00--1.34 for Be$^0$ and 1.02--2.21 for He$^0$, the condensation onto the
-ground 0.26--1.00 and 0.88--1.00. So no stage-to-stage model is right for every ion.
-The physically correct option is the resolved balance, the default.
 
 \subsection{Electron energy loss, radiated power and emission functions}\label{sec:eloss}
 
-A fluid energy equation needs the energy that the free electrons lose to an
-ion. Summers et al.\ (their Eq.~27) write it from the GCR coefficients and the
-power coefficients,
+The electron-energy budget includes both emitted radiation and changes
+in atomic internal energy. For an electron-driven GCR model, these
+contributions combine as (Summers et al., Eq.~27)
 \begin{equation}\label{eq:energy-loss}
- L_e=\sum_XE_X\,\dot N_X\big|_{\rm atomic}
+ L_e=\sum_X\mathcal U_X\,\dot N_X\big|_{\rm atomic}
      +\nelec\sum_\rho\mathrm{PLT}_\rho N_\rho+\nelec\sum_p\mathrm{PRB}_pN_p,
 \end{equation}
-where $X$ runs over the metastables of the ion and of its parent, $E_X$ is the
-absolute energy of $X$, and $\dot N_X|_{\rm atomic}$ its rate of change by the
-GCR coefficients: transfer between the metastables, ionization and
-recombination. With PLT as in Eq.~\eqref{eq:plt} it includes the forbidden
-lines between metastables. Only relative energies remain, because the atomic
-processes conserve particles, and in ionization equilibrium the first term
-vanishes: the electron energy loss equals the radiated power. For an element in
-ionization equilibrium the radiated power coefficient is (their Eq.~53)
+where $X$ ranges over the retained metastables of the ion and its
+parent. The energies $\mathcal U_X$ are in joules relative to one
+reference shared across charge stages, and
+$\dot N_X|_{\rm atomic}$ follows from GCR redistribution,
+ionization and recombination. PLT includes radiation between retained
+metastables through Eq.~\eqref{eq:plt}. Particle conservation makes
+the choice of common energy zero immaterial.
+
+At ionization equilibrium the internal-energy term vanishes, so the
+electron energy loss equals the complete radiated power. For an
+element, the equilibrium power coefficient is (Summers et al., Eq.~53)
 \begin{equation}\label{eq:ptot}
  P^{\rm tot}=\sum_z\sum_\sigma\bigl(\mathrm{PLT}^{[z]}_\sigma+\mathrm{PRB}^{[z]}_\sigma\bigr)
-   \Bigl(\frac{N^{[z]}_\sigma}{N^{\rm tot}}\Bigr)_{\rm eq},
+   \Bigl(\frac{N^{[z]}_\sigma}{N^{\rm tot}}\Bigr)_{\rm eq}.
 \end{equation}
-in W\,cm$^3$ per electron and per ion of the element, where
-PRB$^{[z]}_\sigma$ is the recombination power driven by the metastable
-$\sigma$ of stage $z$, which stage $z-1$ emits. The emission functions of a
-line, the GTN functions of Summers et al.\ (their Eq.~54, the $G(T_e)$ of solar
-physics at finite density), combine the PECs with the same fractions:
+This coefficient is in W\,cm$^3$ per electron and per ion of the
+element. The notation PRB$^{[z]}_\sigma$ refers to recombination
+power driven by level $\sigma$ of stage $z$, emitted by stage $z-1$.
+The same equilibrium fractions weight individual line coefficients
+to give the GTN emission function (Summers et al., Eq.~54), the
+finite-density counterpart of the solar-physics $G(T_e)$:
 \begin{equation}\label{eq:gtn}
  \mathrm{GTN}^{[z]}_{u\ell}=\sum_\sigma\mathrm{PEC}^{[z]\,\rm exc}_{u\ell,\sigma}
    \Bigl(\frac{N^{[z]}_\sigma}{N^{\rm tot}}\Bigr)_{\rm eq}
   +\sum_p\mathrm{PEC}^{[z]\,\rm rec}_{u\ell,p}
    \Bigl(\frac{N^{[z+1]}_p}{N^{\rm tot}}\Bigr)_{\rm eq}.
 \end{equation}
-ColRadPy provides the coefficients and, from \routine{ionization_balance}, the
-equilibrium metastable fractions (\code{processed['pops_ss']}), but does not
-assemble Eqs.~\eqref{eq:energy-loss}--\eqref{eq:gtn}. Its \code{prb} lacks
-the continuum and bremsstrahlung that the ADAS PRB supplies.
+ColRadPy supplies the component coefficients and the retained
+equilibrium fractions through \routine{ionization_balance}
+(\code{processed['pops_ss']}); the combined energy-loss, element-power
+and GTN expressions are not assembled automatically. With population
+rates in cm$^{-3}$\,s$^{-1}$, $L_e$ is in W\,cm$^{-3}$.
+Tabulated wavenumber energies convert to joules as
+$\mathcal U=hc\,(100E_{\rm cm^{-1}})$ using SI constants, and the
+ground energies of successive ions include the intervening ionization
+thresholds.
 
-\section{Charge-state energy balance}\label{sec:energy}
+The normalization $N^{\rm tot}$ must be consistent with the intended
+observable. A retained-population sum gives power per retained
+particle, whereas power per ion of the element requires the full
+reconstruction in Section~\ref{sec:ion-fractions}. These expressions
+omit CX and assume complete radiative channels. The restricted
+\code{prb} output therefore provides only part of an electron cooling
+rate.
 
-The energy-balance extension first solves the charge-state fractions $x_z(t)$,
-then evolves a kinetic-energy variable per modeled particle,
+\section{Projection of the high \texorpdfstring{$n$}{n}-shells}\label{sec:projection}
+
+A finite low-level model can omit important capture and cascade
+pathways through high Rydberg shells, as well as excitation-mediated
+ionization through those shells. Projection incorporates their effect
+through an auxiliary bundle-$nS$ model while retaining a compact
+explicit level system. It is the same quasistatic elimination used
+in Section~\ref{sec:quasistatic}, applied to shell populations.
+
+The construction has three stages: elimination of the auxiliary high
+shells, subtraction of direct processes already present in the ADF04
+model, and expansion of the remaining corrections onto explicit
+levels. This separation preserves the low-level atomic data while
+adding pathways represented by the high-shell calculation.
+
+\subsection{Condensed shell model and elimination}
+
+For a fixed parent $p$ and spin system, let $x_n$ denote the population
+of shell $n$. ADF17 contains condensed bundle-$nS$ couplings calculated
+by ADAS204 on a temperature--density grid. In its loss-positive
+convention, the shell balance is
+\begin{equation}\label{eq:bundle}
+ \sum_m P_{nm}x_m=\nelec N_p r_n.
+\end{equation}
+The diagonal $P_{nn}>0$ contains the shell loss rate, and off-diagonal
+$P_{nm}$ are negative transfer terms from $m$ to $n$, in s$^{-1}$.
+The coefficient $r_n$ describes capture into shell $n$ in cm$^3$/s.
+Ionization from $n$ to parent $q$ is specified by $\kappa_{nq}$ in
+s$^{-1}$; $X_q$ describes parent transfer along paths that bypass
+the retained shells, in cm$^3$/s. Parent and spin labels on the arrays
+are suppressed here.
+
+Because this auxiliary model is evaluated at each density, it supplies
+the density-dependent redistribution of high doubly excited states
+that is absent from zero-density ADF04 recombination data (Summers
+et al., Eq.~45)~\cite{summers2006}.
+
+Partitioning the shells into retained shells $l$ and higher shells
+$u$, solution of the $u$ equations and substitution into the retained
+balance gives
+\begin{align}
+ P'&=P_{ll}-P_{lu}P_{uu}^{-1}P_{ul}, &
+ r'&=r_l-P_{lu}P_{uu}^{-1}r_u,\\
+ \kappa'&=\kappa_l-\bigl(P_{uu}^{-1}P_{ul}\bigr)^{\mathsf T}\kappa_u, &
+ X'&=X+\kappa_u^{\mathsf T}P_{uu}^{-1}r_u.
+\end{align}
+These terms account for return from the eliminated manifold to a
+retained shell and for transfer to a parent. Their signs follow the
+loss-positive definition of $P$, which reverses the generator sign
+convention used for $C$.
+
+\subsection{Removing the direct processes}
+
+The reduced auxiliary matrices contain direct low-level processes as
+well as the desired high-shell pathways. Their direct components
+must be subtracted before addition to the ADF04 model. ADF17 provides
+$D_{nm}$ for direct shell coupling, $D^{\kappa}_{nq}$ for direct
+ionization and $d_n$ for direct radiative, dielectronic, three-body
+and charge-exchange recombination. Restricting $D$ to $l$ and
+removing its diagonal losses to $u$ defines $D'$, since transfers
+through $u$ now form part of the indirect contribution. The required
+corrections are
+\begin{equation}
+ P^{\rm ind}=P'-D'-\operatorname{diag}\left(\sum_qD^{\kappa}_{nq}\right),\qquad
+ \kappa^{\rm ind}=\kappa'-D^{\kappa},\qquad
+ r^{\rm ind}=r'-d,\qquad X^{\rm ind}=X'.
+\end{equation}
+The off-diagonal entries of $-P^{\rm ind}$ are indirect shell gains.
+The corresponding ionization and recombination differences retain
+the additional pathways supplied by the auxiliary model.
+
+\subsection{Expansion onto the explicit levels}
+
+An ADF18 \code{a17_p208} file associates each explicit level with a
+parent, spin system and shell $n(i)$. Its expansion weight $w_i$ is
+normalized over the mapped levels of that shell. Incoming shell
+population is distributed according to these weights, while an
+outgoing rate per shell population applies to each constituent level.
+For one parent and spin group the expansion is
+\begin{align}
+ R^{\rm ind}_{ip}&=w_i r^{\rm ind}_{n(i)}, &
+ S^{\rm ind}_{ip}&=\kappa^{\rm ind}_{n(i)p}/\nelec,\\
+ \Delta C_{ij}&=-w_i P^{\rm ind}_{n(i)n(j)}\quad(n(i)\ne n(j)), &
+ X^{\rm ind}_{qp}&=\sum_{\text{spin systems of }p}X^{\rm ind}_q.\label{eq:expansion}
+\end{align}
+The transfer correction is denoted by $\Delta C$ to distinguish it
+from the recombination response $G$. Transfers within a single shell
+are omitted because shell populations do not resolve that
+redistribution.
+
+The expanded corrections enter $C_{ij}$, $C_{pi}$ and $C_{ip}$ as
+$\Delta C_{ij}$, $\nelec S^{\rm ind}_{ip}$ and
+$\nelec R^{\rm ind}_{ip}$, respectively. Matching source-diagonal
+losses maintain particle conservation. The parent contribution
+$X^{\rm ind}_{qp}$ augments XCD for $p\to q$. The resulting
+populations, emission and effective coefficients include high-shell
+pathways, although the eliminated shell populations and radiation
+are not explicit outputs.
+
+\begin{implnote}[Parent attribution and mapping]
+Only ionization to the parent of the shell group is credited. Transfers
+through core-excited shells into other parents can overlap the
+excitation-autoionization already present in the ADF04 ionization data.
+The implementation omits both those gains and their losses, and builds
+the diagonal from the expanded gains instead of using $P^{\rm ind}_{nn}$ directly.
+The ADF18 level numbers refer to the original ADF04 order before energy
+sorting. Unmapped shells/spin systems receive no correction and give a
+warning. Fractional-parentage switches \code{IEFPRE}, \code{IEFPRS}
+in the older \code{cbnm93} files and indirect CX are not implemented.
+\end{implnote}
+
+\subsection{Grid continuation and numerical qualifications}
+
+Interpolation of indirect couplings uses logarithmic temperature,
+density and coefficient coordinates. Negative inferred gains or
+ionization, recombination and parent-transfer coefficients are
+clipped when their magnitude is no greater than $10^{-3}$ of the
+projected/direct subtraction scale. Larger negative values cause
+the affected temperatures to be excluded for that coupling, parent
+and spin system. This numerical tolerance is independent of any
+accuracy inferred from the precision of the ADF17 fields.
+
+Below the first retained temperature $T_0$, a coupling is continued as
+\begin{equation}\label{eq:projection-below}
+ c(T)=c(T_0)\left(\frac{T}{T_0}\right)^a
+ \exp\left[-\Delta E\left(\frac1T-\frac1{T_0}\right)\right].
+\end{equation}
+Here $T,T_0,\Delta E$ are in eV. The exponent $a$ is the logarithmic
+slope of $c\exp(\Delta E/T)$ between the two lowest usable
+temperatures, restricted to $[-1.5,0]$ for recombination and parent
+transfer and to $a\ge0$ for reduced ionization and shell transfers.
+Estimated thresholds are the level binding energy $\chi_i$ for
+ionization, the upward parent gap for parent transfer and zero for
+recombination. A transfer out of level $j$ uses
+$\chi_j-\bar\chi_{n_1}n_1^2/(n_1+1)^2$, based on the mean binding
+energy of the highest retained shell $n_1$. Values above the
+temperature grid or outside the density grid are held at the edge.
+Warnings identify these continuation regimes, whose effect requires
+sensitivity assessment.
+
+\begin{implnote}[Routines and data]
+\routine{read_adf17} reads the condensed model and \routine{read_adf18}
+its level mapping. \code{colradpy(..., projection=(adf17, adf18))}
+invokes \routine{make_projection} and \routine{projection.project},
+stores \code{rates['projection']}, and adds its corrections in
+\routine{populate_cr_matrix}. Files are read once; \routine{solve_cr}
+recalculates the projection on each solve's grid. An ionization balance
+takes one pair or \code{None} per ADF04 stage.
+\end{implnote}
+
+\section{Atomic-data preparation}\label{sec:data-preparation}
+
+\subsection{Interpolation and asymptotic continuation}\label{sec:interpolation}
+
+Interpolation and continuation complete the mapping from tabulated
+atomic data to the plasma grid. The coordinate choice is explicit in
+the interpolation option: a leading \code{log} or \code{loglog}
+qualifier is followed by a SciPy interpolation kind. With
+\code{log}, temperature is logarithmic while coefficient values
+remain linear:
+\begin{equation}
+ \widehat r(\Te)=\mathcal I\!\left[\ln T_k,r_k\right](\ln\Te)
+\end{equation}
+The ordinates $r_k$ are unchanged by the coordinate transformation,
+so linear extrapolation can cross zero and is clipped there. In
+the Be I data, recombination and ionization coefficients can reach
+this boundary at temperatures a few times the upper tabulated limit.
+
+By default (\code{loglog_slinear}), recombination and reduced ionization
+coefficients are interpolated as
+\begin{equation}
+ \widehat r(\Te)=\exp\mathcal I\!\left[\ln T_k,\ln r_k\right](\ln\Te),
+\end{equation}
+using the positive values of each transition. At the midpoint in
+$\ln T$, the result is the geometric mean of the neighboring rates;
+linear-ordinate interpolation on the same coordinate gives the
+arithmetic mean. Their ordering alone says nothing about the true
+coefficient. Log-log interpolation represents a local power law and
+preserves positivity, but its accuracy remains dependent on the
+underlying atomic data.
+
+Outside the grid, the two nearest values determine a power-law
+continuation $\widehat r\propto T^s$, subject to prescribed slope
+limits. Recombination uses $-3/2\le s\le0$; reduced ionization uses
+$-1\le s\le1/2$ above the grid and $s\ge0$ below it, holding a
+decreasing reduced coefficient constant at the low-temperature edge.
+Options without \code{loglog} interpolate coefficient values directly.
+Excitation and charge exchange use these options, with excitation
+continued by the Burgess--Tully procedure described below.
+
+The slope restrictions define a continuation policy rather than a
+general atomic asymptote. For example,
+$\alpha_{\rm DR}\propto T^{-3/2}\exp(-E_r/T)$ has logarithmic slope
+$-3/2+E_r/T$ and increases below $T=2E_r/3$ when both energies are
+in eV. Monotone continuation can therefore miss a resonance-related
+rise. Calculations outside the atomic-data grid require additional
+data or assessment of their extrapolation sensitivity.
+
+\begin{implnote}[Suspected placeholder filtering]
+Suspected placeholders are screened using thresholds of $10^{-6}$
+cm$^3$/s for reduced ionization and $10^{-7}$ cm$^3$/s for
+recombination. Leading low-temperature points are also excluded if
+their decrease toward a later point is steeper than $T^{-1}$ for
+reduced ionization or $T^{-2}$ for recombination, up to the first
+acceptable point. These criteria target artifacts in the supported
+files and can reject valid data outside that context. Warnings
+identify the affected channels for comparison with the original
+data; tests are listed in Appendix~\ref{app:evidence}.
+\end{implnote}
+
+The Burgess--Tully helpers compress an unbounded temperature coordinate into
+$0\le x<1$. With $\theta=k_BT/\Delta E$ and a positive scaling parameter
+$c>1$ (default 1.5), the four implemented transforms are
+\begin{table}[htbp]\centering
+\begin{tabular}{cll}\toprule Type & $x(\theta)$ & Transformed ordinate $y$\\\midrule
+1 & $1-\ln c/\ln(\theta+c)$ & $\Upsilon/\ln(\theta+\ee)$\\
+2 & $\theta/(\theta+c)$ & $\Upsilon$\\
+3 & $\theta/(\theta+c)$ & $(1+\theta)\Upsilon$\\
+4 & $1-\ln c/\ln(\theta+c)$ & $\Upsilon/\ln(\theta+c)$\\\bottomrule
+\end{tabular}
+\caption{Coordinate and ordinate definitions in \code{burgess_tully_rates.py}.
+The original routines use Kelvin and wavenumbers to form $\theta$.}
+\end{table}
+An infinite-energy point, where available, constrains the continuation
+in transformed coordinates. Otherwise the final calculated points
+determine the continuation, followed by inverse transformation to
+recover $\Upsilon$. This permits evaluation beyond a finite data grid:
+the published Mo I example, whose collision data end near 17 eV,
+uses such an extension~\cite{johnson}. Agreement with an asymptotic
+constraint does not establish accuracy far outside the computed range.
+
+\begin{implnote}[Continuation]
+Above the file grid each transition is continued in the coordinates of its
+own Burgess--Tully type: along the line from its last calculated point to the
+infinite-energy point, or, where that point is missing or unusable, along the
+line through its last two calculated points. Below the file grid it applies a
+nonnegative transformed continuation or keeps the first collision strength for
+transitions whose data start far above threshold. This numerical policy
+prevents negative rates but does not establish atomic-data accuracy outside
+the calculated range.
+\end{implnote}
+
+\subsection{Atomic data from the Flexible Atomic Code}\label{sec:fac}
+
+Cross-section data provide an alternative to tabulated thermal rate
+coefficients. FAC~\cite{fac} supplies these data together with level
+energies and radiative rates in a $jj$-coupled description.
+\routine{read_fac} converts its ASCII \code{PrintTable} outputs to
+thermal coefficients and the internal dictionary used by ADF04 input.
+The resulting kinetic calculation then follows the matrix construction
+and reduction developed in Sections~\ref{sec:matrix}--\ref{sec:gcr}.
+
+Energy ordering determines the bound-level indices, and levels of the
+next ion define the parents, with thresholds measured from the lower
+ion's ground. The interface retains definite $J$ values and weights
+$2J+1$; unassigned LS labels are stored as $L,S=-1$. Parent detailed
+balance therefore uses $g_p=2J_p+1$.
+
+\subsubsection{Common thermal average}
+
+For incident kinetic energy $E$, threshold $E_0$ and a normalized
+electron-energy probability density $f$ in eV$^{-1}$, the thermal
+coefficient can be written as
+\begin{equation}\label{eq:fac-rate}
+ q(T)=\int_{E_0}^{\infty}\sigma(E)v(E)f(E,T)\,\dd E
+ =e^{-E_0/T}T\int_0^\infty
+   \sigma(E)v(E)\widetilde f(E,T)e^{-u}\,\dd u,
+ \quad E=E_0+uT,
+\end{equation}
+where $\widetilde f=f e^{E/T}$ and $T,E,E_0$ are in eV. Cross-sections
+in cm$^2$ and speeds in cm/s give $q$ in cm$^3$/s. By default the
+distribution and speed are relativistic:
+\begin{equation}
+ f(E,T)=\frac{\gamma^2\beta e^{-\gamma/\theta}}
+              {\theta K_2(1/\theta)m_ec^2},\qquad
+ \gamma=1+\frac{E}{m_ec^2},\quad
+ \theta=\frac{T}{m_ec^2},\quad v=c\beta,
+\end{equation}
+with $\beta=\sqrt{1-\gamma^{-2}}$, $K_2$ the modified Bessel function,
+and $m_ec^2$ expressed in eV. The nonrelativistic limit is
+$f=2\sqrt{E/\pi}T^{-3/2}e^{-E/T}$. The option
+\code{relativistic=False} selects that distribution and the
+nonrelativistic speed.
+
+The threshold substitution isolates the Boltzmann factor and leaves
+the reduced coefficient $\widetilde q=q e^{E_0/T}$ for evaluation
+by 64-node Gauss--Laguerre quadrature. A scaled Bessel normalization
+avoids underflow in the thermal distribution at low temperature.
+The final physical rate can nevertheless underflow when its threshold
+factor is sufficiently small.
+
+\subsubsection{Excitation and ionization}
+
+Excitation and ionization strengths in FAC follow different
+cross-section conventions. With incident energy $E_{\rm H}$ in
+hartree, dimensionless
+$k^2=2E_{\rm H}(1+\alpha_{\rm f}^2E_{\rm H}/2)$ and $a_0$ in cm,
+the corresponding cross-sections are
+\begin{equation}
+ \sigma_{\rm exc}=\frac{\pi a_0^2\Omega_{\rm exc}}{g_\ell k^2},
+ \qquad
+ \sigma_{\rm ion}=\frac{a_0^2\Omega_{\rm ion}}{g_i k^2}.
+\end{equation}
+The energy supplied to these formulas must be converted from the eV
+coordinate used in Eq.~\eqref{eq:fac-rate}.
+
+The excitation average is stored in the effective-strength convention
+of Eq.~\eqref{eq:qdown}:
+\begin{equation}
+ \Upsilon_{\ell u}
+  =\frac{\widetilde q_{\ell u}g_\ell}{2.1716\times10^{-8}}
+    \sqrt{\frac{T}{13.6058}},\qquad E_0=\Delta E.
+\end{equation}
+This representation allows the matrix builder to recover the
+integrated excitation rate. Ionization is stored in the reduced
+form $\widetilde S$, using the relevant parent threshold as $E_0$.
+
+Between tabulated energies, strengths are interpolated log-log.
+Excitation is held at the first value below the grid and joined to
+the Bethe--Born form $\Omega=b\ln(E/E_0)+c$ above the grid when
+that limit is available. Exchange transitions without a Born limit
+follow the end-point power law, constrained to be at least as steep
+as $E^{-1}$. Ionization outside its tabulated range uses FAC's fit,
+\begin{equation}
+ \Omega=p_0\ln x+p_1y^2+p_2y/x+p_3y/x^2,
+ \qquad x=E/I,\quad y=1-1/x,
+\end{equation}
+with high-energy normalization matched to the last tabulated value.
+These forms specify the continuation of the imported cross-sections
+used in the thermal average.
+
+\subsubsection{Radiative recombination}
+
+For electron energy $\varepsilon$ and photon energy $E_\gamma$, both in
+hartree, let $\mathcal B$ denote FAC's bound-free oscillator-strength
+density (its tabulated $S$). The implemented conversion is
+\begin{equation}
+ \sigma_{\rm RR}
+ =\frac{2\pi\alpha_{\rm f}\mathcal B a_0^2
+                (\alpha_{\rm f}E_\gamma)^2}
+        {2\varepsilon(1+\alpha_{\rm f}^2\varepsilon/2)g_p}.
+\end{equation}
+The recombination average has threshold $E_0=0$. Bound-free strength
+is interpolated log-log, held below the first point, and continued
+above the grid with FAC's angular-momentum-dependent fit normalized
+to the final tabulated value. The resulting coefficients enter
+the recombination term $R$ in Eq.~\eqref{eq:recomb}.
+
+\subsubsection{Dielectronic capture and autoionization folding}
+
+Capture into an autoionizing level $d$ from parent $p$ is resonant at
+$E_r=E_d-I_p$, here in eV. If FAC gives resonance strength
+$S_{\rm DC}$ in cm$^2$\,eV, then
+$\alpha_{\rm DC}=S_{\rm DC}v(E_r)f(E_r,T)$. In the nonrelativistic
+thermal limit its relation to the autoionization rate $A^a_{dp}$ is
+\begin{equation}
+ \alpha_{\rm DC}=10^6\frac{g_d}{2g_p}
+ \left(\frac{h^2}{2\pi m_e eT}\right)^{3/2}
+ A^a_{dp}e^{-E_r/T}\quad\text{(cm$^3$/s)},
+\end{equation}
+using SI $h,m_e,e$ and $T$ in eV. The factor $10^6$ converts the
+translational volume from m$^3$ to cm$^3$.
+
+Although ADF04 has fields for Auger rates (\code{AAUG})~\cite{adf04},
+the current main generator represents autoionization through modified
+rates rather than an explicit decay channel. FAC import therefore
+folds stabilization and return to parents into the other processes.
+Let $A^r_{d\ell}$ denote radiative decay rates,
+$A^r_d=\sum_\ell A^r_{d\ell}$ their sum, and
+$A^a_d=\sum_p A^a_{dp}$ the total autoionization rate. Stabilization
+probabilities $b_d$ and return probabilities $P_{dp}$ are evaluated
+in increasing level-energy order, so downward cascades use the
+already determined lower-level probabilities:
+\begin{equation}
+ b_d=\frac{\sum_\ell A^r_{d\ell}b_\ell}{A^r_d+A^a_d},\qquad
+ P_{dp}=\frac{A^a_{dp}+\sum_\ell A^r_{d\ell}P_{\ell p}}
+                   {A^r_d+A^a_d}.
+\end{equation}
+Stable levels have $b=1$ and $P=0$. Capture and excitation into an
+autoionizing level are weighted by its stabilization probability;
+cascades into an autoionizing lower level carry that lower level's
+weight. The excitation fraction returning to a parent contributes
+to excitation-autoionization through
+\begin{equation}
+ \widetilde S_{\ell p}\mathrel{+}=
+ \widetilde q_{\ell d}P_{dp}e^{-(E_d-I_p)/T}.
+\end{equation}
+
+The folding is applicable when collisional rates out of autoionizing
+levels are small compared with their total decay rates. It represents
+the tested stabilization pathways in that limit. Capture followed
+by autoionization into another parent, and radiation emitted before
+nonstabilizing decay, are not recovered as separate outputs.
+Nonstabilizing levels are excluded from the folded level model.
+Two-photon rates contribute population losses, with the spectral
+qualification described in Section~\ref{sec:two-photon}.
+
+\begin{implnote}[Tests and resolution limits]
+\routine{read_fac} and \routine{_fold_autoionization} are checked with
+synthetic tables, nonrelativistic analytic averages, and an explicit
+autoionization matrix. The folding comparison asserts relative tolerance
+$10^{-6}$ on its toy grid without three-body recombination; it does not
+bound errors for other ions or densities. Paths to these tests are in
+Appendix~\ref{app:evidence}.
+Magnetic-sublevel tables are not read, and FAC parents have no LS term
+for the current inter-stage matching. Thermal inverse-rate relations
+cannot be applied unchanged to an arbitrary nonthermal distribution.
+\end{implnote}
+
+\begin{caveat}[Relativistic equilibrium consistency]
+FAC forward rates can use Maxwell--J\"uttner averages, while three-body
+inverse rates still use the nonrelativistic factor in Eq.~\eqref{eq:saha}.
+For classical free electrons the relativistic/nonrelativistic ratio
+of translational partition densities is
+\[
+ \mathcal R(\theta)=\sqrt{\frac{2}{\pi\theta}}\,
+       e^{1/\theta}K_2(1/\theta),\qquad \theta=\Te/(m_ec^2).
+\]
+With the ion partition functions fixed, relativistic detailed balance
+would multiply the three-body/ionization ratio by $1/\mathcal R$.
+The ratio tends to one at low temperature and is about 1.037 at 10 keV
+and 1.333 at 85 keV. The present combination does not establish
+relativistic Saha equilibrium; forward-average checks and
+nonrelativistic LTE checks test different limits.
+\end{caveat}
+
+\section{Charge-state kinetic-energy evolution}\label{sec:energy}
+
+The charge-state model can also transport the kinetic energy of a
+trace species interacting with a prescribed background. Once the
+charge-state fractions $x_z(t)$ are known, the energy associated
+with stage $z$, per modeled particle, is defined as
 \begin{equation}
  \mathcal E_z=\frac32x_zT_z.
 \end{equation}
-It transports that variable between charge states with the same ionization
-matrix and adds exchange with a prescribed background ion bath at $T_b$:
+Ionization and recombination transfer this energy with the same
+population generator. Exchange with background ions at temperature
+$T_b$ adds a relaxation term, giving
 \begin{equation}\label{eq:energy}
  \dot{\mathcal E}_z=\sum_{z'}M_{zz'}\mathcal E_{z'}
       -\frac23\nu_z\mathcal E_z+\nu_zx_zT_b.
 \end{equation}
-The convention for $\nu_z$ is an energy-transfer frequency:
-$\tfrac32x_z\dot T_z=-\nu_zx_z(T_z-T_b)$ when the population is fixed.
-The temperature-relaxation frequency is therefore $2\nu_z/3$.
-This is kinetic-temperature exchange, not a complete plasma energy equation
-including radiation, electron heating, and ionization-potential energy losses
-(Section~\ref{sec:eloss}).
+The coefficient $\nu_z$ is defined by
+$\tfrac32x_z\dot T_z=-\nu_zx_z(T_z-T_b)$ at fixed population, so
+the temperature-relaxation frequency is $2\nu_z/3$. In this convention
+$\mathcal E_z$ is in eV per modeled particle, $T_z,T_b$ are in eV,
+and $M,\nu_z$ are in s$^{-1}$. Multiplication by $e$ converts the
+energy to joules. The extension describes kinetic-temperature
+exchange with a fixed bath; a complete plasma energy equation would
+also include electron heating, radiation and ionization-potential
+energy (Section~\ref{sec:eloss}).
+
+\begin{caveat}[Required charge-state layout]
+The energy-transfer mapping assigns neutral scattering to entry 0
+and Coulomb charges $1,2,\ldots$ to subsequent entries. Its supported
+layout therefore has one population per consecutive charge stage,
+beginning with the neutral, with initial abundances and temperatures
+in the same order. Although the ionization-balance model supports
+more general retained manifolds, the energy wrapper has no mapping
+for several metastables sharing a charge or for an initial charge
+offset. Those layouts require an extension of the energy model.
+\end{caveat}
 
 \subsection{Charged and neutral energy transfer}
 
@@ -1566,222 +1971,31 @@ $\alpha_{\rm f}$ is the fine-structure constant. This elastic approximation
 does not include every long-range or inelastic energy-transfer mechanism.
 
 \begin{caveat}[Energy extension]
-The caller converts electron density from cm$^{-3}$ to m$^{-3}$ for the
-Debye helper. The energy solver uses one temperature/density point,
-reconstructs populations from stored eigenpairs, and integrates
-Eq.~\eqref{eq:energy} with BDF.
-A failed integration gives a warning with the solver message, and the
-stored times, abundances, energies and temperatures stop at the last time
-reached.
+The energy solver uses one plasma temperature/density point,
+converts density from cm$^{-3}$ to m$^{-3}$ for the Debye calculation,
+reconstructs populations from the stored eigenpairs and integrates
+Eq.~\eqref{eq:energy} with BDF. If integration fails, a warning
+reports the solver message and all stored histories terminate at
+the last reached time.
 \end{caveat}
 
-\section{Data products and external interfaces}\label{sec:interfaces}
+\section{Applicability and verification}\label{sec:limitations}
 
-\subsection{Array layout}\label{sec:arrays}
+The validity of a collisional-radiative calculation depends jointly
+on the plasma assumptions, the completeness of the atomic model and
+the numerical solution of its balance equations. The preceding
+derivations identify the assumptions associated with each reduction
+and observable; the principal qualifications are collected here.
 
-For an ordinary temperature--density grid, thermodynamic axes trail the
-physical indices: $(\ldots,N_T,N_n)$. Paired mode uses
-$(\ldots,N_{\rm pair})$, evaluating corresponding temperature and density
-entries rather than their Cartesian product. Typical arrays are
-\begin{align*}
- \code{pops}&:\ (N_e,N_{\rm driver},N_T,N_n),\\
- \code{pecs}&:\ (N_{\rm line},N_{\rm driver},N_T,N_n),\\
- \code{scd},\code{acd}&:\ (N_m,N_p,N_T,N_n),\\
- \code{qcd}&:\ (N_m,N_m,N_T,N_n),\\
- \code{xcd}&:\ (N_p,N_p,N_T,N_n).
-\end{align*}
-The paired layout removes one grid axis. An excited-level axis is not a
-physical bound-level index; use the stored level map. Likewise the driving
-column index combines several process types and does not universally mean
-an ionization parent. The index order of the effective coefficients is:
-
-\begin{table}[htbp]\centering\small
-\begin{tabularx}{\textwidth}{lXXl}\toprule
-Array & First index & Second index & Rate multiplier\\\midrule
-\code{scd} & source bound metastable & destination parent & $\nelec$\\
-\code{acd} & destination bound metastable & source parent & $\nelec$\\
-\code{ccd} & destination bound metastable & source CX parent & $\nh$\\
-\code{qcd} & source bound metastable & destination bound metastable & $\nelec$\\
-\code{xcd} & source parent & destination parent & $\nelec$\\\bottomrule
-\end{tabularx}
-\caption{Stored coefficient orientation. Equal matrix dimensions can conceal
-an accidental transpose, so checking shapes alone is insufficient.}
-\end{table}
-
-\subsection{ADF04, ADF11, ADF13, ADF15 and HDF5}
-
-ADF04 is a level-resolved atomic-data format, whereas ADF11 holds effective
-charge-state coefficients on temperature and density grids, made as described
-in Section~\ref{sec:adf11adas}. The ADF11 reader
-stores logarithmic data and the ionization-balance path interpolates the
-logged grids and coefficients before converting to physical values.
-File naming and block interpretation identify coefficient families.
-ADF13 holds S/XB ratios of selected lines in blocks like those of ADF15,
-each with its driver~\cite{adf13}; ColRadPy reads them and writes its own
-from the SCD and excitation PECs (Section~\ref{sec:sxb}).
-
-ADF15 records line photon emission coefficients with wavelength and driver
-identifiers. Its wavelength convention is Angstroms~\cite{adf15}, so a
-conversion from internal nm must occur exactly once. The number of output
-blocks must include every emitted line--driver pair; each block needs an
-unambiguous index and process/driver metadata. These are part of the scientific
-interface because a downstream reader can silently drop or misidentify lines.
-
-\begin{implnote}[Export and reading]
-The ADF15 wrapper converts nm to Angstroms once; the writer declares every
-line--driver block and assigns distinct selectors, and writes the ion field
-(\texttt{C + 2}) and a source member name, without which the ADAS reader stops.
-The ADF13 writer uses the same fields, with \texttt{INDM = T} for populations
-normalized to the whole ion and the driver index otherwise; the ADAS reader
-keeps three digits of the selector, so at most 999 blocks are read.
-The ADF11 constructor collects coefficient files before filling missing
-QCD/XCD arrays, so their order does not require SCD first. The readers follow
-the fixed fields of the ADAS specifications: ADF04 values are 8-character
-fields, so a negative value can follow the previous one without a space;
-ADF11 blocks are placed by their labels (IPRT, IGRD, JPRT, JGRD), whose order
-and meaning change with the class, including metastable resolved power files;
-each ADF13 block has its own grids and metastable. They were checked against
-the ADAS data collections: every ADF11 and ADF13 file, the condensed
-projection ADF17 files and a sample of ADF04 files from every collection.
-\end{implnote}
-
-The HDF5 dumping method uses an optional serialization dependency and can
-select PECs, GCR coefficients, and additional arrays. Record the data version,
-source file and hash, selected metastables, units, grid ordering, normalization
-convention, and any rate supplementation with each saved result.
-
-\subsection{How ADAS makes its ADF11 data}\label{sec:adf11adas}
-
-ADF11 is a derived format~\cite{adf11}: its coefficients, functions of the
-electron temperature and density, come from collisional-radiative models and
-are given by element at two levels of refinement~\cite{summers2006}. In the
-\emph{unresolved} or stage-to-stage data only the ground states of the ions
-are taken as dominant populations: these are conventional
-collisional-radiative (CR) coefficients, one per charge stage, of the classes
-ACD, SCD, CCD, PLT, PRB and PRC (for example \code{scd96}, \code{acd96}). In
-the \emph{metastable resolved} data the ground and the metastables of each ion
-may be dominant: these are the generalized collisional-radiative (GCR)
-coefficients of Section~\ref{sec:gcr}, the same classes with the block of each ion
-subdivided by metastable (and parent), plus QCD and XCD (for example
-\code{scd96r}, \code{qcd96r}, \code{xcd96r}). QCD and XCD exist only for GCR
-data, because they move population between the metastables of one stage or
-between parents, which a single population per stage does not have. Three codes
-make the GCR-project data (classes \code{96}). ADAS204~\cite{adas204} solves a bundle-$nS$ model and writes the
-condensed matrices that Section~\ref{sec:projection} projects onto the low
-levels. ADAS208~\cite{adas208} solves the model of an ADF04 file with that
-projection and partitions the reduced matrix into the coefficients above:
-the ionization of each level is that of the S lines of the file, or ECIP
-without them, optionally replaced by zero-density ADF07 rates for the
-metastables, and three-body recombination follows from it by detailed
-balance, as in ColRadPy. The results are stored per isoelectronic sequence
-(ADF10~\cite{adf10}) on the scaled grids $\Te/z_1^2$ and $\nelec/z_1^7$, $z_1$
-being the charge of the recombining ion, and ADAS404~\cite{adas404} makes the
-ADF11 files by cubic-spline interpolation in $z_1$, temperature and density.
-PRB does not come from ADAS208: it is the bundle-$n$ recombination power of
-ADAS204, the recombination continuum, bremsstrahlung weighted by spin system,
-the cascade and dielectronic stabilization, whereas \code{prb} in ColRadPy is
-the line power of the levels of the ADF04 file after capture only.
-
-The unresolved coefficients of the GCR project (classes \code{96}, and
-\code{93} from the earlier resolved data), although described as conventional
-CR data, are not made with a separate model: ADAS404 contracts the resolved
-ones with metastable fractions, Eq.~\eqref{eq:unresolved}. The contraction
-changes only the stages with more than one metastable: in the \code{96r} files
-these are, for example, He$^0$, Li$^+$, Be$^0$ and Be$^{2+}$, and all but the
-H-, Li- and Na-like stages of C, N, O, Ne and Si. The fractions are an ADF10
-class of their own (MET, ``equilibrium metastable fractions'',
-\texttt{adf10/met96/pj\#met96\_<seq>\#\#.dat}, written by ADAS208 for each
-ion), which holds the ratios $m_\rho=N_\rho/N_g$ to the ground (for Be$^0$
-$m_{^3\mathrm P}=1.49$ at 2\,eV) and which ADAS404 normalizes to fractions
-after interpolation. Other unresolved classes (\code{74}, \code{85},
-\code{89}, \code{92}, \code{12}, \code{50}) come from other codes without
-resolved data; the code that made a file is named in its comments.
-
-For line emission ``unresolved'' means the condensation onto the ground
-instead: ADAS's unresolved photon emissivity and S/XB files (prefixes
-\code{pju}, \code{llu}; \code{INDM = T}) come from an ADAS208 run with the
-ground as the only metastable and the populations normalized to the whole
-stage, its resolved ones (\code{pjr}, \code{llr}) from a run with the
-metastables. ColRadPy reproduces the former with the ground as its only
-metastable.
-
-\section{Analytic examples and checks}\label{sec:checks}
-
-\subsection{A two-level density scan}
-
-For a two-level ion with upward and downward coefficients $q_{01},q_{10}$
-and radiative rate $A$, the stationary, ion-total-normalized excited fraction is
-\begin{equation}
- f_1=\frac{\nelec q_{01}}{A+\nelec(q_{01}+q_{10})},\qquad
- \mathrm{PEC}_{10}=\frac{Aq_{01}}{A+\nelec(q_{01}+q_{10})}.
-\end{equation}
-At low density, PEC approaches $q_{01}$ and $f_1$ is proportional to density.
-At high density, $f_1\to q_{01}/(q_{01}+q_{10})$ while PEC falls inversely
-with density. The photon rate per emitting ion approaches $Af_1$, not zero.
-This distinction explains why a falling PEC is not itself vanishing emission.
-
-\begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/two_level.pdf}
-\caption{An analytic illustration with $A=10^7\,\mathrm{s}^{-1}$,
-$q_{01}=10^{-8}$ and $q_{10}=3\times10^{-8}$ cm$^3$/s. The dashed line is
-the high-density fraction $1/4$. These are illustrative coefficients, not
-a fit to a specific atom or an execution of the ColRadPy atomic-data path.}
-\end{figure}
-
-\subsection{A conservative chain and a slow mode}
-
-The generator in Eq.~\eqref{eq:chain} is closed and has a known exact
-solution. An independent SciPy matrix exponential reproduces it; the
-ColRadPy solver agrees with both it and the analytic
-solution while conserving population.
-
-\begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/chain.pdf}
-\caption{Equal-rate chain: solid curves are analytic populations; dashed
-curves are ColRadPy results. The right panel tests the conserved sum.
-Agreement includes the $t\ee^{-t}$ contribution from the defective basis.}
-\end{figure}
-
-A second generator, $C=[[-r,0],[r,0]]$ with $r=10^{-12}\,\mathrm{s}^{-1}$,
-has $N_0(10^{12}\,\mathrm s)=\ee^{-1}$ for $N(0)=(1,0)$.
-The source solver with a zero source reproduces this slow
-evolution and agrees with source-free dynamics.
-
-\subsection{XCD checked by direct elimination}
-
-The bundled Be II file is solved with metastables $[0,1]$, temperatures
-$[5,20]$ eV and densities $[10^{12},10^{14}]$ cm$^{-3}$, with both
-recombination mechanisms and ionization enabled. At the first grid point,
-form the parent block of Eq.~\eqref{eq:schur} using a linear solve rather
-than the stored inverse. Divide its off-diagonal rate by $\nelec$ and
-compare with stored XCD$[1,0]$. Both quantities are in cm$^3$/s; a separate
-noncontiguous-metastable test covers row selection.
-
-\begin{table}[htbp]\centering\small
-\input{figures/results.tex}
-\caption{Executed checks. The first two rows are dimensionless
-populations. Both XCD values have units cm$^3$/s.}
-\end{table}
-
-The figure script records the branch HEAD, working-tree status,
-package-module hashes, Python and library versions in \code{provenance.json}.
-Grid parameters and numerical results are recorded in \code{checks.json}.
-The analytic figures and checks establish specific limits and agreements.
-They are not a certification of all atomic datasets, an ADAS benchmark, or
-a reproduction of a particular tungsten dataset.
-
-\section{Validity boundaries and implementation checklist}\label{sec:limitations}
-
-\subsection{Physical assumptions}
-
-The model assumes a specified Maxwellian electron bath, rates appropriate
-to the supplied atomic resolution, and escaping photons. The quasistatic
-approximation additionally requires fast excited-state relaxation.
-Statistical LS multiplet splitting assumes the relevant coupling and
-population pattern. ECIP approximates missing ionization; extrapolation
-does not create new atomic accuracy. The energy extension describes trace
-species kinetics in a prescribed background. These assumptions are separate
-from implementation defects.
+The basic model assumes a prescribed electron bath and optically
+thin emission. Quasistatic reduction additionally requires separated
+relaxation times, LS splitting requires the specified coupling and
+sublevel populations, and kinetic-energy evolution assumes a trace
+species in a fixed background. Relativistic FAC forward rates have
+the equilibrium qualification discussed in Section~\ref{sec:fac}.
+Approximate completion and extrapolation increase data coverage,
+while introducing model choices whose effect must be assessed for
+the application.
 
 \subsection{Current limitations}
 
@@ -1790,29 +2004,375 @@ from implementation defects.
 \endfirsthead
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
-Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented; the ACD into Ne$^{+}$ differs from ADAS by 20--40\,\%; below the first ADF17 temperature the couplings are continued with estimated thresholds and limited power laws, and above the last one held at its values. & Section~\ref{sec:projection}\\
-Radiated power & \code{prb} is the line power of the ADF04 levels after capture; it does not include the recombination continuum, bremsstrahlung or the radiation of the projected shells that the ADAS PRB contains (1--8\,\% of it for Be I). & Section~\ref{sec:adf11adas}\\
+Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented. Below the ADF17 temperature grid, couplings use estimated thresholds and limited power laws; above it, edge values are held. These continuations and rejection tolerances need sensitivity checks. & Section~\ref{sec:projection}\\
+Radiated power & \code{prb} is the power of the explicit levels after capture; it omits the recombination continuum, bremsstrahlung and projected-shell radiation in ADAS PRB. Two-photon contributions have correct integrated energy but are not continuum spectra in the generic line outputs. & Sections~\ref{sec:two-photon}, \ref{sec:adf11adas}\\
+Population convention & Stored excitation responses may be normalized; resolved balance fractions refer to retained populations unless the excited populations are reconstructed. & Sections~\ref{sec:normalization}, \ref{sec:ion-fractions}\\
+Relativistic rates & Maxwell--J\"uttner forward averages are combined with nonrelativistic three-body detailed balance; relativistic Saha consistency is not established. & Section~\ref{sec:fac}\\
+Energy layout & One entry per consecutive charge stage beginning with the neutral is required by the energy-transfer mapping. & Section~\ref{sec:energy}\\
 Processes not modelled & Ionization from the stage below into the metastables (the ADF04 I lines; the ionization from the stage below of the GCR equations of Summers et al.), proton and other ion impact (P lines), and unresolved dielectronic satellite lines and the autoionization of levels of the ADF04 file (L lines and the AAUG values) are not modelled; \routine{read_adf04} skips the P, I and L lines with a warning. The electron energy loss, the radiated power of an element and GTN functions are not assembled. & Sections~\ref{sec:gcr}, \ref{sec:eloss}\\
 Coupling assumptions & Intercombination and $|\Delta L|>1$ lines are kept unsplit rather than split with a coupling model. & Section~\ref{sec:spectra}\\
 \bottomrule
 \end{longtable}
 
-The table is a guide to interpreting the current implementation. Before using a result,
-check coefficient signs, state and parent maps, column-sum conservation,
-population normalization, line-energy consistency, density powers, and the
-exported units. For a transient solve, compare against an independent matrix
-exponential at representative grid points and verify the initial condition.
-For a quasistatic solve, substitute the calculated excited populations back
-into the balance equation. Agreement with these identities does not establish
-the accuracy of the input atomic calculations, but a failure identifies a
-problem before comparison with an experiment.
+Verification begins with coefficient signs, state and parent mapping,
+column-sum conservation, density powers, population normalization,
+line-energy consistency and exported units. Transient calculations
+can be compared with an independent matrix exponential at
+representative grid points, including the initial state. Quasistatic
+populations can be substituted back into the excited balance
+equations. These identities test numerical and bookkeeping
+consistency independently of the accuracy of the input atomic data.
+
+\subsection{Analytic examples and checks}\label{sec:checks}
+
+The two-level example illustrates density dependence analytically,
+while the chain and direct XCD reduction test population evolution
+and effective-rate construction. The table reports the checks
+executed by the accompanying generator; the examples themselves
+appear beside their derivations in Sections~\ref{sec:matrix}
+and~\ref{sec:gcr}.
+
+\begin{table}[htbp]\centering\small
+\input{figures/results.tex}
+\caption{Executed checks. The first two rows are dimensionless
+populations. Both XCD values have units cm$^3$/s.}\label{tab:checks}
+\end{table}
+
+The figure script records the branch HEAD, working-tree status,
+package-module hashes, Python and library versions in \code{provenance.json}.
+It also hashes its bundled atomic input, the figure and build scripts,
+and the manual sources under \code{check_input_sha256} and
+\code{documentation_sha256}. These hashes identify the numerical example
+and documentation inputs.
+Grid parameters and numerical results are recorded in \code{checks.json}.
+The analytic figures and checks establish specific limits and agreements.
+They are not a certification of all atomic datasets or an ADAS benchmark.
 
 \appendix
+\section{Data products and external interfaces}\label{sec:interfaces}
+
+\subsection{Array layout}\label{sec:arrays}
+
+Physical indices precede the thermodynamic axes in the stored arrays.
+A Cartesian temperature--density grid has trailing shape
+$(N_T,N_n)$, while paired evaluation has one trailing axis
+$N_{\rm pair}$ and associates corresponding temperature and density
+entries. Representative layouts are
+\begin{align*}
+ \code{pops}&:\ (N_e,N_{\rm driver},N_T,N_n),\\
+ \code{pecs}&:\ (N_{\rm line},N_{\rm driver},N_T,N_n),\\
+ \code{scd},\code{acd}&:\ (N_m,N_p,N_T,N_n),\\
+ \code{qcd}&:\ (N_m,N_m,N_T,N_n),\\
+ \code{xcd}&:\ (N_p,N_p,N_T,N_n),\\
+ \code{rates['projection']['parent_coupling']}&:\ (N_p,N_p,N_T,N_n).
+\end{align*}
+An excited-level axis follows the reduced level map and is therefore
+distinct from the original bound-level numbering. Driver columns
+also distinguish excitation, recombination and CX contributions;
+their indices cannot all be interpreted as ionization parents.
+The orientations of the effective-coefficient arrays are listed below.
+
+\begin{table}[htbp]\centering\small
+\begin{tabularx}{\textwidth}{lXXl}\toprule
+Array & First index & Second index & Rate multiplier\\\midrule
+\code{scd} & source bound metastable & destination parent & $\nelec$\\
+\code{acd} & destination bound metastable & source parent & $\nelec$\\
+\code{ccd} & destination bound metastable & source CX parent & $\nh$\\
+\code{qcd} & source bound metastable & destination bound metastable & $\nelec$\\
+\code{xcd} & source parent & destination parent & $\nelec$\\
+\code{parent_coupling} & destination parent & source parent & $\nelec$\\\bottomrule
+\end{tabularx}
+\caption{Stored coefficient orientation. \code{parent_coupling} is the projected
+part $X^{\rm ind}$ of XCD in \code{rates['projection']}, transposed when it is
+added to \code{xcd}. Equal matrix dimensions can conceal an accidental
+transpose, so checking shapes alone is insufficient.}
+\end{table}
+
+\subsection{ADF04, ADF11, ADF13, ADF15 and HDF5}
+
+The ADAS formats distinguish level-resolved inputs from effective
+coefficients. ADF04 provides the atomic model of one ion, whereas
+ADF11 contains charge-state coefficients on temperature--density
+grids, produced as described in Appendix~\ref{sec:adf11adas}.
+The ADF11 reader retains logarithmic grids and coefficients;
+interpolation in the ionization-balance calculation precedes
+conversion to physical values. File families and block metadata
+identify the coefficient classes. ADF13 provides line-specific
+S/XB ratios and driver information~\cite{adf13}; ColRadPy reads
+these data and can generate them from SCD and excitation PECs
+(Section~\ref{sec:sxb}).
+
+ADF15 records photon emission coefficients with their wavelengths
+and driver identifiers. Its wavelength unit is the angstrom~\cite{adf15},
+requiring one conversion from the internal nm representation.
+Each emitted line--driver pair forms a separately indexed block
+with process and driver metadata. These conventions determine how
+downstream readers associate coefficients with physical transitions.
+
+\begin{implnote}[Export and reading]
+The ADF15 wrapper performs the nm-to-angstrom conversion, declares
+all line--driver blocks and writes distinct selectors, the ion field
+(for example \texttt{C + 2}) and source member name required by the
+ADAS reader. The ADF13 writer uses the same identification fields,
+with \texttt{INDM = T} for whole-ion normalization and the driver
+index otherwise. Its ADAS reader retains three selector digits,
+limiting readable output to 999 blocks.
+
+Input handling follows the corresponding fixed-field conventions:
+ADF04 uses 8-character value fields; ADF11 blocks are placed by
+their class-dependent IPRT, IGRD, JPRT and JGRD labels; each ADF13
+block carries its own grids and metastable identifier. ADF11 files
+are collected before missing QCD/XCD arrays are created, so SCD
+need not appear first. Bundled reader tests are identified in
+Appendix~\ref{app:evidence}; their coverage concerns the supplied
+fixtures rather than every possible collection or revision.
+\end{implnote}
+
+HDF5 serialization uses an optional dependency and can include PECs,
+GCR coefficients and additional arrays. A reproducible saved result
+also records the atomic-file version and hash, retained levels,
+units, grid ordering, population convention and any supplementary
+rate model.
+
+\subsection{Input routes and retained manifolds}\label{sec:inputroutes}
+
+\routine{ionization_balance} accepts coefficients derived from
+ADF04 models or precomputed ADF11/HDF5 data. Since retained
+manifolds differ between stages, a sequence such as
+$[\,[0,1],\,[0,1,2],]$ requires a ragged representation rather
+than a rectangular numeric array. Input-file order carries the
+charge-stage ordering and forms part of the calculation definition.
+Relevant implementation limits are collected in
+Section~\ref{sec:limitations}.
+
+\begin{implnote}[Constructor defaults]
+For ADF04, a flat metastable array selects levels in the first stage; later
+selections use the preceding SCD parent count. A per-stage list may have
+unequal lengths. Default initial abundances are sized after the GCR stages
+are loaded, including the final parent stage, and place all population in
+the first state. ADF11 and HDF5 source solves use the same default-abundance
+helper after their ionization matrix is constructed.
+\end{implnote}
+
+\section{Numerical methods for matrix evolution}\label{app:numerical-methods}
+
+\subsection{Constant sources and modal evaluation}
+
+For a diagonalizable generator $C=V\Lambda V^{-1}$, the
+source-free propagator is $V\ee^{\Lambda t}V^{-1}N(0)$.
+Writing the modal populations as $v=V^{-1}N$ and the transformed
+source as $c=V^{-1}s$, each component satisfies
+\begin{equation}
+ v_k(t)=v_k(0)\ee^{\lambda_kt}+c_k\phi(\lambda_k,t),\qquad
+ \phi(\lambda,t)=\begin{cases}
+  (\ee^{\lambda t}-1)/\lambda,&\lambda\ne0,\\t,&\lambda=0.
+ \end{cases}\label{eq:source-mode}
+\end{equation}
+Evaluation with \code{expm1} avoids cancellation in
+$\ee^{\lambda t}-1$ for small $|\lambda t|$. The same product
+sets the significance of a slow mode over the observation interval;
+a small rate alone is not a reason to discard that mode. A constant
+source can also be included through an augmented exponential,
+\begin{equation}\label{eq:augmented}
+ \begin{pmatrix}N(t)\\1\end{pmatrix}
+ =\exp\!\left[t\begin{pmatrix}C&s\\0&0\end{pmatrix}\right]
+                 \begin{pmatrix}N(0)\\1\end{pmatrix}.
+\end{equation}
+\subsection{Complex modes and real populations}
+
+A real, nonsymmetric rate matrix can have complex conjugate eigenvalues.
+For example, a conservative three-state cycle has
+\begin{equation}
+ C=\begin{pmatrix}-1&0&1\\1&-1&0\\0&1&-1\end{pmatrix},\qquad
+ \lambda=0,\ -\tfrac32\pm\tfrac{\sqrt3}{2}\,\mathrm i.
+\end{equation}
+Conjugate modes together produce real populations for real initial
+conditions and sources. Their imaginary parts cancel in the exact
+reconstruction, whereas discarding imaginary parts of the individual
+eigenvalues or eigenvectors changes the propagator. A small imaginary
+residual in the reconstructed population may be removed only after
+its numerical significance has been assessed. Real-arithmetic
+exponential methods avoid these complex intermediates.
+
+\subsection{Defective and ill-conditioned eigenbases}
+
+The equal-rate chain in Eq.~\eqref{eq:chain} illustrates a physical
+generator without a complete eigenbasis. Its Jordan block produces
+the $t\ee^{-t}$ term. A numerical eigenvector inverse can yield
+plausible populations while losing this contribution. Near such
+matrices, the conditioning of the eigenbasis controls reconstruction
+accuracy, motivating a stable matrix exponential when the modal
+representation is unreliable.
+
+\begin{implnote}[Transient algorithms]
+The transient solvers check eigenvector conditioning and compare selected
+populations against a matrix exponential. Untrusted points are recomputed
+with \routine{scipy.linalg.expm}; a constant source uses an augmented matrix.
+Real populations are returned, and slow physical modes are retained according
+to their evolution over the requested times rather than an absolute rate
+cutoff. The cached evaluator needs the original rate matrix to perform the
+same exponential fallback.
+\end{implnote}
+
+\subsection{Stationary numerical methods}
+
+For a particle-conserving matrix with nonnegative off-diagonal rates,
+the solver first attempts Grassmann--Taksar--Heyman
+elimination~\cite{gth}. Its use of off-diagonal rates avoids
+subtractive cancellation and can preserve very small stationary
+populations in suitable communicating systems. Its applicability
+still depends on representable rates and the elimination conditions;
+underflow, overflow and nonuniqueness in reducible systems remain
+possible. When this path is unavailable, the solver tests the
+smallest-magnitude eigenmode against residual and normalization
+criteria and replaces unreliable results with a normalized
+stationary solve. The ionization-balance wrapper uses the same routine.
+
+\section{How ADAS makes its ADF11 data}\label{sec:adf11adas}
+
+ADF11 archives effective coefficients for all charge stages of an
+element on electron-temperature and density grids~\cite{adf11}.
+Its unresolved representation has one population per stage and
+contains ACD, SCD, CCD, PLT, PRB and PRC. The metastable-resolved
+representation subdivides these classes by retained level and
+parent and adds QCD and XCD~\cite{summers2006}. These latter
+classes describe redistribution within a stage and consequently
+have no separate counterpart in a one-population stage model.
+
+\subsection{Production of GCR-project coefficients}
+
+The GCR-project class \code{96} is produced through a sequence of
+calculations. ADAS204~\cite{adas204} solves a bundle-$nS$ model
+and supplies the condensed matrices used for high-shell projection.
+ADAS208~\cite{adas208} combines that projection with an ADF04
+model and partitions the reduced matrix into effective coefficients.
+Ionization is taken from the file's S lines where available and
+from ECIP otherwise, with optional replacement of metastable rates
+by zero-density ADF07 data. Three-body recombination follows by
+detailed balance, as in ColRadPy.
+
+The coefficients are archived by isoelectronic sequence in
+ADF10~\cite{adf10} on scaled grids $\Te/z_1^2$ and
+$\nelec/z_1^7$, where $z_1$ is the charge of the recombining ion.
+ADAS404~\cite{adas404} constructs the element-specific ADF11 files
+by cubic-spline interpolation in charge, temperature and density.
+PRB follows a different production path: ADAS204 supplies the
+bundle-$n$ recombination power, including continuum radiation,
+spin-weighted bremsstrahlung, cascades and dielectronic stabilization.
+
+\subsection{XCD in the inspected ADAS208 implementation}
+
+The ADAS208 source inspected for this manual is
+\texttt{adas208.for}, version 1.23, dated 28 February 2020.
+Its parent cross-coupling multiplies ordinary-level ionization
+coefficients, in cm$^3$/s, by recombination-driven populations
+returned by \routine{B8STKE}. That routine documents these
+populations in cm$^3$, corresponding to normalization per
+$\nelec N_p$. The contraction lacks the factor $\nelec$ in
+Eq.~\eqref{eq:xcd}. The ADF04-level contribution is consequently
+scaled by $1/\nelec$, strongly suppressing it at plasma densities and leaving XCD
+dominated by the projected parent coupling.
+
+A comparison with the Be$^+$ ADF10 file
+\texttt{pj\#xcd96\_li21.dat} is consistent with this behavior in
+an earlier calculation. The file uses $z_1=2$ and was produced in
+2006 from \texttt{cpb03\_ls\#be1.dat}. For transfer from the
+1s2s $^3$S parent to 1s$^2$ $^1$S, its XCD agrees with ColRadPy's
+projected contribution alone to 0.3\,\% at the tabulated nodes
+between 8000 and 40000 K and between $1.28\times10^{11}$ and
+$1.28\times10^{14}$ cm$^{-3}$. Including ColRadPy's ordinary-level
+path gives 1.0--1.9 times the ADF10 value. In this example,
+dielectronic capture from the metastable parent strongly populates
+the 1s$^2nl$ levels, making the omitted density multiplier
+consequential. The implementation finding applies to the inspected
+source; the earlier data comparison is supporting numerical evidence.
+
+\subsection{Resolved and unresolved charge-state data}
+
+For the GCR-project classes \code{96} and the earlier \code{93},
+unresolved coefficients are obtained by contraction of the resolved
+coefficients rather than by an independent ground-only calculation.
+ADAS404 uses the metastable fractions in Eq.~\eqref{eq:unresolved}.
+Only stages with several retained metastables are affected. In the
+\code{96r} collections these include He$^0$, Li$^+$, Be$^0$ and
+Be$^{2+}$, and all stages of C, N, O, Ne and Si other than the bare
+nuclei and the H-, Li- and Na-like stages.
+
+The required MET ratios form an ADF10 class,
+\texttt{adf10/met96/pj\#met96\_<seq>\#\#.dat}, written by
+ADAS208. They are ground-relative ratios
+$\eta_\rho=N_\rho/N_g$; for example,
+$\eta_{^3\mathrm P}=1.49$ for Be$^0$ at 2 eV. ADAS404
+interpolates and normalizes them to metastable fractions before
+contraction. Other unresolved classes, including \code{74},
+\code{85}, \code{89}, \code{92}, \code{12} and \code{50},
+originate from other production codes, identified in the file comments,
+and need not have associated resolved data.
+
+\subsection{Resolved and unresolved emission data}
+
+For photon emissivity and S/XB data, the unresolved construction
+uses ground condensation. The ADAS prefixes \code{pju} and
+\code{llu}, with \code{INDM = T}, identify calculations with
+the ground as the sole retained level and whole-stage population
+normalization. Their resolved counterparts, \code{pjr} and
+\code{llr}, retain metastable populations. ColRadPy represents
+the unresolved construction by retaining only the ground, with
+the associated normalization described in
+Section~\ref{sec:normalization}.
+
 \section{Source-code map}\label{app:source}
 
 The map below is generated from the same source as the numerical checks. Paths are relative to the repository root.
 
 \input{figures/source_map.tex}
+\clearpage
+\section{Evidence and reproduction paths}\label{app:evidence}
+
+The \href{scripts/theory_examples.py}{figure and check generator}
+uses \texttt{examples/input/cpb03\_ls\#be1.dat} for the Be II XCD check and
+analytic matrices for the chain and slow mode. Its
+\href{figures/checks.json}{numerical results} and
+\href{figures/provenance.json}{provenance record} accompany this PDF.
+Run it from the repository root as described on the documentation page.
+
+The source-controlled tests below address complementary properties
+of the calculation. Their synthetic or bundled inputs make each
+comparison independently inspectable.
+\begin{itemize}
+\item \href{../../../tests/test_population_normalization.py}{Population normalization}:
+  excitation versus parent columns and the normalized direct ionization term.
+\item \href{../../../tests/test_read_fac.py}{FAC reader and rates}:
+  synthetic tables written by the tests, thermal averages and explicit versus
+  folded autoionization (\code{FoldingTests.test_explicit_autoionization},
+  asserted relative tolerance $10^{-6}$).
+\item \href{../../../tests/test_solver.py}{Matrix solvers} and
+  \href{../../../tests/test_lte_populations.py}{LTE helpers}:
+  analytic/exponential comparisons and nonrelativistic equilibrium relations.
+\item \href{../../../tests/test_rate_interpolation.py}{Rate interpolation},
+  \href{../../../tests/test_ionization_placeholders.py}{placeholder filtering}
+  and \href{../../../tests/test_projection.py}{projection}:
+  the implemented interpolation, rejection and continuation policies.
+\item Reader fixtures in
+  \href{../../../tests/test_read_adf04.py}{ADF04},
+  \href{../../../tests/test_adf11.py}{ADF11},
+  \href{../../../tests/test_read_adf13.py}{ADF13},
+  \href{../../../tests/test_read_adf17.py}{ADF17} and
+  \href{../../../tests/test_read_adf18.py}{ADF18} tests.
+\end{itemize}
+Individual checks can be reproduced from the repository root. For example,
+the FAC tests are run with
+\begin{quote}\small
+\code{python -m pytest tests/test_read_fac.py -q}
+\end{quote}
+An asserted tolerance specifies acceptance for the stated test and
+reference; it is not an error bound over physical atomic datasets.
+
+Reproduction of an external benchmark additionally requires the
+exact script and configuration, atomic-file identifiers and hashes,
+code revision, population conventions, grids, reference quantities
+and numerical outputs.
+
 \clearpage
 \begin{thebibliography}{9}
 \bibitem{johnson} C. A. Johnson, S. D. Loch and D. A. Ennis,
@@ -1860,11 +2420,11 @@ manual. The recorded HEAD, source-file hashes and runtime versions are in
 of Physics} \textbf{86}, 675 (2008).
 \href{https://doi.org/10.1139/P07-197}{doi:10.1139/P07-197};
 \url{https://github.com/flexible-atomic-code/fac}.
-\bibitem{mewe} R. Mewe, ``Interpolation formulae for the electron impact
-excitation of ions in the H-, He-, Li-, and Ne-sequences,'' \emph{Astronomy
-and Astrophysics} \textbf{20}, 215 (1972).
 \bibitem{drake} G. W. F. Drake, ``Spontaneous two-photon decay rates in
 hydrogenlike and heliumlike ions,'' \emph{Physical Review A} \textbf{34}, 2871
 (1986).
+\bibitem{gth} W. K. Grassmann, M. I. Taksar and D. P. Heyman,
+``Regenerative analysis and steady state distributions for Markov chains,''
+\emph{Operations Research} \textbf{33}, 1107--1116 (1985).
 \end{thebibliography}
 \end{document}

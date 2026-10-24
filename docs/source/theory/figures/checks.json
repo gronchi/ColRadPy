@@ -18,8 +18,8 @@
     0.36787944117144233,
     0.6321205588285577
   ],
-  "be1_xcd_development_cm3_s": 3.8811279762774735e-12,
-  "be1_xcd_schur_cm3_s": 3.8811279762774735e-12,
+  "be1_xcd_development_cm3_s": 3.88112181161119e-12,
+  "be1_xcd_schur_cm3_s": 3.881121811611189e-12,
   "be1_density_cm-3": 1000000000000.0,
   "be1_temperature_eV": 5.0,
   "be1_metastables": [

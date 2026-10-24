@@ -136,6 +136,16 @@ def examples():
     (OUT / "results.tex").write_text("\n".join(table) + "\n", encoding="utf-8")
 
     source_files = sorted((ROOT / "colradpy").glob("*.py"))
+    check_inputs = [
+        Path(__file__).resolve(),
+        ROOT / "examples/input/cpb03_ls#be1.dat",
+    ]
+    documentation_files = [
+        THEORY / "ColRadPy_theory_manual.tex",
+        THEORY / "scripts/build_theory_manual.py",
+        THEORY.parent / "theory_manual.rst",
+        ROOT / "pyproject.toml",
+    ]
     provenance = {
         "git_branch": branch,
         "git_head": git("rev-parse", "HEAD"),
@@ -145,6 +155,10 @@ def examples():
         "source_import": str(Path(sys.modules["colradpy"].__file__).relative_to(ROOT)),
         "source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                           for path in source_files},
+        "check_input_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+                               for path in check_inputs},
+        "documentation_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                 for path in documentation_files},
     }
     (OUT / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
 

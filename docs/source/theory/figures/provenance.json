@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "3976a39647a1d82ffb17b387aa9c72eebb60541f",
+  "git_head": "9b3df28d77554cdf87d9736719e441f7c2121640",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -10,17 +10,17 @@
   "source_sha256": {
     "colradpy\\__init__.py": "5ed21e52614b13bc602d6a1340096708a1e6d14152b61e30141399038a6a4201",
     "colradpy\\adf04_file_paths.py": "82eeb13f56c81c89d170e5d9812811981ee2ce8683827af070f465b5eb408e2c",
-    "colradpy\\burgess_tully_rates.py": "3c7a65f9e36cc6e1864ff1587d081d94e372d7a376e8800fde41b8b1b5b4c4b8",
-    "colradpy\\colradpy_class.py": "81eb9af4efcadbe0d6f846f744f1c901f74e265aa3d3d6bb474aba62068d5bc6",
+    "colradpy\\burgess_tully_rates.py": "92446d71fa7797e7e433021a319a491d91992c12f31a1ab4cc49ea942e9bc121",
+    "colradpy\\colradpy_class.py": "6a5613a2561ccfe0f3dbe82fa845f3f7d41da334c6ac37b5c72958f6bf6003bd",
     "colradpy\\colradpy_utility.py": "ec2faa8f789398c284226bc5c7e2ce78afef828a7189ff887b894c56b9a4d200",
     "colradpy\\convert_eissner.py": "514325a62db0e13e533492bbc02cb6a4ca807ae2810cd2c9bc02bb6f2aa1b503",
     "colradpy\\convolve_eedf.py": "af961883b6c397992c7acfda376afc29774e1761363e34b7fbb34b20922d9ef7",
-    "colradpy\\ecip_rates.py": "a3dba0fbbb707f27afb014d794e059337daf065659f74a51b5a8108183b537f1",
+    "colradpy\\ecip_rates.py": "5d9cc1c1e473c611e5dca41d9c91c21156df2464b1148fa6870c7bed1692564e",
     "colradpy\\energy_balance.py": "57ffc22dd742ba87ff6a528a03d51692a718638df41992e91b4c13c891209407",
-    "colradpy\\ionization_balance_class.py": "9a18e983a92fb539aeaef389c5c315cdb7db90ac539125d2c3be432477419975",
+    "colradpy\\ionization_balance_class.py": "04a0482b8a32374d04715f9cc72d89dbbca09f5c4b1d86c1c8b9c1d684fae99e",
     "colradpy\\nist_read.py": "9ae562f04023be028920c36900dd4c1829501e09f27cf8edb03550219e19a004",
     "colradpy\\nist_read_txt.py": "d21b8e32c85e4a3d5842932e2af61ee8f592c57f4199e1bdd29effa411b5367e",
-    "colradpy\\projection.py": "fd805421ae21cdc7cd2a62467971ecc819c510005ca93deca2375f551e4f20c8",
+    "colradpy\\projection.py": "c4b5b101d05698762cae4da0da5c60e017da22a0fe232732ea1ae8979744ef5d",
     "colradpy\\r8necip.py": "cb180771317b4ce2b36e0c5186ed87b2b56088591ee6143e323d10c03cb5a476",
     "colradpy\\r8yip.py": "b1128ed23a9bf77974b48b85800b3bd4032a5ceccd0ea3c1ced3f483c564fb36",
     "colradpy\\read_adf04_py3_class.py": "6b74e149c310e95fef79813b8c08db3f1eef8d6fc209a736b66adee93453848f",
@@ -28,11 +28,21 @@
     "colradpy\\read_adf13.py": "fa4660ddaeedd47460f9d0fbc98cb812ab66c749a6e8864c844a2a71f0791242",
     "colradpy\\read_adf17.py": "9e9cd3d6034e0e8f17727912a8b823016bfa7de50dabe042aeb6e313eece82ca",
     "colradpy\\read_adf18.py": "34c9a67140dda0faecdf3651b3f29b1ab377a79ac2e683bbcd3ed553c79529e7",
-    "colradpy\\read_fac.py": "3409f0a2fbdc35b01ca8818e47f6be65d596f896cbf7e09da32d6e3d684d65e0",
+    "colradpy\\read_fac.py": "3872a527f8cb917634a3366f538dff1fc313f65e0399e4af66cc654be3b09d75",
     "colradpy\\saha_boltzmann_lte_pops.py": "2cb47c53cf733d6f6f35f9f5c504f8237629391ee8ec552963ec2e9a05ca69ce",
     "colradpy\\solve_matrix_exponential.py": "7e2ac430e41f8c535c955903d64cbfca8fe206816416f73dd2110e4acdd18412",
     "colradpy\\split_multiplet.py": "03017da8a7f00ce94e9bca567a98fe1b11f41e29be46245027103ccec2ac8a79",
     "colradpy\\write_adf13.py": "da9b7602eec6e71a7e5cbdb9fd2cd5e9c5e0966ecdc99af2c4bab9b0d6340943",
     "colradpy\\write_adf15.py": "ffbe087174fd642c0e65a1fa4e354a3945d7aef66d0df10c34f6cfd4bc8b0fbf"
+  },
+  "check_input_sha256": {
+    "docs\\source\\theory\\scripts\\theory_examples.py": "373a6fd68bc576905990c5d2a869c566c86a1a5461f381a8ed0e69c8bd882302",
+    "examples\\input\\cpb03_ls#be1.dat": "1fb3ebd7d0934024800b102ae269bdbeca05fdc29cd80dde80b14dc84cfc433c"
+  },
+  "documentation_sha256": {
+    "docs\\source\\theory\\ColRadPy_theory_manual.tex": "4e3ce9d44ccdd35d3b7bedda4567ab7a44b3353e78e81bdb7ec71fa58a6729d8",
+    "docs\\source\\theory\\scripts\\build_theory_manual.py": "ce727677c8f00123b4376e60acdd339ee99165545cfd304743556a04ee6f578f",
+    "docs\\source\\theory_manual.rst": "8a8c7b63332e7cb84f1e79c9816c222c81389a1db621d8a11fd52adfbb1c9b48",
+    "pyproject.toml": "9770ca65eefddfc5a432dea3034fc0bea4aee63682da87c6d7ea6c9b4b86c865"
   }
 }
