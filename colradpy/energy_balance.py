@@ -85,21 +85,31 @@ class energy_balance(object):
         self.data["user"]["init_temp"] = init_temp
 
 
-    def solve(self, n0=np.array([]), T0=np.array([]), td_t=np.array([])):
+    def solve(self, n0=np.array([]), T0=np.array([]), td_t=np.array([]), rtol=1e-8, atol=None):
         """
         Solves the time-dependent energy balance given initial populations and temperatures
 
         :param n0: The initial fractional abundance of each charge state at t=0
         :type n0: float array
-        
+
         :param T0: The intial temperature in (eV) of each charge state at t=0
         :type T0: float array
 
         :param td_t: Solution times
         :type td_t: float array
 
-        populates the abundances, energies, and temperatures for all solution times; the
-        temperature of a charge state without population is NaN
+        :param rtol: Relative tolerance of the integrated energies
+        :type rtol: float
+
+        :param atol: Absolute tolerance of the integrated energies 3/2 n T (eV); None for 1e-12
+                     of 3/2 T_max, with T_max the larger of the ion temperature and the initial
+                     temperatures
+        :type atol: float
+
+        populates the abundances, energies, and temperatures for all solution times. The
+        temperature of a charge state is NaN where its abundance is below min_abundance =
+        1e4 atol / (3/2 T_max) (1e-8 with the default atol), also stored: there its energy is
+        too close to the absolute tolerance for the temperature to be resolved
         """
         # Set default parameter values
         if(n0.size < 1):
@@ -115,6 +125,14 @@ class energy_balance(object):
 
         # Calculate initial total energy of each charge state
         E0 = 3/2 * n0 * T0
+
+        # Largest energy of a charge state of unit abundance: the collisions heat it at most to
+        # the ion temperature, unless it starts hotter
+        energy_scale = 3/2 * np.max(np.r_[self.data["user"]["ion_temp"], T0])
+        if energy_scale <= 0:
+            energy_scale = 3/2 * self.data["user"]["electron_temp"]
+        if atol is None:
+            atol = 1e-12 * energy_scale
 
         # Set up the energy matrix to track energy transfer due to ionization/recombination processes
         self.energy_matrix = (
@@ -141,10 +159,11 @@ class energy_balance(object):
                              self.ion_balance.data["user"]["dens_grid"]),
         )
 
-        # Calculate solution using scipy solver
+        # Calculate solution using scipy solver. Its default tolerances (rtol 1e-3, atol 1e-6)
+        # left temperatures of charge states with abundances above 1e-6 off by up to 10%
         sol = solve_ivp(
             self._evolve_energy, t_span=[0, td_t[-1]], t_eval=td_t, y0=E0,
-            args=(pops_fun,), method="BDF",
+            args=(pops_fun,), method="BDF", rtol=rtol, atol=atol,
         )
 
         # If the integration failed, the solution only reaches part of the requested times,
@@ -163,11 +182,15 @@ class energy_balance(object):
         self.data["processed"]["time"] = np.asarray(td_t)[:num_times]
         self.data["processed"]["abundances"] = self.ion_balance.data["processed"]["pops_td"][:, :num_times, 0, 0]
         self.data["processed"]["energies"] = sol.y
-        # charge states without population have no temperature (NaN)
+        # Below min_abundance the energy of a charge state is within 1e4 atol of zero and its
+        # temperature, energy / (3/2 abundance), is integration noise (e.g. -1800 eV for an
+        # abundance of 1e-17), so it is NaN, as for charge states without population
         abundances = self.data["processed"]["abundances"]
+        min_abundance = 1e4 * atol / energy_scale
+        self.data["processed"]["min_abundance"] = min_abundance
         self.data["processed"]["temperatures"] = np.divide(
             self.data["processed"]["energies"], 3/2 * abundances,
-            out=np.full(np.shape(abundances), np.nan), where=abundances > 0,
+            out=np.full(np.shape(abundances), np.nan), where=abundances >= min_abundance,
         )
         self.data["processed"]["nfev"] = sol.nfev
         self.data["processed"]["status"] = sol.status

@@ -114,8 +114,37 @@ class EnergyBalanceTests(unittest.TestCase):
         empty = processed["abundances"] <= 0
         self.assertTrue(empty[:, 0].any())
         self.assertTrue(np.isnan(processed["temperatures"][empty]).all())
-        self.assertTrue(np.isfinite(processed["temperatures"][~empty]).all())
+        resolved = processed["abundances"] >= processed["min_abundance"]
+        self.assertTrue(np.isfinite(processed["temperatures"][resolved]).all())
         np.testing.assert_allclose(processed["temperatures"][0, 0], 1.0)  # init_temp
+
+    def test_temperatures_below_the_tolerance(self):
+        # The temperature of a barely populated charge state is its energy, integration noise
+        # near the absolute tolerance, over 3/2 its abundance: C at 1e-17 gave -1800 eV.
+        balance = make_balance(10.0, 1e13)
+        balance.ion_balance.data["user"]["soln_times"] = np.array([1e-7, 1e-3, 1e-1])
+        balance.solve()
+        processed = balance.data["processed"]
+        # 1e-12 of 3/2 T_max = 15 eV, the default atol, times 1e4, over 15 eV
+        np.testing.assert_allclose(processed["min_abundance"], 1e-8)
+        abundances = processed["abundances"]
+        self.assertLess(abundances[2, 0], 1e-8)    # about 1e-14 after 1e-7 s
+        self.assertGreater(abundances[1, 0], 1e-8)
+        self.assertTrue(np.isnan(processed["temperatures"][2, 0]))
+        self.assertTrue(np.isfinite(processed["temperatures"][abundances >= 1e-8]).all())
+
+    def test_default_tolerances_converge(self):
+        # solve_ivp's defaults (rtol 1e-3, atol 1e-6 eV) left the temperatures of carbon in a
+        # 100 eV plasma up to 10% off for abundances above 1e-6.
+        processed = []
+        for options in ({}, {"rtol": 1e-12, "atol": 1e-18}):
+            balance = make_balance(10.0, 1e13)
+            balance.solve(**options)
+            processed.append(balance.data["processed"])
+        default, converged = processed
+        resolved = default["abundances"] >= default["min_abundance"]
+        np.testing.assert_allclose(default["temperatures"][resolved],
+                                   converged["temperatures"][resolved], rtol=1e-6)
 
     def test_module_example(self):
         # The example run as __main__ called plasma_energy_transfer_frequency without
