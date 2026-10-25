@@ -31,6 +31,7 @@ The tutorial covers the following topics:
 * `Projection of the high n-shells`_
 * `Atomic data from the Flexible Atomic Code`_
 * `Ionization Balance`_
+* `Opacity of the Lyman lines`_
 
 
 Installing ColRadPy
@@ -893,3 +894,146 @@ The steady-state solution as a function of electron temperature is shown below.
 .. figure:: images/be_ion_bal_ind_time.png
    :scale: 50 %
    :alt: Be steady-state ionization balance
+
+
+Opacity of the Lyman lines
+==========================
+In dense, cold plasmas, such as detached divertors, the resonance lines of hydrogen are absorbed
+again by ground-state atoms before they leave the plasma. ColRadPy describes this with escape
+factors (``colradpy.escape_factors`` and the theory manual). The absorption is treated as negative
+emission: the populations are calculated with the A-values of the thick lines multiplied by the
+population escape factor :math:`\theta_P`. The radiance along a line of sight through the centre
+of the plasma is that of the optically thin A-values times the line escape factor
+:math:`\theta_L`. Both depend on the line profile and on the optical depth at the line centre from
+the centre to the edge of the plasma, :math:`\tau_0`. The ``opacity`` argument gives the densities
+of the absorbing levels (cm-3), the distance ``length`` from the centre to the edge (cm), the
+``temperature`` (eV) and ``mass`` (amu) of the absorbers, and optionally the ``geometry``
+(``'cylinder'``, ``'slab'`` or ``'sphere'``), the ``profile`` (``'doppler'``, or ``'voigt'`` with
+the natural widths) and the ``position`` of :math:`\theta_P` (``'average'`` over the volume, the
+default, or ``'centre'``).
+
+The example follows the one of ADAS214 (``run_adas214`` of the ADAS Python library): H I in the
+conditions of the ASDEX Upgrade divertor, with 1e14 cm-3 hydrogen atoms in the ground state at
+23010 K in a cylinder of radius 7.5 cm, an electron temperature of 1 eV and an electron density of
+1e14 cm-3. Its n-resolved H I data are downloaded from OPEN-ADAS.
+
+.. code-block:: python
+   :linenos:
+
+   from pathlib import Path
+   from urllib.request import urlretrieve
+   import numpy as np
+   import matplotlib.pyplot as plt
+   from scipy import constants
+   from colradpy import colradpy
+   from colradpy.escape_factors import population_escape_factor, line_escape_factor
+
+   #n-resolved H I data of the ADAS214 example, from OPEN-ADAS
+   h_file = 'copha#h_bn#97h.dat'
+   if not Path(h_file).exists():
+       urlretrieve('https://open.adas.ac.uk/download/adf04/copha][h/copha][h_bn][97h.dat', h_file)
+
+   temp = np.array([1.])   #electron temperature (eV)
+   dens = np.array([1e14]) #electron density (cm-3)
+   #absorbers: 1e14 cm-3 H atoms in the ground state at 23010 K, in a cylinder of radius 7.5 cm
+   opacity = {'length': 7.5, 'densities': {0: 1e14}, 'mass': 1.008,
+              'temperature': 23010*constants.k/constants.e, 'geometry': 'cylinder'}
+
+   h_thin = colradpy(h_file, np.array([0]), temp, dens)
+   h_thin.solve_cr()
+   h_thick = colradpy(h_file, np.array([0]), temp, dens, opacity=opacity)
+   h_thick.solve_cr()
+
+   escape = h_thick.data['rates']['escape']
+   lines = {'Ly-alpha': (1, 0), 'Ly-beta': (2, 0), 'H-alpha': (2, 1)} #(upper, lower) levels
+   for name, levels in lines.items():
+       centre = population_escape_factor(escape['tau0'][levels], 'cylinder', position='centre')
+       print(f"{name:8s} tau0 {escape['tau0'][levels]:6.2f}, theta_p {escape['theta_p'][levels]:.4f}"
+             f" (centre {centre:.4f}), theta_l {escape['theta_l'][levels]:.4f}")
+   #Ly-alpha tau0  29.19, theta_p 0.0407 (centre 0.0077), theta_l 0.0413
+   #Ly-beta  tau0   4.67, theta_p 0.1914 (centre 0.0724), theta_l 0.1974
+   #H-alpha  tau0   0.00, theta_p 1.0000 (centre 1.0000), theta_l 1.0000
+
+   #populations of n = 2-5 with opacity relative to the optically thin ones
+   print(np.round(h_thick.data['processed']['pops'][:, 0, 0, 0]/
+                  h_thin.data['processed']['pops'][:, 0, 0, 0], 2))
+   #[19.18  5.57  5.39  5.48]
+
+Only the lines that end on a level of ``densities`` are thick, here the Lyman lines; H-alpha
+stays thin. Ly-alpha keeps 4% of its photons, so its upper level n = 2 is 19 times more populated
+than without opacity. Ly-beta is less thick. Its absorbed photons excite n = 3 again, which then
+also decays through H-alpha, and the populations from n = 3 up are 5.5 times higher.
+``position='centre'`` gives the escape factor at the centre of the plasma, as ADAS214 does. It is
+several times smaller than the average over the volume, because a photon emitted at the centre
+has to cross the whole radius, while those emitted near the edge leave easily. The ADAS214
+example also has a parabolic emission profile, a Voigt profile whose Lorentzian width is 0.14
+times the Doppler width, and a cylinder of finite length (aspect ratio 5), which ColRadPy does not
+model, so its escape factors differ from these.
+
+The optical depth is proportional to the density of the absorbers, so the escape factors at other
+densities follow from :math:`\tau_0` with the functions of ``colradpy.escape_factors``. The grey
+line marks the density of the example.
+
+.. code-block:: python
+   :linenos:
+
+   n_ground = np.geomspace(1e10, 1e16, 61) #H ground-state density (cm-3)
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for name, color in (('Ly-alpha', 'C0'), ('Ly-beta', 'C1')):
+       tau0 = escape['tau0'][lines[name]]*n_ground/opacity['densities'][0]
+       ax.plot(n_ground, population_escape_factor(tau0, 'cylinder'), color=color,
+               label=name + r' $\theta_P$')
+       ax.plot(n_ground, population_escape_factor(tau0, 'cylinder', position='centre'),
+               color=color, linestyle='--', label=name + r' $\theta_P$ centre')
+       ax.plot(n_ground, line_escape_factor(tau0), color=color, linestyle=':',
+               label=name + r' $\theta_L$')
+   ax.axvline(opacity['densities'][0], color='0.6', linewidth=0.8)
+   ax.set(xscale='log', yscale='log', ylim=(1e-4, 2), xlabel='H ground-state density (cm$^{-3}$)',
+          ylabel='Escape factor (-)', title='Cylinder, $R$ = 7.5 cm, $T$ = 23010 K')
+   ax.legend(fontsize='x-small', ncols=2)
+
+.. figure:: images/h0_escape_factors.png
+   :scale: 50 %
+   :alt: Escape factors of Ly-alpha and Ly-beta against the H ground-state density
+
+The PECs change with the populations, so the model is solved again for each density of the
+absorbers. ``processed['pecs']`` are the net PECs, with the A-values times :math:`\theta_P`, and
+``processed['pecs_los']`` those of the radiance along the line of sight through the centre, with
+the thin A-values times :math:`\theta_L`, which a spectrometer looking through the centre of the
+plasma measures. The two are the same for thin lines. The figure shows the excitation PECs along
+the line of sight relative to the thin ones.
+
+.. code-block:: python
+   :linenos:
+
+   pec_levels = h_thin.data['processed']['pec_levels'].tolist()
+   pec_ind = {name: pec_levels.index(list(levels)) for name, levels in lines.items()}
+   n_scan = np.geomspace(1e10, 1e16, 25)
+   ratio = {name: [] for name in lines}
+   for n_h in n_scan:
+       h_scan = colradpy(h_file, np.array([0]), temp, dens,
+                         opacity={**opacity, 'densities': {0: n_h}})
+       h_scan.solve_cr()
+       for name, ind in pec_ind.items():
+           ratio[name].append(h_scan.data['processed']['pecs_los'][ind, 0, 0, 0]/
+                              h_thin.data['processed']['pecs'][ind, 0, 0, 0])
+
+   fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
+   for name in lines:
+       ax.plot(n_scan, ratio[name], label=name)
+   ax.axhline(1, color='0.6', linewidth=0.8)
+   ax.set(xscale='log', yscale='log', xlabel='H ground-state density (cm$^{-3}$)',
+          ylabel='PEC / thin PEC (-)', title='$T_e$ = 1 eV, $n_e$ = 1e14 cm$^{-3}$, excitation')
+   ax.legend(fontsize='small')
+
+.. figure:: images/h0_opacity_pecs.png
+   :scale: 50 %
+   :alt: Ly-alpha, Ly-beta and H-alpha PECs with opacity relative to the thin PECs
+
+While the trapping is weak, an absorbed photon is emitted again until it leaves the plasma, and
+the lines keep their strength. Ly-beta first rises by up to 20%, as n = 3 is also excited from the
+more populated n = 2. Each time a Ly-beta photon is absorbed, n = 3 can decay through H-alpha
+instead, so with stronger trapping Ly-beta falls and H-alpha rises: 5.6 times at the density of
+the example and 22 times at 1e16 cm-3. Ly-alpha falls when the collisions of n = 2 compete with
+its reduced decay. The densities of the absorbers are inputs: ColRadPy does not adjust them to
+the populations it calculates.
