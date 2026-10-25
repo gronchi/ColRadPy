@@ -9,9 +9,9 @@ repository root, where they find the bundled adf04 files in ``examples/input``; 
 examples are in the ``examples`` folder. The figures of this page are made by running its code
 blocks in order with ``python docs/source/scripts/tutorial_figures.py``.
 
-For an introduction to CR theory see the ColRadPy paper (:download:`colradpy_paper.pdf
-<files/colradpy_paper.pdf>`, Johnson et al. 2019) and Summers et al. (2006); the
-:doc:`theory manual <theory_manual>` develops the equations that ColRadPy solves.
+For an introduction to CR theory see the ColRadPy paper (`colradpy_paper.pdf
+<files/colradpy_paper.pdf>`__, Johnson et al. 2019) and Summers et al. (2006); the
+`theory manual <theory_manual.rst>`__ develops the equations that ColRadPy solves.
 
 Many plasmas of interest, fusion edge plasmas among them, are neither in local thermodynamic
 equilibrium (LTE) nor in the coronal (low-density) limit. Their level populations depend on the
@@ -37,7 +37,7 @@ The tutorial covers the following topics:
 Installing ColRadPy
 ===================
 ColRadPy needs Python 3 with NumPy, SciPy and matplotlib.
-From a clone of the repository, install it in editable mode (see :ref:`installation`):
+From a clone of the repository, install it in editable mode (see `Installation <installation.rst>`__):
 
 .. code-block:: bash
 
@@ -116,9 +116,9 @@ plasma conditions. Once the excited levels have relaxed, it agrees with the quas
 Running ColRadPy
 ===================
 
-:ref:`ColRadPy <colradpy>` needs the following inputs. The basic quasistatic run, discussed first,
-is sufficient for most users. Once the code runs, its data are stored in the dictionary ``.data``,
-whose entries are documented :ref:`here <colradpy_dict>`.
+`ColRadPy <api/colradpy_class.rst>`__ needs the following inputs. The basic quasistatic run,
+discussed first, is sufficient for most users. Once the code runs, its data are stored in the
+dictionary ``.data``, whose entries are documented `here <dictionary.rst>`__.
 
 * Atomic data input file - an ADF04 file (or the dictionary that ``colradpy.read_fac`` makes).
 
@@ -169,12 +169,13 @@ the absolute values of the PECs and their ratios.
 
 ``be`` is now a solved ``colradpy`` object. The results that needed the solution of the CR
 equations are in the ``be.data['processed']`` sub dictionary. The methods of the class are
-:ref:`documented here <colradpy>`. ``solve_cr()`` runs the steps below, which can also be run one
-at a time.
+`documented here <api/colradpy_class.rst>`__. ``solve_cr()`` runs the steps below, which can also
+be run one at a time.
 
-.. hidden-code-block:: python
+.. tutorial: not run
+
+.. code-block:: python
     :linenos:
-    :label: Show the steps of solve_cr()
 
     #what solve_cr() does
     # 1. make the rates from the adf04 file or internally (ECIP, three-body
@@ -430,7 +431,7 @@ This example uses Be II, because the next charge state, Be III, has two metastab
 to show the QCD between two retained levels: it is not metastable, and its QCD to the ground is
 dominated by its radiative decay divided by the density, A/ne. Remember the call from before for Be I.
 The coefficients are stored as ``qcd[from, to]``, ``scd[metastable, parent]``,
-``acd[metastable, parent]`` and ``xcd[from, to]`` (see the :ref:`dictionary <colradpy_dict>`).
+``acd[metastable, parent]`` and ``xcd[from, to]`` (see the `dictionary <dictionary.rst>`__).
 
 .. code-block:: python
    :linenos:
@@ -921,14 +922,14 @@ In dense, cold plasmas, such as detached divertors, the resonance lines of hydro
 again by ground-state atoms before they leave the plasma. ColRadPy describes this with escape
 factors (``colradpy.escape_factors`` and the theory manual). The absorption is treated as negative
 emission: the populations are calculated with the A-values of the thick lines multiplied by the
-population escape factor :math:`\theta_P`. The radiance along a line of sight through the centre
+population escape factor θ\ :sub:`P`. The radiance along a line of sight through the centre
 of the plasma is that of the optically thin A-values times the line escape factor
-:math:`\theta_L`. Both depend on the line profile and on the optical depth at the line centre from
-the centre to the edge of the plasma, :math:`\tau_0`. The ``opacity`` argument gives the densities
+θ\ :sub:`L`. Both depend on the line profile and on the optical depth at the line centre from
+the centre to the edge of the plasma, τ\ :sub:`0`. The ``opacity`` argument gives the densities
 of the absorbing levels (cm-3), the distance ``length`` from the centre to the edge (cm), the
 ``temperature`` (eV) and ``mass`` (amu) of the absorbers, and optionally the ``geometry``
 (``'cylinder'``, ``'slab'`` or ``'sphere'``), the ``profile`` (``'doppler'``, or ``'voigt'`` with
-the natural widths) and the ``position`` of :math:`\theta_P` (``'average'`` over the volume, the
+the natural widths) and the ``position`` of θ\ :sub:`P` (``'average'`` over the volume, the
 default, or ``'centre'``).
 
 The example follows the one of ADAS214 (``run_adas214`` of the ADAS Python library): H I in the
@@ -994,7 +995,7 @@ times the Doppler width, and a cylinder of finite length (aspect ratio 5), which
 model, so its escape factors differ from these.
 
 The optical depth is proportional to the density of the absorbers, so the escape factors at other
-densities follow from :math:`\tau_0` with the functions of ``colradpy.escape_factors``. The grey
+densities follow from τ\ :sub:`0` with the functions of ``colradpy.escape_factors``. The grey
 line marks the density of the example.
 
 .. code-block:: python
@@ -1021,9 +1022,9 @@ line marks the density of the example.
    :alt: Escape factors of Ly-alpha and Ly-beta against the H ground-state density
 
 The PECs change with the populations, so the model is solved again for each density of the
-absorbers. ``processed['pecs']`` are the net PECs, with the A-values times :math:`\theta_P`, and
+absorbers. ``processed['pecs']`` are the net PECs, with the A-values times θ\ :sub:`P`, and
 ``processed['pecs_los']`` those of the radiance along the line of sight through the centre, with
-the thin A-values times :math:`\theta_L`, which a spectrometer looking through the centre of the
+the thin A-values times θ\ :sub:`L`, which a spectrometer looking through the centre of the
 plasma measures. The two are the same for thin lines. The figure shows the excitation PECs along
 the line of sight relative to the thin ones.
 

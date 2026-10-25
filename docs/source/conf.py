@@ -27,7 +27,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'hidden_code_block',
+    'portable_links',
 ]
 
 # energy_balance has numpy style docstrings; the others use :param: fields, which
