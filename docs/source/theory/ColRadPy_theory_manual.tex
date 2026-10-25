@@ -103,9 +103,11 @@ input, including level energies, radiative probabilities, effective
 collision strengths and any available parent-resolved ionization,
 recombination or charge-exchange data.
 
-The basic model assumes a prescribed Maxwellian electron bath and
-optically thin emission. Temperature and density are external parameters,
-and emitted photons escape without further interaction. Ground and
+The default model assumes a prescribed Maxwellian electron bath and
+optically thin emission. An optional uniform-source escape-factor closure
+reduces radiative losses for isolated lines (Section~\ref{sec:opacity}); it
+does not solve spatial radiation transport. Temperature and density are
+external parameters. Ground and
 metastable populations may remain independent dynamical variables, while
 shorter-lived excited populations can be represented by their response
 to these variables. This local kinetic description supplies coefficients
@@ -1142,6 +1144,107 @@ Use electron density with that stored response, or explicitly convert to a
 donor-normalized coefficient before using Eq.~\eqref{eq:emissivity}.
 \end{implnote}
 
+\subsection{Uniform-source escape factors}\label{sec:opacity}
+
+Escape factors~\cite{irons,behringer} describe the reabsorption of a line by
+its lower level inside the plasma without solving the transfer equation.
+For an isolated one-photon line with equal, spatially uniform emission and
+absorption profiles, neglecting stimulated emission, the absorption coefficient is
+\begin{equation}
+ \kappa_\nu=N_\ell\frac{g_u}{g_\ell}\frac{\lambda^2 A_{u\ell}}{8\pi}
+ \phi_\nu,\qquad
+ \tau_0=\frac{N_\ell(g_u/g_\ell)\lambda^3 A_{u\ell}\phi(0)R}{8\pi v_{\rm th}},
+ \qquad v_{\rm th}=\sqrt{2k_BT_a/m}.
+\end{equation}
+Here $\phi(x)$ is normalized per $x=(\nu-\nu_0)/\Delta\nu_D$,
+$\Delta\nu_D=v_{\rm th}/\lambda$, and $R$ is the radius or slab half thickness.
+The code uses cm, cm/s, absolute absorber densities in cm$^{-3}$, absorber
+temperature in eV and mass in amu; the input wavelength is converted from nm.
+Doppler profiles have $\phi(x)=\exp(-x^2)/\sqrt\pi$; Voigt profiles add the
+thin-rate natural half width in units of $\Delta\nu_D$.
+
+Writing $t(x)=\tau_0\phi(x)/\phi(0)$, the population escape factor is
+\begin{equation}
+ \theta_P=\int_{-\infty}^{\infty}\phi(x)K(t(x))\,\dd x,
+ \qquad A^{\rm eff}_{u\ell}=\theta_P A_{u\ell}.
+\end{equation}
+The default $K$ averages the one-flight escape probability over isotropic
+directions and uniform emission positions. For a sphere,
+$K(t)=3[t^2-1/2+(t+1/2)\exp(-2t)]/(4t^3)$; for an infinite slab,
+$K(t)=[1-2E_3(2t)]/(4t)$. The infinite-cylinder kernel is tabulated from
+boundary-integrated radiance with analytic integration along each chord.
+At large monochromatic depth these kernels tend respectively to
+$3/(4t)$, $1/(4t)$ and $1/(2t)$.
+The optional centre closure uses $K(t)=\exp(-t)$ for a sphere,
+$E_2(t)$ for a slab, or
+$\int_0^{\pi/2}\exp[-t/\sin\vartheta]\sin\vartheta\,\dd\vartheta$
+for a cylinder, following the local-centre construction of
+ADAS214~\cite{adas214}.
+
+For uniform emission along the central chord of length $2R$, the line factor is
+\begin{equation}
+ \theta_L=\int_{-\infty}^{\infty}\phi(x)
+ \frac{1-\exp[-2t(x)]}{2t(x)}\,\dd x.
+\end{equation}
+With the same opacity-modified population responses, \code{pecs} uses
+$\theta_P A$, while \code{pecs_los} uses $\theta_L A$. The latter contains
+neither the chord length nor the $1/(4\pi)$ angular factor. S/XB and
+ADF13/ADF15 exports select these through \code{emission='net'} (default)
+or \code{emission='los'}, with the choice recorded in comments.
+Natural widths always retain the thin A-values.
+
+\begin{implnote}[Relation to ADAS214]
+With \code{position='centre'}, $\theta_P$ and $\theta_L$ are the
+homogeneous-emission escape factors of ADAS214~\cite{adas214}. Its sphere
+factor $\int P\exp(-\bar\kappa b)\,\dd\lambda$ and its line factor are the
+sphere kernel and $\theta_L$ above, and its solid-angle sums for a disk and a
+cylinder of aspect ratio $a/b$ tend to the slab and cylinder kernels as
+$a/b\to\infty$. Its length $b$ is $R$ and its optical depth $\bar\kappa(0)b$
+is $\tau_0$; a rounded constant makes its Doppler width 0.2\% smaller. A Voigt
+profile whose Lorentzian full width is $d$ times the Doppler full width has
+$a=d\sqrt{\ln 2}$. The ADAS214 routines compiled from source give the same
+Doppler centre factors within 2\% for $\tau_0\le10^3$ and $a/b\ge3$; at
+$a/b=1$ its disk factor is up to 1.47 times the slab factor. Its table ends at
+$\tau_0\approx3\times10^3$ and is extrapolated linearly in log--log, so its
+Doppler factors are 3\% low at $\tau_0=10^4$ and 8--9\% low at $10^5$; above
+about $10^6$ it sets the A-value to $10^{-30}$. It integrates the profile to at
+most 160 Doppler full widths for a Voigt profile and 400 Lorentzian full widths
+for a Lorentzian, so its factors miss the escape from the far wings: at the
+sphere centre they are 9--13\% low at $\tau_0=10^3$ and 36--50\% low at
+$10^5$. ColRadPy integrates the whole profile. ADAS214's linear and parabolic
+emission profiles, finite aspect ratios, Holtsmark and two-Doppler profiles, and
+absorber densities from a Boltzmann distribution with underpopulation factors
+are not implemented, and the default volume average has no ADAS214
+counterpart.
+\end{implnote}
+
+\begin{caveat}[Conservation and closure]
+The volume-average factor equates $V\theta_P A N_u$ to photons escaping
+through the boundary integrated over outgoing directions, for the prescribed
+uniform upper population. It does not solve its spatial distribution.
+A central-chord radiance above its thin value is not a violation of global
+photon conservation. Applying the local-centre loss factor to uniform
+populations throughout the volume mismatches the population and transport
+closures. Neither closure is experimental validation of a spatially structured
+plasma diagnostic.
+\end{caveat}
+
+\begin{implnote}[Restricted implementation]
+\code{opacity} takes fixed absolute lower-level densities, geometry, radius,
+absorber temperature and mass, or both explicit factor mappings. It assumes
+complete frequency redistribution. Precomputed high-shell projection and
+statistical PEC splitting reject opacity until their population physics is
+consistent with trapping. Atomic sublevel mixing must justify unresolved
+term or shell models. Time-dependent LOS PECs use fixed factors and an
+instantaneous radiation closure. Population-dependent opacity requires a
+nonlinear solve and absolute-density reconstruction including excited and
+capture-driven populations: stage density is not generally ground density.
+Coefficients from such a solve would be conditional on its converged state.
+A supplied total radiation field would instead require thin spontaneous
+rates plus explicit absorption and stimulated emission, avoiding double
+counting internal reabsorption.
+\end{implnote}
+
 \subsection{Two-photon decay and the limits of line outputs}\label{sec:two-photon}
 
 Two-photon decay requires a spectral distribution as well as a total
@@ -1988,7 +2091,8 @@ derivations identify the assumptions associated with each reduction
 and observable; the principal qualifications are collected here.
 
 The basic model assumes a prescribed electron bath and optically
-thin emission. Quasistatic reduction additionally requires separated
+thin emission, unless the restricted escape-factor closure is selected.
+Quasistatic reduction additionally requires separated
 relaxation times, LS splitting requires the specified coupling and
 sublevel populations, and kinetic-energy evolution assumes a trace
 species in a fixed background. Relativistic FAC forward rates have
@@ -2004,6 +2108,7 @@ the application.
 \endfirsthead
 \toprule Area & Current qualification & Discussed in\\\midrule
 \endhead
+Opacity & Uniform, fixed absorbers and source profiles with complete redistribution; no spatial or transient photon transport. Projection and statistical PEC splitting reject opacity. & Section~\ref{sec:opacity}\\
 Projection & The fractional-parentage switches of the \code{cbnm93} ADF17 files and indirect charge exchange are not implemented. Below the ADF17 temperature grid, couplings use estimated thresholds and limited power laws; above it, edge values are held. These continuations and rejection tolerances need sensitivity checks. & Section~\ref{sec:projection}\\
 Radiated power & \code{prb} is the power of the explicit levels after capture; it omits the recombination continuum, bremsstrahlung and projected-shell radiation in ADAS PRB. Two-photon contributions have correct integrated energy but are not continuum spectra in the generic line outputs. & Sections~\ref{sec:two-photon}, \ref{sec:adf11adas}\\
 Population convention & Stored excitation responses may be normalized; resolved balance fractions refer to retained populations unless the excited populations are reconstructed. & Sections~\ref{sec:normalization}, \ref{sec:ion-fractions}\\
@@ -2399,6 +2504,16 @@ process collisional radiative coefficients and populations}.
 \bibitem{adas208} ADAS User Manual, \emph{ADAS208: specific z excitation --
 advanced population processing}.
 \url{https://www.adas.ac.uk/man/chap2-08.pdf}.
+\bibitem{adas214} ADAS User Manual, \emph{ADAS214: escape factors for line
+emission and population calculations}.
+\url{https://www.adas.ac.uk/man/chap2-14.pdf}.
+\bibitem{irons} F. E. Irons, ``The escape factor in plasma spectroscopy---I.
+The escape factor defined and evaluated,'' \emph{Journal of Quantitative
+Spectroscopy and Radiative Transfer} \textbf{22}, 1 (1979).
+\href{https://doi.org/10.1016/0022-4073(79)90102-X}{doi:10.1016/0022-4073(79)90102-X}.
+\bibitem{behringer} K. Behringer and U. Fantz, ``The influence of opacity on
+hydrogen excited-state population and applications to low-temperature
+plasmas,'' \emph{New Journal of Physics} \textbf{2}, 23 (2000).
 \bibitem{adas404} ADAS User Manual, \emph{ADAS404: isonuclear master data --
 extract from isoelectronic master data}.
 \url{https://www.adas.ac.uk/man/chap4-04.pdf}.

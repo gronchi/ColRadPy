@@ -1,6 +1,6 @@
 {
   "git_branch": "development",
-  "git_head": "9b3df28d77554cdf87d9736719e441f7c2121640",
+  "git_head": "cbfda21a93b1ff069a608f216a2eaa8335c63382",
   "working_tree_changes": "",
   "python": "3.13.9",
   "numpy": "2.4.6",
@@ -11,12 +11,13 @@
     "colradpy\\__init__.py": "5ed21e52614b13bc602d6a1340096708a1e6d14152b61e30141399038a6a4201",
     "colradpy\\adf04_file_paths.py": "82eeb13f56c81c89d170e5d9812811981ee2ce8683827af070f465b5eb408e2c",
     "colradpy\\burgess_tully_rates.py": "92446d71fa7797e7e433021a319a491d91992c12f31a1ab4cc49ea942e9bc121",
-    "colradpy\\colradpy_class.py": "6a5613a2561ccfe0f3dbe82fa845f3f7d41da334c6ac37b5c72958f6bf6003bd",
+    "colradpy\\colradpy_class.py": "1bbbe1fd4f8d5fcf3a0843a6bf19161870a88097d56999a0a554f7f08116e67f",
     "colradpy\\colradpy_utility.py": "ec2faa8f789398c284226bc5c7e2ce78afef828a7189ff887b894c56b9a4d200",
     "colradpy\\convert_eissner.py": "514325a62db0e13e533492bbc02cb6a4ca807ae2810cd2c9bc02bb6f2aa1b503",
     "colradpy\\convolve_eedf.py": "af961883b6c397992c7acfda376afc29774e1761363e34b7fbb34b20922d9ef7",
     "colradpy\\ecip_rates.py": "5d9cc1c1e473c611e5dca41d9c91c21156df2464b1148fa6870c7bed1692564e",
     "colradpy\\energy_balance.py": "57ffc22dd742ba87ff6a528a03d51692a718638df41992e91b4c13c891209407",
+    "colradpy\\escape_factors.py": "ad56be1bb3307a9f28286b6d917248ca60a99a141426256c706f9c400f84391b",
     "colradpy\\ionization_balance_class.py": "04a0482b8a32374d04715f9cc72d89dbbca09f5c4b1d86c1c8b9c1d684fae99e",
     "colradpy\\nist_read.py": "9ae562f04023be028920c36900dd4c1829501e09f27cf8edb03550219e19a004",
     "colradpy\\nist_read_txt.py": "d21b8e32c85e4a3d5842932e2af61ee8f592c57f4199e1bdd29effa411b5367e",
@@ -40,7 +41,7 @@
     "examples\\input\\cpb03_ls#be1.dat": "1fb3ebd7d0934024800b102ae269bdbeca05fdc29cd80dde80b14dc84cfc433c"
   },
   "documentation_sha256": {
-    "docs\\source\\theory\\ColRadPy_theory_manual.tex": "4e3ce9d44ccdd35d3b7bedda4567ab7a44b3353e78e81bdb7ec71fa58a6729d8",
+    "docs\\source\\theory\\ColRadPy_theory_manual.tex": "7c0127d98a07581b7d55b73cdb2733863986470a2f8f83b927440cef6e571b73",
     "docs\\source\\theory\\scripts\\build_theory_manual.py": "ce727677c8f00123b4376e60acdd339ee99165545cfd304743556a04ee6f578f",
     "docs\\source\\theory_manual.rst": "8a8c7b63332e7cb84f1e79c9816c222c81389a1db621d8a11fd52adfbb1c9b48",
     "pyproject.toml": "9770ca65eefddfc5a432dea3034fc0bea4aee63682da87c6d7ea6c9b4b86c865"
