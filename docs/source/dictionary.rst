@@ -4,6 +4,27 @@
 ColRadPy Dictionary Structure
 =============================
 
+Opacity outputs
+---------------
+
+The optional ``user['opacity']`` stores fixed absolute absorber densities and
+geometry/profile parameters, or explicit population and chord escape factors.
+See :doc:`api/escape_factors` for units, validation and restrictions.
+With opacity enabled:
+
+* ``rates['escape']`` holds ``tau0``, ``theta_p`` and ``theta_l`` arrays indexed
+  by (upper, lower); thin entries are zero, one and one respectively.
+* ``cr_matrix['A_ji_thin']`` retains the original spontaneous rates.
+  ``A_ji`` uses the population escape factor, while ``A_ji_loss`` retains thin
+  radiative widths.
+* ``processed['pecs']`` is the net-loss PEC of the selected population closure;
+  ``processed['pecs_los']`` is the central-chord PEC for uniform emission.
+  ``processed['td']['pecs_los']`` is its fixed-factor time-dependent counterpart.
+  PEC shapes follow the existing driver and electron-grid conventions.
+
+Existing dictionary entries
+---------------------------
+
 All data relavent to to a collisional radative is stored in the 'data' dictionary.
 If data can be easily reproduced from data that is already stored in the dictionary
 it is not store.

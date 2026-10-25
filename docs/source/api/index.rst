@@ -68,5 +68,6 @@ LTE populations, time-dependent solutions and line shapes.
 
    saha_boltzmann_lte_pops
    solve_matrix_exponential
+   escape_factors
    split_multiplet
    colradpy_utility

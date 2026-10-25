@@ -57,6 +57,8 @@ from colradpy.write_adf13 import MIN_SXB, write_adf13
 from colradpy.read_adf17 import read_adf17
 from colradpy.read_adf18 import read_adf18
 from colradpy.projection import project
+from colradpy.escape_factors import (line_escape_factor, optical_depth,
+                                     population_escape_factor, thermal_speed, validate_opacity)
 if( (sys.version_info[0] ==3) & (sys.version_info[1] >=10)):
     from collections.abc import Mapping
 else:
@@ -462,6 +464,18 @@ class colradpy():
                          (see make_projection); None for the levels of the adf04 file only
       :type projection: tuple of str
 
+      :param opacity: escape factors of optically thick lines (see make_escape_factors): a dict with
+                      'length' (cm, from the centre to the edge of the plasma), 'densities'
+                      ({level index: density of that level in cm-3}, the absorbers of the lines
+                      ending on it), 'temperature' (eV) and 'mass' (amu) of the absorbers, and
+                      optionally 'geometry' ('slab', 'cylinder' (default) or 'sphere'), 'profile'
+                      ('doppler' (default) or 'voigt', with the natural widths of the lines) and
+                      'position' of the population escape factor ('average' (default) over the
+                      volume, or 'centre' as ADAS214); or both 'theta_p' and
+                      'theta_l', {(upper, lower): escape factor}, given directly. None for
+                      optically thin lines
+      :type opacity: dict
+
     """
     
     def __init__(self,fil,metas=np.array([]),temp_grid=np.array([]),electron_den=np.array([]),
@@ -471,7 +485,7 @@ class colradpy():
                   default_pop_norm=True,temp_dens_pair=False,rate_interp_ion = 'loglog_slinear',
                  rate_interp_recomb='loglog_slinear',rate_interp_col='log_slinear',
                  rate_interp_cx='log_quadratic',use_cx=False,scale_file_ioniz=False,
-                 ne_tau = -1, projection=None):
+                 ne_tau = -1, projection=None, opacity=None):
         
         """The initializing method. Sets up the nested list for data storage and starts to populate with user data
            as well as reading in the adf04 file
@@ -505,6 +519,10 @@ class colradpy():
                                  'a17_p208 file that maps it onto the levels of the adf04 file')
             projection = tuple(str(f) for f in projection)
         self.data['user']['projection'] = projection
+        self.data['user']['opacity'] = validate_opacity(opacity)
+        if(opacity is not None and projection is not None):
+            raise ValueError('opacity with precomputed high-shell projection is not supported: '
+                             'the condensed rates assume their original radiative transfer')
         self.data['user']['metas'] = 'look at [atomic][metas] for values'
         self.data['user']['td_t'] = np.asarray(td_t)# seconds
         self.data['user']['td_n0'] = np.asarray(td_n0)
@@ -566,6 +584,8 @@ class colradpy():
                 sys.exit()
                 
         self.populate_data(fil)
+        self.data['user']['opacity'] = validate_opacity(self.data['user']['opacity'],
+                                                       len(self.data['atomic']['energy']))
         self.data['atomic']['metas'] = np.asarray(metas)
         #the quasistatic model needs the ground level as a metastable, it cannot be an excited level
         if(self.data['atomic']['metas'].size > 0):
@@ -1244,6 +1264,74 @@ class colradpy():
                                                    self.data['user']['temp_grid'], self.data['user']['dens_grid'],
                                                    pairs=self.data['user']['temp_dens_pair'])
 
+    def make_escape_factors(self):
+        """Escape factors of the optically thick lines (colradpy.escape_factors), from
+           ['user']['opacity']. A line from level u to level l is thick when the density of l is
+           given in opacity['densities']; its optical depth at the line centre over the length
+           (from the centre to the edge of the plasma) follows from its A-value, the weights of
+           the levels and the Doppler width of the absorbers, and with the profile ('doppler', or
+           'voigt' with the natural widths of the two levels) and the geometry it gives the
+           population escape factor theta_p, at the centre or averaged over the volume
+           (opacity['position']), and the line escape factor theta_l along a line of sight through
+           the centre. populate_cr_matrix multiplies the A-values by theta_p, so the populations,
+           PECs, power and GCR coefficients include the absorption; ['processed']['pecs_los'] are
+           the PECs of the radiance along the line of sight, the A-values of the file times
+           theta_l. The default volume average conserves boundary-integrated photons for the
+           assumed uniform populations; the optional centre closure does not describe their
+           volume-integrated losses. Neither solves the spatial distribution of populations.
+           Central-chord radiance need not equal the thin radiance. Given both 'theta_p' and
+           'theta_l' ({(upper, lower): factor}), those are used as supplied after validation.
+           The densities are those of the absorbing levels, not responses to a
+           driver; they do not change with the solution.
+
+           Creates ['rates']['escape'] with 'theta_p', 'theta_l' and 'tau0', (upper, lower) arrays
+           of the levels, 1, 1 and 0 for the thin lines.
+        """
+        num_levels = len(self.data['atomic']['energy'])
+        opacity = validate_opacity(self.data['user']['opacity'], num_levels)
+        if(opacity is None):
+            raise ValueError('make_escape_factors needs an opacity configuration')
+        if(self.data['user'].get('projection')):
+            raise ValueError('opacity with precomputed high-shell projection is not supported')
+        self.data['user']['opacity'] = opacity
+        tau0 = np.zeros((num_levels, num_levels))
+        theta_p = np.ones((num_levels, num_levels))
+        theta_l = np.ones((num_levels, num_levels))
+        if('theta_p' in opacity or 'theta_l' in opacity):
+            for (upper, lower), value in opacity.get('theta_p', {}).items():
+                theta_p[upper, lower] = value
+            for (upper, lower), value in opacity.get('theta_l', {}).items():
+                theta_l[upper, lower] = value
+        else:
+            densities = opacity['densities']
+            transitions = np.asarray(self.data['rates']['excit']['col_transitions']) - 1
+            a_val = np.asarray(self.data['rates']['a_val'], dtype=float)
+            inside = ((transitions >= 0) & (transitions < num_levels)).all(axis=1)
+            energy = np.asarray(self.data['atomic']['energy'], dtype=float)
+            g = 2*np.asarray(self.data['atomic']['w'], dtype=float) + 1
+            thick = inside & (a_val > 0) & _isin(transitions[:, 1], list(densities))
+            thick[thick] = energy[transitions[thick, 0]] != energy[transitions[thick, 1]]
+            upper, lower = transitions[thick, 0], transitions[thick, 1]
+            wave = 1e7/np.abs(energy[upper] - energy[lower]) #nm
+            damping = np.zeros(len(upper))
+            if(opacity.get('profile', 'doppler') == 'voigt'):
+                #natural Lorentzian half width (Gamma_u + Gamma_l)/(4 pi), in units of the Doppler
+                #width v_th/lambda, from the A-values of the file
+                loss = np.zeros(num_levels)
+                np.add.at(loss, transitions[inside, 0], a_val[inside])
+                doppler = thermal_speed(opacity['temperature'], opacity['mass'])/(wave*1e-7)
+                damping = (loss[upper] + loss[lower])/(4*np.pi)/doppler
+            n_lower = np.array([densities[level] for level in lower])
+            tau = optical_depth(wave, a_val[thick], g[upper], g[lower], n_lower, opacity['length'],
+                                opacity['temperature'], opacity['mass'], damping)
+            geometry = opacity.get('geometry', 'cylinder')
+            position = opacity['position']
+            for k in range(len(upper)):
+                tau0[upper[k], lower[k]] = tau[k]
+                theta_p[upper[k], lower[k]] = population_escape_factor(tau[k], geometry, damping[k], position)
+                theta_l[upper[k], lower[k]] = line_escape_factor(tau[k], damping[k])
+        self.data['rates']['escape'] = {'tau0': tau0, 'theta_p': theta_p, 'theta_l': theta_l}
+
     def _add_projection_to_cr_matrix(self):
         """Adds the indirect couplings through the high n-shells (make_projection) to the CR matrix:
            transfers between levels, ionization of the levels to the parents and recombination of the
@@ -1364,6 +1452,14 @@ class colradpy():
 
         #sum up all the spontaneous emissions from a level for use in natural broadening
         self.data['cr_matrix']['A_ji_loss'] = np.sum(self.data['cr_matrix']['A_ji'],axis=1)
+
+        #optically thick lines (make_escape_factors): the CR matrix and the PECs use the A-values
+        #reduced by the population escape factors; A_ji_thin keeps those of the adf04 file, which
+        #give the natural widths above and the line-of-sight PECs
+        if(self.data['user'].get('opacity')):
+            self.make_escape_factors()
+            self.data['cr_matrix']['A_ji_thin'] = self.data['cr_matrix']['A_ji'].copy()
+            self.data['cr_matrix']['A_ji'] = self.data['cr_matrix']['A_ji']*self.data['rates']['escape']['theta_p']
         
         #transpose the self.data['cr_matrix']['q_ij'] matrix so the indexes make sense
         self.data['cr_matrix']['q_ij'] = self.data['cr_matrix']['q_ij'].transpose(1,0,2)
@@ -1733,6 +1829,11 @@ class colradpy():
         excited_index = {level: j for j, level in enumerate(levels_to_keep)}
         meta_index = {level: m for m, level in enumerate(self.data['atomic']['metas'])}
         pls = []
+        #pecs uses the net radiative loss of the selected population closure (A times theta_p);
+        #pecs_los uses uniform emission along a line of sight through the
+        #centre (thin A-values times theta_l), both with the populations of the thick lines
+        escape = self.data['rates'].get('escape') if self.data['user'].get('opacity') else None
+        pecs_los = []
         for i, upper in self._line_pairs():
             if(upper in excited_index):
                 pop = self.data['processed']['pops'][excited_index[upper]]
@@ -1740,6 +1841,9 @@ class colradpy():
                 pop = own_pops[meta_index[upper]]
             pec = self.data['cr_matrix']['A_ji'][upper,i]*pop/self.data['user']['dens_grid']
             self.data['processed']['pecs'].append(pec)
+            if(escape is not None):
+                pecs_los.append(self.data['cr_matrix']['A_ji_thin'][upper,i]*escape['theta_l'][upper,i]*
+                                pop/self.data['user']['dens_grid'])
             #line power, photon energy * PEC, in W cm3
             pls.append(np.abs(self.data['atomic']['energy'][upper] - self.data['atomic']['energy'][i])*
                        J_PER_WAVENUMBER*pec)
@@ -1764,6 +1868,8 @@ class colradpy():
         self.data['processed']['prc'] = np.sum(self.data['processed']['pls'][:,nmeta+nrecomb:], axis=0)
 
         self.data['processed']['pecs'] = np.asarray(self.data['processed']['pecs'])
+        if(escape is not None):
+            self.data['processed']['pecs_los'] = np.asarray(pecs_los)
 
         self.data['processed']['wave_vac'] = np.asarray(self.data['processed']['wave_vac'])
         self.data['processed']['wave_air'] = vac_to_air(self.data['processed']['wave_vac'])
@@ -2050,7 +2156,10 @@ class colradpy():
 
                     
     def solve_time_dependent(self):
-        """This function will solve the CR matrix with no assumptions. A matrix expoential is used to solve this problem.
+        """Solve the fixed CR matrix with a matrix exponential.
+           With opacity, absorber densities and escape factors remain fixed in time and radiation
+           transport is instantaneous within the selected uniform-source closure. This does not
+           solve evolving opacity or a time-dependent photon transport problem.
            A source term can be included to mimick erosion of fresh atoms or injection of neutral gas or maybe even LIF
 
            Uses same CR matrix ".data['cr_matrix']['cr']" used to define the reduced CR matrix that the quasistatic solution solves.
@@ -2117,6 +2226,9 @@ class colradpy():
 
         self.data['processed']['td']['pecs'] = []#photon emissivity coefficients
         self.data['processed']['td']['pls'] = []
+        escape = self.data['rates'].get('escape') if self.data['user'].get('opacity') else None
+        if(escape is not None):
+            self.data['processed']['td']['pecs_los'] = []
 
         #same lines as the SS version, those of the metastables included; the time dependent
         #populations of the metastables are solved with the others
@@ -2124,12 +2236,18 @@ class colradpy():
             pec = self.data['cr_matrix']['A_ji'][upper,i]*self.data['processed']['td']['td_pop'][upper]/\
                   self.data['user']['dens_grid']
             self.data['processed']['td']['pecs'].append(pec)
+            if(escape is not None):
+                self.data['processed']['td']['pecs_los'].append(
+                    self.data['cr_matrix']['A_ji_thin'][upper,i]*escape['theta_l'][upper,i]*
+                    self.data['processed']['td']['td_pop'][upper]/self.data['user']['dens_grid'])
             #line power, photon energy * PEC, in W cm3
             self.data['processed']['td']['pls'].append(np.abs(self.data['atomic']['energy'][upper] -
                                                               self.data['atomic']['energy'][i])*J_PER_WAVENUMBER*pec)
 
 
         self.data['processed']['td']['pecs'] = np.asarray(self.data['processed']['td']['pecs'])
+        if(escape is not None):
+            self.data['processed']['td']['pecs_los'] = np.asarray(self.data['processed']['td']['pecs_los'])
         self.data['processed']['td']['pls'] = np.asarray(self.data['processed']['td']['pls'])
         self.data['processed']['td']['plt'] =  np.sum(self.data['processed']['td']['pls'],axis=0)#sum up all contributions
         
@@ -2166,6 +2284,9 @@ class colradpy():
            Creates the ['split'] sub dictionary to hold the information of the split
 
         """
+        if(self.data['user'].get('opacity')):
+            raise ValueError('splitting PECs with opacity is not supported: component trapping '
+                             'must enter the population solution as well as the line emission')
         if('processed' not in self.data.keys()):
             self.solve_quasi_static()
 
@@ -3147,7 +3268,16 @@ class colradpy():
         return figures
 
 
-    def write_pecs_adf15(self,fil_name='', pec_inds = None, num = 8, pecs_split=False):
+    def _emission_pecs(self, processed, emission, pecs_split=False):
+        """Select the net-loss or central-chord PECs; they coincide without opacity."""
+        if(emission not in ('net', 'los')):
+            raise ValueError("emission must be 'net' or 'los'")
+        if(self.data['user'].get('opacity') and pecs_split):
+            raise ValueError('split PECs with opacity are not supported')
+        key = 'pecs_los' if emission == 'los' and self.data['user'].get('opacity') else 'pecs'
+        return processed[key]
+
+    def write_pecs_adf15(self,fil_name='', pec_inds = None, num = 8, pecs_split=False, emission='net'):
 
         """ This function calls the write_adf15 function.
 
@@ -3169,6 +3299,10 @@ class colradpy():
         :param pecs_split: write the PECs split to j levels by split_pec_multiplet
         :type pecs_split: bool
 
+        :param emission: 'net' (default) for the selected population closure's net radiative loss,
+                         or 'los' for uniform emission along the central chord of length 2R.
+                         The opacity parameters and this choice are recorded in comments.
+
         """
 
         if(self.data['user']['temp_dens_pair']):
@@ -3182,6 +3316,7 @@ class colradpy():
             processed = self.data['processed']['split']
         else:#write un-split PECs
             processed = self.data['processed']
+        pecs = self._emission_pecs(processed, emission, pecs_split)
         wave = processed['wave_air']*10#nm to A
 
         #pec_inds = 0 also selects all, as before
@@ -3198,16 +3333,16 @@ class colradpy():
             num_recomb = len(self.data['atomic']['ion_pot'])
 
         write_adf15(fil_name, pec_inds, wave,
-                    processed['pecs'], self.data['atomic']['element'],
+                    pecs, self.data['atomic']['element'],
                     self.data['atomic']['charge_state'], self.data['user']['dens_grid'],
                     self.data['user']['temp_grid'], self.data['atomic']['metas'],
                     self.data['atomic']['ion_pot'],
-                    user = self.data['user'], atomic = self.data['atomic'], num = num,
+                    user = dict(self.data['user'], emission=emission), atomic = self.data['atomic'], num = num,
                     num_recomb = num_recomb,
                     pec_levels = None if pecs_split else processed['pec_levels'])
 
 
-    def get_sxb(self, pecs_split=False):
+    def get_sxb(self, pecs_split=False, emission='net'):
 
         """ S/XB, the ionizations per emitted photon of each line, from the solved model. For
             each metastable m and line, as ADAS208 makes them,
@@ -3223,6 +3358,9 @@ class colradpy():
         :param pecs_split: S/XB of the PECs split to j levels by split_pec_multiplet
         :type pecs_split: bool
 
+        :param emission: 'net' for net-loss PECs (default), or 'los' for central-chord PECs.
+                         Observed chord brightness requires the matching geometry and LOS choice.
+
         :returns: array --S/XB (dimensionless), (lines, metastables, temperatures, densities)
                   as processed['pecs'], or (lines, metastables, pairs) with temp_dens_pair
 
@@ -3237,13 +3375,13 @@ class colradpy():
 
         processed = self.data['processed']['split'] if pecs_split else self.data['processed']
         num_metas = len(self.data['atomic']['metas'])
-        excitation = processed['pecs'][:, :num_metas]                 #(lines, metastables, grid)
+        excitation = self._emission_pecs(processed, emission, pecs_split)[:, :num_metas]
         ionization = self.data['processed']['scd'].sum(axis=1)        #(metastables, grid)
         with np.errstate(divide='ignore', invalid='ignore'):
             return np.where(excitation > 0, ionization[None]/excitation, np.nan)
 
 
-    def write_sxb_adf13(self,fil_name='', sxb_inds = None, num = 8, pecs_split=False):
+    def write_sxb_adf13(self,fil_name='', sxb_inds = None, num = 8, pecs_split=False, emission='net'):
 
         """ This function writes the S/XB coefficients, the ionizations per emitted photon of
             lines (get_sxb), to an adf13 file (ADAS appxa-13) with the write_adf13 function.
@@ -3264,12 +3402,14 @@ class colradpy():
         :param pecs_split: write the S/XB of the PECs split to j levels by split_pec_multiplet
         :type pecs_split: bool
 
+        :param emission: 'net' (default) or 'los', as in get_sxb; recorded in comments.
+
         """
 
         if(self.data['user']['temp_dens_pair']):
             raise ValueError('adf13 files need S/XB on a temperature-density grid, '
                              'they cannot be written with temp_dens_pair=True')
-        sxb = self.get_sxb(pecs_split)
+        sxb = self.get_sxb(pecs_split, emission=emission)
 
         if(fil_name==''):#default file name if the user did not choose one
             fil_name = 'adf13_colradpy_' + os.path.basename(self.data['user']['file_loc'])
@@ -3294,7 +3434,7 @@ class colradpy():
         write_adf13(fil_name, sxb_inds, wave, sxb, self.data['atomic']['element'],
                     self.data['atomic']['charge_state'], self.data['user']['dens_grid'],
                     self.data['user']['temp_grid'], self.data['atomic']['metas'],
-                    user = self.data['user'], atomic = self.data['atomic'], num = num,
+                    user = dict(self.data['user'], emission=emission), atomic = self.data['atomic'], num = num,
                     total = self.data['processed']['driving_populations_norm'] and num_metas == 1,
                     sxb_levels = None if pecs_split else processed['pec_levels'])
 
@@ -3325,15 +3465,22 @@ class colradpy():
         #in reality comparison to experiment will only be the strong lines so make a cut
 
         #find all the pecs above the cut limit, careful the largest pec can change with Te
-        inds_above = np.unique(np.where(self.data['processed']['pecs']/\
-                               np.max(self.data['processed']['pecs'],axis=0) >cut_limit)[0])
+        inds_above = np.array([], dtype=int)
+        for key in ('pecs', 'pecs_los'):
+            if(key in self.data['processed']):
+                values = self.data['processed'][key]
+                maximum = np.max(values, axis=0)
+                relative = np.divide(values, maximum, out=np.zeros_like(values), where=maximum > 0)
+                inds_above = np.union1d(inds_above, np.where(relative > cut_limit)[0])
         
         processed = {}#modified processed dictionary to be sent to hdf5
 
         if(pecs):# dumps the PECs to the hdf file
             processed['pops']                     = self.data['processed']['pops']
             processed['driving_populations_norm'] = self.data['processed']['driving_populations_norm']
-            processed['pecs']                     = self.data['processed']['pecs'][inds_above,:,:,:]
+            processed['pecs']                     = self.data['processed']['pecs'][inds_above]
+            if(self.data['user'].get('opacity')):
+                processed['pecs_los'] = self.data['processed']['pecs_los'][inds_above]
             processed['pec_levels']               = self.data['processed']['pec_levels'][inds_above,:]
             processed['wave_air']                 = self.data['processed']['wave_air'][inds_above]
             
@@ -3351,22 +3498,27 @@ class colradpy():
             processed['pops_no_norm'] = self.data['processed']['pops_no_norm']
             processed['wave_vac']     = self.data['processed']['wave_vac'][inds_above]
             
-        fil_tmp = open(fil_name,'w')
-
         sav_dict = {}
-        sav_dict['user']       = self.data['user']
+        sav_dict['user']       = dict(self.data['user'])
         sav_dict['atomic']     = self.data['atomic']
         sav_dict['input_file'] =  self.data['input_file']
         sav_dict['processed']  =  processed
+        if(self.data['user'].get('opacity')):
+            sav_dict['rates'] = {'escape': self.data['rates']['escape']}
+            sav_dict['cr_matrix'] = {'A_ji_thin': self.data['cr_matrix']['A_ji_thin']}
+            # HDF5 group names are strings, whereas the input dictionaries use integer levels
+            # and tuple transition keys. Store indexed tables without changing the live input.
+            opacity = dict(self.data['user']['opacity'])
+            for name in ('densities', 'theta_p', 'theta_l'):
+                if(name in opacity):
+                    rows = [(key, value) if name == 'densities' else (*key, value)
+                            for key, value in opacity[name].items()]
+                    opacity[name] = np.asarray(rows, dtype=float).reshape(-1, 2 if name == 'densities' else 3)
+            sav_dict['user']['opacity'] = opacity
 
 
         sav_dict = myprint(sav_dict)
-        hdfdict.dump(sav_dict, h5py.File(fil_name,'a'))
-
-
-
-
-        
-        fil_tmp.close()
+        with h5py.File(fil_name, 'w') as output:
+            hdfdict.dump(sav_dict, output)
 
 
