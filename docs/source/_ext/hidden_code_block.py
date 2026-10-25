@@ -105,8 +105,8 @@ def visit_hcb_html(self, node):
                    'label': node.get('label'), 
                    }
 
-    divheader = ("""<a href="javascript:showhide(document.getElementById('{divname}'))">"""
-                 """{label}</a><br />"""
+    divheader = ("""<p><a href="javascript:showhide(document.getElementById('{divname}'))">"""
+                 """{label}</a></p>"""
                  '''<div id="{divname}" style="display: {startdisplay}">'''
                  ).format(**fill_header)
 

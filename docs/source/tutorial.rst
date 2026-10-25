@@ -161,24 +161,28 @@ the absolute values of the PECs and their ratios.
    density_arr = np.geomspace(1.e10,1.e15,11) # cm-3
 
    #calling the colradpy class with the various inputs
-   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-                 use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True)
+   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,
+                 use_recombination=True,use_recombination_three_body=True,
+                 use_ionization=True,suppliment_with_ecip=True)
 
    be.solve_cr() #solve the CR equations with the quasistatic method
 
 ``be`` is now a solved ``colradpy`` object. The results that needed the solution of the CR
 equations are in the ``be.data['processed']`` sub dictionary. The methods of the class are
-:ref:`documented here <colradpy>`.
+:ref:`documented here <colradpy>`. ``solve_cr()`` runs the steps below, which can also be run one
+at a time.
 
 .. hidden-code-block:: python
     :linenos:
-    :label: --- Show/details of solve_cr()---
+    :label: Show the steps of solve_cr()
 
     #what solve_cr() does
-    # 1. make the rates from the adf04 file or internally (ECIP, three-body recombination)
+    # 1. make the rates from the adf04 file or internally (ECIP, three-body
+    #    recombination)
     # 2. populate the CR matrix
     # 3. solve the matrix and make the processed data
-    if(be.data['user']['use_ionization'] or be.data['user']['use_recombination_three_body']):
+    if(be.data['user']['use_ionization'] or
+       be.data['user']['use_recombination_three_body']):
         be.make_ioniz_from_reduced_ionizrates()
     if(be.data['user']['suppliment_with_ecip']):
         be.make_ecip()
@@ -310,7 +314,8 @@ at one temperature and density.
    n = be.data['user']['dens_grid'][ne]
 
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
-   ax.vlines(be.data['processed']['wave_air'], 0, be.data['processed']['pecs'][:,met,te,ne])
+   ax.vlines(be.data['processed']['wave_air'], 0,
+             be.data['processed']['pecs'][:,met,te,ne])
    ax.set(xlim=(0, 1000), xlabel='Wavelength (nm)', ylabel='PEC (ph cm$^3$ s$^{-1}$)',
           title=f'PEC spectrum, $T_e$ = {T:.0f} eV, ' + '$n_e$ = 1e13 cm$^{-3}$')
 
@@ -376,7 +381,8 @@ interest are generally much stronger.
                        (be.data['processed']['wave_air'] > 351))[0]
    print('Wavelength from file ' + str(be.data['processed']['wave_air'][pec_ind]))
    #Wavelength from file [351.55028819]
-   print('PEC upper and lower levels ' + str(be.data['processed']['pec_levels'][pec_ind]))
+   print('PEC upper and lower levels ' +
+         str(be.data['processed']['pec_levels'][pec_ind]))
    #PEC upper and lower levels [[26  2]]
 
 
@@ -436,8 +442,9 @@ The coefficients are stored as ``qcd[from, to]``, ``scd[metastable, parent]``,
    temperature_arr = np.linspace(1,100,50) #eV
    metastable_levels = np.array([0,1])   #ground and level 1 chosen to be metastable
    density_arr = np.array([1.e13,8.e13,4.e14]) # cm-3
-   beii = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-                   use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True)
+   beii = colradpy(fil,metastable_levels,temperature_arr,density_arr,
+                   use_recombination=True,use_recombination_three_body=True,
+                   use_ionization=True,suppliment_with_ecip=True)
    beii.solve_cr()
 
 .. code-block:: python
@@ -464,10 +471,11 @@ The coefficients are stored as ``qcd[from, to]``, ``scd[metastable, parent]``,
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
    for met in range(2):
        for parent in range(2):
-           ax.plot(T, beii.data['processed']['scd'][met,parent,:,0], label=f'SCD {met+1} -> {parent+1}+')
+           ax.plot(T, beii.data['processed']['scd'][met,parent,:,0],
+                   label=f'SCD {met+1} -> {parent+1}+')
    #ionization to 1s2s 3S is negligible at the lowest temperatures
-   ax.set(yscale='log', ylim=(1e-20, 1e-7), xlabel='Temperature (eV)', ylabel='SCD (cm$^3$ s$^{-1}$)',
-          title='SCD of Be II, $n_e$ = 1e13 cm$^{-3}$')
+   ax.set(yscale='log', ylim=(1e-20, 1e-7), xlabel='Temperature (eV)',
+          ylabel='SCD (cm$^3$ s$^{-1}$)', title='SCD of Be II, $n_e$ = 1e13 cm$^{-3}$')
    ax.legend(fontsize='small')
 
 .. figure:: images/be1_scd.png
@@ -484,7 +492,8 @@ The coefficients are stored as ``qcd[from, to]``, ``scd[metastable, parent]``,
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
    for met in range(2):
        for parent in range(2):
-           ax.plot(T, beii.data['processed']['acd'][met,parent,:,0], label=f'ACD {parent+1}+ -> {met+1}')
+           ax.plot(T, beii.data['processed']['acd'][met,parent,:,0],
+                   label=f'ACD {parent+1}+ -> {met+1}')
    ax.set(yscale='log', xlabel='Temperature (eV)', ylabel='ACD (cm$^3$ s$^{-1}$)',
           title='ACD of Be II, $n_e$ = 1e13 cm$^{-3}$')
    ax.legend(fontsize='small')
@@ -532,21 +541,22 @@ with temperature.
 .. code-block:: python
    :linenos:
 
-   #fraction of the population of level 1 (excited index 0) injected into each excited level,
-   #from the ground (driver 0) at 1e13 cm-3
+   #fraction of the population of level 1 (excited index 0) injected into each
+   #excited level, from the ground (driver 0) at 1e13 cm-3
    pop_lvl = be.data['processed']['pop_lvl']
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
    for te in (0, 10, -1):
        contribution = pop_lvl[0,:,0,te,ne]
-       ax.plot(np.arange(1, len(contribution)+1), contribution/np.sum(contribution), 'o-', ms=3,
-               label=f"$T_e$ = {be.data['user']['temp_grid'][te]:.0f} eV")
+       ax.plot(np.arange(1, len(contribution)+1), contribution/np.sum(contribution),
+               'o-', ms=3, label=f"$T_e$ = {be.data['user']['temp_grid'][te]:.0f} eV")
    ax.set(xlabel='Injection level (#)', ylabel='Populating fraction (-)',
           title='Populating levels of level 1')
    ax.legend()
 
    #fraction of the population of level 1 injected directly into it from the ground
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
-   ax.plot(be.data['user']['temp_grid'], pop_lvl[0,0,0,:,ne]/np.sum(pop_lvl[0,:,0,:,ne], axis=0))
+   ax.plot(be.data['user']['temp_grid'],
+           pop_lvl[0,0,0,:,ne]/np.sum(pop_lvl[0,:,0,:,ne], axis=0))
    ax.set(xlabel='Temperature (eV)', ylabel='Populating fraction from ground (-)',
           title='Populating fraction from the ground to level 1')
 
@@ -600,9 +610,9 @@ each parent: for Be I, 29 levels and the Be II ground.
    temperature_arr = np.array([10]) #eV
    metastable_levels = np.array([0])   #metastable level, just ground chosen here
    density_arr = np.array([1.e9]) # cm-3
-   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-                 use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True,
-                 td_t=td_t,td_n0=td_n0)
+   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,
+                 use_recombination=True,use_recombination_three_body=True,
+                 use_ionization=True,suppliment_with_ecip=True,td_t=td_t,td_n0=td_n0)
    be.solve_cr()
    be.solve_time_dependent()
 
@@ -638,8 +648,9 @@ each parent: for Be I, 29 levels and the Be II ground.
    temperature_arr = np.array([10]) #eV
    metastable_levels = np.array([0])   #metastable level, just ground chosen here
    density_arr = np.array([1.e8]) # cm-3
-   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,use_recombination=True,
-                 use_recombination_three_body=True,use_ionization=True,suppliment_with_ecip=True,
+   be = colradpy(fil,metastable_levels,temperature_arr,density_arr,
+                 use_recombination=True,use_recombination_three_body=True,
+                 use_ionization=True,suppliment_with_ecip=True,
                  td_t=td_t,td_n0=td_n0,td_source=td_s)
 
    be.solve_cr()
@@ -680,8 +691,9 @@ The example below splits the He I 587.6 nm multiplet (1s2p 3P - 1s3d 3D).
    import numpy as np
    import matplotlib.pyplot as plt
 
-   he = colradpy('examples/input/Open-ADAS/adas#2/mom97_ls#he0.dat',np.array([0]),np.array([20]),
-                 np.array([1.e13]),use_recombination=False,use_recombination_three_body=False,
+   he = colradpy('examples/input/Open-ADAS/adas#2/mom97_ls#he0.dat',
+                 np.array([0]),np.array([20]),np.array([1.e13]),
+                 use_recombination=False,use_recombination_three_body=False,
                  use_ionization=True,suppliment_with_ecip=True)
    he.solve_cr()
    he.shift_j_res_energy_to_nist()
@@ -691,9 +703,11 @@ The example below splits the He I 587.6 nm multiplet (1s2p 3P - 1s3d 3D).
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
    ax.vlines(he.data['processed']['wave_air'], 0, he.data['processed']['pecs'][:,0,0,0],
              label='Term resolved')
-   ax.vlines(split['wave_air'], 0, split['pecs'][:,0,0,0], color='C3', label='Level resolved')
+   ax.vlines(split['wave_air'], 0, split['pecs'][:,0,0,0], color='C3',
+             label='Level resolved')
    ax.set(xlim=(587.5, 587.65), ylim=(0, 1e-9), xlabel='Wavelength in air (nm)',
-          ylabel='PEC (ph cm$^3$ s$^{-1}$)', title='He I 587.6 nm, $T_e$ = 20 eV, $n_e$ = 1e13 cm$^{-3}$')
+          ylabel='PEC (ph cm$^3$ s$^{-1}$)',
+          title='He I 587.6 nm, $T_e$ = 20 eV, $n_e$ = 1e13 cm$^{-3}$')
    ax.legend()
 
 .. figure:: images/he0_split_multiplet.png
@@ -741,7 +755,8 @@ ADF04 file:
 .. code-block:: python
 
    ion = ionization_balance(fils, np.array([0, 1]), temperature_arr, density_arr,
-                            projection=[(adf17_files[i], adf18_files[i]) for i in range(len(fils))])
+                            projection=[(adf17_files[i], adf18_files[i])
+                                        for i in range(len(fils))])
 
 
 Atomic data from the Flexible Atomic Code
@@ -848,8 +863,9 @@ are dotted lines.
            ('cpb03_ls#be0.dat', 'cpb03_ls#be1.dat', 'be2_adf04', 'be3_adf04')]
    temp = np.linspace(5,100,5) #temperature grid (eV)
    dens = np.array([1.e11,1.e14]) #density grid (cm-3)
-   #metastables of each stage: they should be the parents listed at the top of the adf04 file of
-   #the stage below; without them only the SCD, ACD and XCD of a stage are calculated, no QCD
+   #metastables of each stage: they should be the parents listed at the top of the
+   #adf04 file of the stage below; without them only the SCD, ACD and XCD of a stage
+   #are calculated, no QCD
    metas = [np.array([0,1]),np.array([0]),np.array([0,1]),np.array([0])]
 
    time = np.linspace(0, .01, 1000)
@@ -861,11 +877,14 @@ are dotted lines.
 
    ion.solve_time_independent()
 
-   labels = ['be0, met0','be0, met1','be1, met0','be2, met0','be2, met1','be3, met0','be4']
+   labels = ['be0, met0','be0, met1','be1, met0','be2, met0','be2, met1','be3, met0',
+             'be4']
    fig, ax = plt.subplots(figsize=(16/3, 3), layout='constrained')
    for state, label in enumerate(labels):
-       line, = ax.plot(time*1e3, ion.data['processed']['pops_td'][state,:,1,1], label=label)
-       ax.axhline(ion.data['processed']['pops_ss'][state,1,1], color=line.get_color(), linestyle=':')
+       line, = ax.plot(time*1e3, ion.data['processed']['pops_td'][state,:,1,1],
+                       label=label)
+       ax.axhline(ion.data['processed']['pops_ss'][state,1,1], color=line.get_color(),
+                  linestyle=':')
    ax.set(xlabel='Time (ms)', ylabel='Fractional abundance (-)',
           title=f'$T_e$ = {temp[1]:.2f} eV, $n_e$ = 1e14 ' + 'cm$^{-3}$')
    ax.legend(fontsize='small')
@@ -930,12 +949,14 @@ conditions of the ASDEX Upgrade divertor, with 1e14 cm-3 hydrogen atoms in the g
 
    #n-resolved H I data of the ADAS214 example, from OPEN-ADAS
    h_file = 'copha#h_bn#97h.dat'
+   url = 'https://open.adas.ac.uk/download/adf04/copha][h/copha][h_bn][97h.dat'
    if not Path(h_file).exists():
-       urlretrieve('https://open.adas.ac.uk/download/adf04/copha][h/copha][h_bn][97h.dat', h_file)
+       urlretrieve(url, h_file)
 
    temp = np.array([1.])   #electron temperature (eV)
    dens = np.array([1e14]) #electron density (cm-3)
-   #absorbers: 1e14 cm-3 H atoms in the ground state at 23010 K, in a cylinder of radius 7.5 cm
+   #absorbers: 1e14 cm-3 H atoms in the ground state at 23010 K,
+   #in a cylinder of radius 7.5 cm
    opacity = {'length': 7.5, 'densities': {0: 1e14}, 'mass': 1.008,
               'temperature': 23010*constants.k/constants.e, 'geometry': 'cylinder'}
 
@@ -945,10 +966,12 @@ conditions of the ASDEX Upgrade divertor, with 1e14 cm-3 hydrogen atoms in the g
    h_thick.solve_cr()
 
    escape = h_thick.data['rates']['escape']
-   lines = {'Ly-alpha': (1, 0), 'Ly-beta': (2, 0), 'H-alpha': (2, 1)} #(upper, lower) levels
+   #the (upper, lower) levels of the lines
+   lines = {'Ly-alpha': (1, 0), 'Ly-beta': (2, 0), 'H-alpha': (2, 1)}
    for name, levels in lines.items():
-       centre = population_escape_factor(escape['tau0'][levels], 'cylinder', position='centre')
-       print(f"{name:8s} tau0 {escape['tau0'][levels]:6.2f}, theta_p {escape['theta_p'][levels]:.4f}"
+       tau0 = escape['tau0'][levels]
+       centre = population_escape_factor(tau0, 'cylinder', position='centre')
+       print(f"{name:8s} tau0 {tau0:6.2f}, theta_p {escape['theta_p'][levels]:.4f}"
              f" (centre {centre:.4f}), theta_l {escape['theta_l'][levels]:.4f}")
    #Ly-alpha tau0  29.19, theta_p 0.0407 (centre 0.0077), theta_l 0.0413
    #Ly-beta  tau0   4.67, theta_p 0.1914 (centre 0.0724), theta_l 0.1974
@@ -988,8 +1011,9 @@ line marks the density of the example.
        ax.plot(n_ground, line_escape_factor(tau0), color=color, linestyle=':',
                label=name + r' $\theta_L$')
    ax.axvline(opacity['densities'][0], color='0.6', linewidth=0.8)
-   ax.set(xscale='log', yscale='log', ylim=(1e-4, 2), xlabel='H ground-state density (cm$^{-3}$)',
-          ylabel='Escape factor (-)', title='Cylinder, $R$ = 7.5 cm, $T$ = 23010 K')
+   ax.set(xscale='log', yscale='log', ylim=(1e-4, 2),
+          xlabel='H ground-state density (cm$^{-3}$)', ylabel='Escape factor (-)',
+          title='Cylinder, $R$ = 7.5 cm, $T$ = 23010 K')
    ax.legend(fontsize='x-small', ncols=2)
 
 .. figure:: images/h0_escape_factors.png
@@ -1023,7 +1047,8 @@ the line of sight relative to the thin ones.
        ax.plot(n_scan, ratio[name], label=name)
    ax.axhline(1, color='0.6', linewidth=0.8)
    ax.set(xscale='log', yscale='log', xlabel='H ground-state density (cm$^{-3}$)',
-          ylabel='PEC / thin PEC (-)', title='$T_e$ = 1 eV, $n_e$ = 1e14 cm$^{-3}$, excitation')
+          ylabel='PEC / thin PEC (-)',
+          title='$T_e$ = 1 eV, $n_e$ = 1e14 cm$^{-3}$, excitation')
    ax.legend(fontsize='small')
 
 .. figure:: images/h0_opacity_pecs.png
