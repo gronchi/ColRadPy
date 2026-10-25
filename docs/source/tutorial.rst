@@ -36,7 +36,7 @@ The tutorial covers the following topics:
 
 Installing ColRadPy
 ===================
-ColRadPy needs Python 3 with NumPy (below 2.5), SciPy and matplotlib.
+ColRadPy needs Python 3 with NumPy, SciPy and matplotlib.
 From a clone of the repository, install it in editable mode (see :ref:`installation`):
 
 .. code-block:: bash

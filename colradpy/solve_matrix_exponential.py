@@ -44,6 +44,19 @@ def _inverse_and_condition(eigenvectors):
     return inverse, cond
 
 
+def _eig(matrices):
+    """Eigenvalues and eigenvectors of stacked real rate matrices, real if every eigenvalue is.
+
+    NumPy before 2.5 returned real arrays then; from 2.5 np.linalg.eig always returns complex
+    ones, which makes the solution about three times slower and the stored eigenvalues complex.
+    """
+    eigenvals, eigenvectors = np.linalg.eig(matrices)
+    if(not np.iscomplexobj(matrices) and np.iscomplexobj(eigenvals)
+       and not np.any(eigenvals.imag) and not np.any(eigenvectors.imag)):
+        eigenvals, eigenvectors = eigenvals.real.copy(), eigenvectors.real.copy()
+    return eigenvals, eigenvectors
+
+
 def _is_closed_rate_matrix(matrix):
     """Recognize nonnegative transfer rates with column sums zero to round-off."""
     if np.iscomplexobj(matrix) or not np.isfinite(matrix).all():
@@ -275,14 +288,14 @@ def solve_matrix_exponential(matrix,td_n0,td_t):
     #the last two dimensions have to be the ij parts so we need to transpose matrix
     #string logic for the einsums based on matrix dimensions        
     if(len(np.shape(matrix)) ==4):
-        eigenvals, eigenvectors = np.linalg.eig(matrix.transpose(2,3,0,1))
+        eigenvals, eigenvectors = _eig(matrix.transpose(2,3,0,1))
 
         eval_str = 'klj'
         evec_str = 'klij'
         vt_str1 = 'klj'
         pop_str='ikl'
     if(len(np.shape(matrix)) ==3):
-        eigenvals, eigenvectors = np.linalg.eig(matrix.transpose(2,0,1))
+        eigenvals, eigenvectors = _eig(matrix.transpose(2,0,1))
 
         eval_str = 'lj'
         evec_str = 'lij'
@@ -384,10 +397,10 @@ def solve_matrix_exponential_steady_state(matrix):
     #that will give the equilibrium populuations
     if(len(np.shape(matrix)) ==4):
         
-        eigenvals, eigenvectors = np.linalg.eig(matrix.transpose(2,3,0,1))
+        eigenvals, eigenvectors = _eig(matrix.transpose(2,3,0,1))
         axis=2
     if(len(np.shape(matrix)) ==3):
-        eigenvals, eigenvectors = np.linalg.eig(matrix.transpose(2,0,1))
+        eigenvals, eigenvectors = _eig(matrix.transpose(2,0,1))
         axis=1
 
 
@@ -472,14 +485,14 @@ def solve_matrix_exponential_source(matrix, td_n0, source, td_t):
     #the last two dimensions have to be the ij parts so we need to transpose matrix
     #string logic for the einsums based on matrix dimensions        
     if(len(np.shape(matrix)) ==4):
-        eigenvals, eigenvectors = np.linalg.eig(matrix.transpose(2,3,0,1))
+        eigenvals, eigenvectors = _eig(matrix.transpose(2,3,0,1))
 
         eval_str = 'klj'
         evec_str = 'klij'
         vt_str1 = 'klj'
         pop_str='ikl'
     if(len(np.shape(matrix)) ==3):
-        eigenvals, eigenvectors = np.linalg.eig(matrix.transpose(2,0,1))
+        eigenvals, eigenvectors = _eig(matrix.transpose(2,0,1))
 
         eval_str = 'lj'
         evec_str = 'lij'

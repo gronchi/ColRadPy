@@ -1,8 +1,4 @@
-"""Run from the repository root with: python -m unittest discover -s tests -v.
-
-The energy derivative check exposes the remaining NumPy 2.5 complex-output
-incompatibility; it is intentionally not marked as an expected failure.
-"""
+"""Run from the repository root with: python -m unittest discover -s tests -v."""
 
 import importlib
 from pathlib import Path
@@ -93,6 +89,22 @@ class NumpyCompatibilityTests(unittest.TestCase):
                 else:
                     pops, _, _ = solve_matrix_exponential(matrix, initial, times)
                 np.testing.assert_allclose(pops[:, :, 0, 0], expected, atol=1e-14)
+                np.testing.assert_allclose(pops.sum(axis=0), 1.0, atol=1e-14)
+
+    def test_real_eigenvalues_keep_real_arrays(self):
+        # NumPy 2.5 returns complex eigen-decompositions also for real eigenvalues, which made
+        # the solution about three times slower and the stored eigenvalues complex.
+        chain = np.array([[-1.0, 0.0], [1.0, 0.0]])[:, :, None, None]
+        # a cycle of transfers has complex conjugate eigenvalues, -3/2 +- i sqrt(3)/2
+        cycle = np.array([[-1.0, 0.0, 1.0], [1.0, -1.0, 0.0], [0.0, 1.0, -1.0]])[:, :, None, None]
+        times = np.array([0.0, 1.0, 2.0])
+        for matrix, complex_pairs in ((chain, False), (cycle, True)):
+            initial = np.eye(len(matrix))[0]
+            with self.subTest(complex_pairs=complex_pairs):
+                pops, eigenvalues, eigenvectors = solve_matrix_exponential(matrix, initial, times)
+                self.assertEqual(np.iscomplexobj(eigenvalues), complex_pairs)
+                self.assertEqual(np.iscomplexobj(eigenvectors), complex_pairs)
+                self.assertFalse(np.iscomplexobj(pops))
                 np.testing.assert_allclose(pops.sum(axis=0), 1.0, atol=1e-14)
 
     def test_energy_derivative_accepts_solver_populations(self):

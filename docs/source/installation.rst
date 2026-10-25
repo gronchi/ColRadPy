@@ -3,7 +3,7 @@
 Installation
 ============
 
-ColRadPy needs Python 3 with NumPy (below 2.5), SciPy and matplotlib. Clone the
+ColRadPy needs Python 3 with NumPy, SciPy and matplotlib. Clone the
 repository and install it in editable mode::
 
     git clone https://github.com/johnson-c/ColRadPy.git

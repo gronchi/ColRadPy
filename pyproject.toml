@@ -9,7 +9,7 @@ description = "python collisional radiative solver"
 authors = [
     { name = "Curt Johnson", email = "caj0026@auburn.edu" },
 ]
-dependencies = ["numpy<2.5", "scipy", "matplotlib>=3.5"]
+dependencies = ["numpy", "scipy", "matplotlib>=3.5"]
 
 [project.urls]
 Homepage = "https://github.com/johnson-c/ColRadPy"
